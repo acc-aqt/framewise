@@ -8,9 +8,11 @@
   }
 </header>
 <main>
-  @if (frames.error()) {
-    <p class="error">Could not load the Frames.</p>
+  @if (groups.error()) {
+    <p class="error">Could not load the Groups.</p>
+  } @else if (openGroup(); as group) {
+    <app-group-view [group]="group" (back)="openGroupId.set(null)" />
   } @else {
-    <app-frame-grid [frames]="frames.value()" />
+    <app-group-grid [groups]="groups.value()" (open)="openGroupId.set($event)" />
   }
 </main>

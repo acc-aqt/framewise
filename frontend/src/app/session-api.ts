@@ -19,3 +19,8 @@ export interface Frame {
   camera_rating: CameraRating;
   thumbnail_url: string;
 }
+
+export interface Group {
+  id: number;
+  frames: Frame[];
+}

@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 import threading
 import time
 import webbrowser
@@ -14,7 +15,7 @@ from framewise.server import create_app
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
-DEFAULT_UI_DIR = Path(__file__).resolve().parents[3] / "frontend" / "dist" / "frontend" / "browser"
+UI_DIR = Path(__file__).resolve().parents[3] / "frontend" / "dist" / "frontend" / "browser"
 
 Serve = Callable[[FastAPI, str, int, Callable[[], None]], None]
 
@@ -50,8 +51,13 @@ def main(
         parser.error(f"not a folder: {args.session_folder}")
 
     data_dir = Path(os.environ.get("FRAMEWISE_DATA_DIR", DEFAULT_DATA_DIR))
-    ui_dir = Path(os.environ.get("FRAMEWISE_UI_DIR", DEFAULT_UI_DIR))
     store = open_session(args.session_folder, data_dir)
     url = f"http://{HOST}:{args.port}/"
     print(f"framewise: {len(store.frames())} Frames in {store.root}, Review UI at {url}")
-    serve(create_app(store, ui_dir), HOST, args.port, lambda: open_browser(url))
+    if not (UI_DIR / "index.html").is_file():
+        print(
+            f"framewise: warning: no Review UI build in {UI_DIR}, "
+            "run `npx ng build` in frontend/ first",
+            file=sys.stderr,
+        )
+    serve(create_app(store, UI_DIR), HOST, args.port, lambda: open_browser(url))

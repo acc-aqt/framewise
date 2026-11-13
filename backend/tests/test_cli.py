@@ -42,3 +42,13 @@ def test_review_refuses_a_folder_that_does_not_exist(tmp_path, isolated_data_dir
         main(["review", str(tmp_path / "missing")], serve=FakeServer(), open_browser=print)
 
     assert exit_info.value.code == 2
+
+
+def test_review_warns_when_the_review_ui_has_not_been_built(
+    session_dir, isolated_data_dir, tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setattr("framewise.cli.UI_DIR", tmp_path / "missing-build")
+
+    main(["review", str(session_dir)], serve=FakeServer(), open_browser=print)
+
+    assert "ng build" in capsys.readouterr().err

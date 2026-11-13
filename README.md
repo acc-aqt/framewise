@@ -22,7 +22,7 @@ cd backend
 uv run framewise review /path/to/session-folder
 ```
 
-This scans the folder, stores its Frames in the Session store under `~/Library/Application Support/framewise/`, starts the server on `http://127.0.0.1:8765/` and opens the browser. Use `--port` to pick another port. `FRAMEWISE_DATA_DIR` and `FRAMEWISE_UI_DIR` override the Session store folder and the Review UI build folder.
+This scans the folder, stores its Frames in the Session store under `~/Library/Application Support/framewise/`, starts the server on `http://127.0.0.1:8765/` and opens the browser. Use `--port` to pick another port. `FRAMEWISE_DATA_DIR` overrides the Session store folder. If the Review UI has not been built, `framewise review` warns you to run `npx ng build` in `frontend/`.
 
 ## Tests
 

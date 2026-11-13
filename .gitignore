@@ -1,0 +1,13 @@
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Angular
+node_modules/
+dist/
+.angular/

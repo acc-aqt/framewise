@@ -1,5 +1,4 @@
 import argparse
-import os
 import sys
 import threading
 import time
@@ -10,7 +9,7 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI
 
-from framewise.review import DEFAULT_DATA_DIR, open_session
+from framewise.review import open_session, resolve_data_dir
 from framewise.server import create_app
 
 HOST = "127.0.0.1"
@@ -50,8 +49,7 @@ def main(
     if not args.session_folder.is_dir():
         parser.error(f"not a folder: {args.session_folder}")
 
-    data_dir = Path(os.environ.get("FRAMEWISE_DATA_DIR", DEFAULT_DATA_DIR))
-    store = open_session(args.session_folder, data_dir)
+    store = open_session(args.session_folder, resolve_data_dir())
     url = f"http://{HOST}:{args.port}/"
     print(f"framewise: {len(store.frames())} Frames in {store.root}, Review UI at {url}")
     if not (UI_DIR / "index.html").is_file():

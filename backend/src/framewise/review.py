@@ -1,4 +1,5 @@
 import hashlib
+import os
 from pathlib import Path
 
 from framewise.camera_rating import read_camera_rating
@@ -9,12 +10,16 @@ from framewise.thumbnails import make_thumbnail
 DEFAULT_DATA_DIR = Path.home() / "Library" / "Application Support" / "framewise"
 
 
+def resolve_data_dir() -> Path:
+    return Path(os.environ.get("FRAMEWISE_DATA_DIR", DEFAULT_DATA_DIR))
+
+
 def session_database_path(root: Path, data_dir: Path) -> Path:
     digest = hashlib.sha256(str(root).encode()).hexdigest()[:16]
     return data_dir / f"{root.name}-{digest}.sqlite"
 
 
-def open_session(folder: Path, data_dir: Path = DEFAULT_DATA_DIR) -> SessionStore:
+def open_session(folder: Path, data_dir: Path) -> SessionStore:
     root = folder.resolve()
     store = SessionStore(session_database_path(root, data_dir), root)
     scan = scan_session(root)

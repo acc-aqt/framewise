@@ -27,6 +27,10 @@ _Avoid_: Preview
 A star rating or color label that was already on a Frame's files before framewise saw them, for example stars set in-camera.
 _Avoid_: Existing rating, prior rating
 
+**Session store**:
+The per-Session SQLite database under `~/Library/Application Support/framewise/` that holds a Session's Frames and their thumbnails. framewise never writes it into the Session folder.
+_Avoid_: Cache, catalog, index
+
 ## Judging
 
 **Group**:

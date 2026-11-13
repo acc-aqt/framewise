@@ -13,12 +13,12 @@ class ScannedFrame:
 
 
 @dataclass(frozen=True)
-class ScanResult:
+class Scan:
     frames: list[ScannedFrame]
     skipped: list[Path]
 
 
-def scan_session(root: Path) -> ScanResult:
+def scan_session(root: Path) -> Scan:
     frames: list[ScannedFrame] = []
     skipped: list[Path] = []
     for folder, subfolders, names in os.walk(root):
@@ -27,10 +27,10 @@ def scan_session(root: Path) -> ScanResult:
         result = _pair_folder(files)
         frames.extend(result.frames)
         skipped.extend(result.skipped)
-    return ScanResult(frames=frames, skipped=skipped)
+    return Scan(frames=frames, skipped=skipped)
 
 
-def _pair_folder(files: list[Path]) -> ScanResult:
+def _pair_folder(files: list[Path]) -> Scan:
     raws_by_stem: dict[str, list[Path]] = {}
     for path in sorted(files):
         if path.suffix.lower() in RAW_EXTENSIONS:
@@ -38,7 +38,7 @@ def _pair_folder(files: list[Path]) -> ScanResult:
     jpgs = sorted(path for path in files if path.suffix.lower() in JPG_EXTENSIONS)
     frames = [ScannedFrame(jpg_path=jpg, raw_path=_take_raw(raws_by_stem, jpg)) for jpg in jpgs]
     skipped = sorted(raw for raws in raws_by_stem.values() for raw in raws)
-    return ScanResult(frames=frames, skipped=skipped)
+    return Scan(frames=frames, skipped=skipped)
 
 
 def _take_raw(raws_by_stem: dict[str, list[Path]], jpg: Path) -> Path | None:

@@ -26,7 +26,7 @@ const KIND_BADGES: Record<Frame['kind'], string> = {
   template: `
     <cdk-virtual-scroll-viewport [itemSize]="rowHeight" class="viewport">
       <div
-        *cdkVirtualFor="let row of rows(); trackBy: trackRow"
+        *cdkVirtualFor="let row of rows()"
         class="row"
         [style.height.px]="rowHeight"
         [style.grid-template-columns]="'repeat(' + columns() + ', 1fr)'"
@@ -34,7 +34,7 @@ const KIND_BADGES: Record<Frame['kind'], string> = {
         @for (frame of row; track frame.id) {
           <figure class="tile" data-testid="frame-tile">
             <img [src]="frame.thumbnail_url" [alt]="frame.jpg_path" loading="lazy" />
-            <span class="badge" data-testid="kind-badge">{{ kindBadge(frame) }}</span>
+            <span class="badge" data-testid="kind-badge">{{ kindBadges[frame.kind] }}</span>
             @if (ratingText(frame.camera_rating); as rating) {
               <span class="rating" data-testid="camera-rating">{{ rating }}</span>
             }
@@ -104,6 +104,7 @@ export class FrameGrid {
   readonly frames = input.required<Frame[]>();
 
   protected readonly rowHeight = ROW_HEIGHT_PX;
+  protected readonly kindBadges = KIND_BADGES;
   protected readonly columns = signal(4);
   protected readonly rows = computed(() => chunk(this.frames(), this.columns()));
 
@@ -120,14 +121,6 @@ export class FrameGrid {
       observer.observe(host);
       destroyRef.onDestroy(() => observer.disconnect());
     });
-  }
-
-  protected trackRow(index: number): number {
-    return index;
-  }
-
-  protected kindBadge(frame: Frame): string {
-    return KIND_BADGES[frame.kind];
   }
 
   protected ratingText(rating: CameraRating): string {

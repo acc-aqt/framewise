@@ -1,5 +1,8 @@
+import json
 import sqlite3
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from framewise.camera_rating import CameraRating
 from framewise.scan import ScannedFrame
@@ -22,6 +25,28 @@ CREATE TABLE IF NOT EXISTS skipped_files (
     path TEXT PRIMARY KEY
 );
 """
+
+FrameKind = Literal["jpg-only", "raw+jpg"]
+
+
+@dataclass(frozen=True)
+class Frame:
+    id: int
+    jpg_path: str
+    raw_path: str | None
+    camera_rating: CameraRating
+
+    @property
+    def kind(self) -> FrameKind:
+        return "jpg-only" if self.raw_path is None else "raw+jpg"
+
+
+@dataclass(frozen=True)
+class SessionSummary:
+    total_frames: int
+    jpg_only_count: int
+    raw_jpg_count: int
+    skipped: list[str]
 
 
 class SessionStore:
@@ -48,30 +73,30 @@ class SessionStore:
             )
 
     def remove_frames_except(self, frames: list[ScannedFrame]) -> None:
-        current = {self._relative(frame.jpg_path) for frame in frames}
+        current = json.dumps([self._relative(frame.jpg_path) for frame in frames])
         with self._db:
-            for table in ("frames", "thumbnails"):
-                stored = self._db.execute(f"SELECT jpg_path FROM {table}").fetchall()
-                self._db.executemany(
-                    f"DELETE FROM {table} WHERE jpg_path = ?",
-                    [(row["jpg_path"],) for row in stored if row["jpg_path"] not in current],
-                )
+            self._db.execute(
+                "DELETE FROM frames WHERE jpg_path NOT IN (SELECT value FROM json_each(?))",
+                (current,),
+            )
+            self._db.execute(
+                "DELETE FROM thumbnails WHERE jpg_path NOT IN (SELECT value FROM json_each(?))",
+                (current,),
+            )
 
     def has_current_thumbnail(self, jpg_path: Path) -> bool:
-        stat = jpg_path.stat()
         row = self._db.execute(
             "SELECT 1 FROM thumbnails WHERE jpg_path = ? AND jpg_size = ? AND jpg_mtime_ns = ?",
-            (self._relative(jpg_path), stat.st_size, stat.st_mtime_ns),
+            self._thumbnail_key(jpg_path),
         ).fetchone()
         return row is not None
 
     def save_thumbnail(self, jpg_path: Path, image: bytes) -> None:
-        stat = jpg_path.stat()
         with self._db:
             self._db.execute(
                 "INSERT OR REPLACE INTO thumbnails (jpg_path, jpg_size, jpg_mtime_ns, image) "
                 "VALUES (?, ?, ?, ?)",
-                (self._relative(jpg_path), stat.st_size, stat.st_mtime_ns, image),
+                (*self._thumbnail_key(jpg_path), image),
             )
 
     def save_skipped_files(self, paths: list[Path]) -> None:
@@ -82,8 +107,27 @@ class SessionStore:
                 [(self._relative(path),) for path in paths],
             )
 
-    def frames(self) -> list[sqlite3.Row]:
-        return self._db.execute("SELECT * FROM frames ORDER BY jpg_path").fetchall()
+    def frames(self) -> list[Frame]:
+        rows = self._db.execute("SELECT * FROM frames ORDER BY jpg_path")
+        return [
+            Frame(
+                id=row["id"],
+                jpg_path=row["jpg_path"],
+                raw_path=row["raw_path"],
+                camera_rating=CameraRating(stars=row["camera_stars"], label=row["camera_label"]),
+            )
+            for row in rows
+        ]
+
+    def summary(self) -> SessionSummary:
+        frames = self.frames()
+        raw_jpg_count = sum(1 for frame in frames if frame.kind == "raw+jpg")
+        return SessionSummary(
+            total_frames=len(frames),
+            jpg_only_count=len(frames) - raw_jpg_count,
+            raw_jpg_count=raw_jpg_count,
+            skipped=self.skipped_files(),
+        )
 
     def thumbnail(self, frame_id: int) -> bytes | None:
         row = self._db.execute(
@@ -96,6 +140,10 @@ class SessionStore:
     def skipped_files(self) -> list[str]:
         rows = self._db.execute("SELECT path FROM skipped_files ORDER BY path")
         return [row["path"] for row in rows]
+
+    def _thumbnail_key(self, jpg_path: Path) -> tuple[str, int, int]:
+        stat = jpg_path.stat()
+        return self._relative(jpg_path), stat.st_size, stat.st_mtime_ns
 
     def _relative(self, path: Path | None) -> str | None:
         return None if path is None else path.relative_to(self.root).as_posix()

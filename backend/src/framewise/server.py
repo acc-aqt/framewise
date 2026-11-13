@@ -11,29 +11,28 @@ def create_app(store: SessionStore, ui_dir: Path | None = None) -> FastAPI:
 
     @app.get("/api/session")
     def session_summary() -> dict:
-        frames = store.frames()
-        raw_jpg_count = sum(1 for frame in frames if frame["raw_path"] is not None)
+        summary = store.summary()
         return {
             "root": str(store.root),
-            "total_frames": len(frames),
-            "jpg_only_count": len(frames) - raw_jpg_count,
-            "raw_jpg_count": raw_jpg_count,
-            "skipped": store.skipped_files(),
+            "total_frames": summary.total_frames,
+            "jpg_only_count": summary.jpg_only_count,
+            "raw_jpg_count": summary.raw_jpg_count,
+            "skipped": summary.skipped,
         }
 
     @app.get("/api/frames")
     def frame_list() -> list[dict]:
         return [
             {
-                "id": frame["id"],
-                "jpg_path": frame["jpg_path"],
-                "raw_path": frame["raw_path"],
-                "kind": "jpg-only" if frame["raw_path"] is None else "raw+jpg",
+                "id": frame.id,
+                "jpg_path": frame.jpg_path,
+                "raw_path": frame.raw_path,
+                "kind": frame.kind,
                 "camera_rating": {
-                    "stars": frame["camera_stars"],
-                    "label": frame["camera_label"],
+                    "stars": frame.camera_rating.stars,
+                    "label": frame.camera_rating.label,
                 },
-                "thumbnail_url": f"/api/frames/{frame['id']}/thumbnail",
+                "thumbnail_url": f"/api/frames/{frame.id}/thumbnail",
             }
             for frame in store.frames()
         ]

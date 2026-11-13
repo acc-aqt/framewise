@@ -41,7 +41,7 @@ def _read_exif(jpg_path: Path) -> CameraRating:
             stars = image.getexif().get(EXIF_RATING_TAG)
     except OSError:
         return CameraRating()
-    return CameraRating(stars=int(stars) if stars is not None else None)
+    return CameraRating(stars=_parse_stars(stars))
 
 
 def _read_xmp(path: Path) -> CameraRating:
@@ -52,11 +52,13 @@ def _read_xmp(path: Path) -> CameraRating:
         root = ElementTree.fromstring(packet)
     except ElementTree.ParseError:
         return CameraRating()
-    stars = _xmp_value(root, "Rating")
     return CameraRating(
-        stars=int(float(stars)) if stars is not None else None,
-        label=_xmp_value(root, "Label"),
+        stars=_parse_stars(_xmp_value(root, "Rating")), label=_xmp_value(root, "Label")
     )
+
+
+def _parse_stars(value: int | str | None) -> int | None:
+    return None if value is None else int(float(value))
 
 
 def _find_xmp_packet(path: Path) -> bytes | None:

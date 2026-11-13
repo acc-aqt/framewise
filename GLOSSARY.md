@@ -57,6 +57,14 @@ _Avoid_: Maybe, review
 A short, human-readable explanation attached to a Verdict, such as "eyes closed" or "weaker duplicate of another Frame".
 _Avoid_: Tag, flag
 
+**Keeper budget**:
+The share of a Session's Frames the photographer roughly wants to keep. It decides how many Frames become Keepers. Each Group's Winner is kept regardless.
+_Avoid_: Quota, target, limit
+
+**Reference rating**:
+A rating the photographer gave a Frame in Lightroom during a past cull. framewise uses these only to measure how often it agrees with the photographer.
+_Avoid_: Ground truth, label
+
 ## Review
 
 **Proposal**:

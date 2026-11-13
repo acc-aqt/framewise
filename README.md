@@ -22,7 +22,7 @@ cd backend
 uv run framewise review /path/to/session-folder
 ```
 
-This scans the folder, stores its Frames in the Session store under `~/Library/Application Support/framewise/`, starts the server on `http://127.0.0.1:8765/` and opens the browser. Use `--port` to pick another port. `FRAMEWISE_DATA_DIR` overrides the Session store folder. If the Review UI has not been built, `framewise review` warns you to run `npx ng build` in `frontend/`.
+This scans the folder, analyses each Frame's JPG with Apple Vision (so it runs on macOS only), groups near-duplicate and burst Frames, stores the results in the Session store under `~/Library/Application Support/framewise/`, starts the server on `http://127.0.0.1:8765/` and opens the browser. Use `--port` to pick another port. `FRAMEWISE_DATA_DIR` overrides the Session store folder. If the Review UI has not been built, `framewise review` warns you to run `npx ng build` in `frontend/`.
 
 ## Tests
 
@@ -30,3 +30,5 @@ This scans the folder, stores its Frames in the Session store under `~/Library/A
 cd backend && uv run pytest && uv run ruff check .
 cd frontend && npx ng test --watch=false
 ```
+
+Most backend tests use a fake Frame analyzer. `tests/test_vision_analyzer.py` runs the real Apple Vision analyzer and is skipped on other platforms.

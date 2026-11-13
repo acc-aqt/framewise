@@ -3,7 +3,8 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 
-from framewise.store import SessionStore
+from framewise.grouper import group_frames
+from framewise.store import Frame, SessionStore
 
 
 def create_app(store: SessionStore, ui_dir: Path | None = None) -> FastAPI:
@@ -22,19 +23,16 @@ def create_app(store: SessionStore, ui_dir: Path | None = None) -> FastAPI:
 
     @app.get("/api/frames")
     def frame_list() -> list[dict]:
+        return [_frame_json(frame) for frame in store.frames()]
+
+    @app.get("/api/groups")
+    def group_list() -> list[dict]:
         return [
             {
-                "id": frame.id,
-                "jpg_path": frame.jpg_path,
-                "raw_path": frame.raw_path,
-                "kind": frame.kind,
-                "camera_rating": {
-                    "stars": frame.camera_rating.stars,
-                    "label": frame.camera_rating.label,
-                },
-                "thumbnail_url": f"/api/frames/{frame.id}/thumbnail",
+                "id": group[0].frame.id,
+                "frames": [_frame_json(analyzed.frame) for analyzed in group],
             }
-            for frame in store.frames()
+            for group in group_frames(store.analyzed_frames())
         ]
 
     @app.get("/api/frames/{frame_id}/thumbnail")
@@ -48,3 +46,14 @@ def create_app(store: SessionStore, ui_dir: Path | None = None) -> FastAPI:
         app.mount("/", StaticFiles(directory=ui_dir, html=True), name="review-ui")
 
     return app
+
+
+def _frame_json(frame: Frame) -> dict:
+    return {
+        "id": frame.id,
+        "jpg_path": frame.jpg_path,
+        "raw_path": frame.raw_path,
+        "kind": frame.kind,
+        "camera_rating": {"stars": frame.camera_rating.stars, "label": frame.camera_rating.label},
+        "thumbnail_url": f"/api/frames/{frame.id}/thumbnail",
+    }

@@ -1,9 +1,12 @@
 import json
 import sqlite3
+from array import array
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
+from framewise.analyzer import FrameSignals
 from framewise.camera_rating import CameraRating
 from framewise.scan import ScannedFrame
 
@@ -20,6 +23,13 @@ CREATE TABLE IF NOT EXISTS thumbnails (
     jpg_size INTEGER NOT NULL,
     jpg_mtime_ns INTEGER NOT NULL,
     image BLOB NOT NULL
+);
+CREATE TABLE IF NOT EXISTS analyses (
+    jpg_path TEXT PRIMARY KEY,
+    jpg_size INTEGER NOT NULL,
+    jpg_mtime_ns INTEGER NOT NULL,
+    fingerprint BLOB NOT NULL,
+    captured_at TEXT
 );
 CREATE TABLE IF NOT EXISTS skipped_files (
     path TEXT PRIMARY KEY
@@ -39,6 +49,13 @@ class Frame:
     @property
     def kind(self) -> FrameKind:
         return "jpg-only" if self.raw_path is None else "raw+jpg"
+
+
+@dataclass(frozen=True)
+class AnalyzedFrame:
+    frame: Frame
+    fingerprint: list[float]
+    captured_at: datetime | None
 
 
 @dataclass(frozen=True)
@@ -79,24 +96,39 @@ class SessionStore:
                 "DELETE FROM frames WHERE jpg_path NOT IN (SELECT value FROM json_each(?))",
                 (current,),
             )
-            self._db.execute(
-                "DELETE FROM thumbnails WHERE jpg_path NOT IN (SELECT value FROM json_each(?))",
-                (current,),
-            )
+            for table in ("thumbnails", "analyses"):
+                self._db.execute(
+                    f"DELETE FROM {table} WHERE jpg_path NOT IN (SELECT value FROM json_each(?))",
+                    (current,),
+                )
 
     def has_current_thumbnail(self, jpg_path: Path) -> bool:
-        row = self._db.execute(
-            "SELECT 1 FROM thumbnails WHERE jpg_path = ? AND jpg_size = ? AND jpg_mtime_ns = ?",
-            self._thumbnail_key(jpg_path),
-        ).fetchone()
-        return row is not None
+        return self._has_current_row("thumbnails", jpg_path)
+
+    def has_current_analysis(self, jpg_path: Path) -> bool:
+        return self._has_current_row("analyses", jpg_path)
+
+    def save_analysis(
+        self, jpg_path: Path, signals: FrameSignals, captured_at: datetime | None
+    ) -> None:
+        with self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO analyses "
+                "(jpg_path, jpg_size, jpg_mtime_ns, fingerprint, captured_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    *self._file_key(jpg_path),
+                    array("f", signals.fingerprint).tobytes(),
+                    None if captured_at is None else captured_at.isoformat(),
+                ),
+            )
 
     def save_thumbnail(self, jpg_path: Path, image: bytes) -> None:
         with self._db:
             self._db.execute(
                 "INSERT OR REPLACE INTO thumbnails (jpg_path, jpg_size, jpg_mtime_ns, image) "
                 "VALUES (?, ?, ?, ?)",
-                (*self._thumbnail_key(jpg_path), image),
+                (*self._file_key(jpg_path), image),
             )
 
     def save_skipped_files(self, paths: list[Path]) -> None:
@@ -109,12 +141,22 @@ class SessionStore:
 
     def frames(self) -> list[Frame]:
         rows = self._db.execute("SELECT * FROM frames ORDER BY jpg_path")
+        return [_frame(row) for row in rows]
+
+    def analyzed_frames(self) -> list[AnalyzedFrame]:
+        rows = self._db.execute(
+            "SELECT frames.*, analyses.fingerprint, analyses.captured_at FROM frames "
+            "JOIN analyses ON analyses.jpg_path = frames.jpg_path ORDER BY frames.jpg_path"
+        )
         return [
-            Frame(
-                id=row["id"],
-                jpg_path=row["jpg_path"],
-                raw_path=row["raw_path"],
-                camera_rating=CameraRating(stars=row["camera_stars"], label=row["camera_label"]),
+            AnalyzedFrame(
+                frame=_frame(row),
+                fingerprint=array("f", row["fingerprint"]).tolist(),
+                captured_at=(
+                    None
+                    if row["captured_at"] is None
+                    else datetime.fromisoformat(row["captured_at"])
+                ),
             )
             for row in rows
         ]
@@ -141,9 +183,25 @@ class SessionStore:
         rows = self._db.execute("SELECT path FROM skipped_files ORDER BY path")
         return [row["path"] for row in rows]
 
-    def _thumbnail_key(self, jpg_path: Path) -> tuple[str, int, int]:
+    def _has_current_row(self, table: str, jpg_path: Path) -> bool:
+        row = self._db.execute(
+            f"SELECT 1 FROM {table} WHERE jpg_path = ? AND jpg_size = ? AND jpg_mtime_ns = ?",
+            self._file_key(jpg_path),
+        ).fetchone()
+        return row is not None
+
+    def _file_key(self, jpg_path: Path) -> tuple[str, int, int]:
         stat = jpg_path.stat()
         return self._relative(jpg_path), stat.st_size, stat.st_mtime_ns
 
     def _relative(self, path: Path | None) -> str | None:
         return None if path is None else path.relative_to(self.root).as_posix()
+
+
+def _frame(row: sqlite3.Row) -> Frame:
+    return Frame(
+        id=row["id"],
+        jpg_path=row["jpg_path"],
+        raw_path=row["raw_path"],
+        camera_rating=CameraRating(stars=row["camera_stars"], label=row["camera_label"]),
+    )

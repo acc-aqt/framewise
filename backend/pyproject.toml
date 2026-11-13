@@ -9,6 +9,7 @@ requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.162.7",
     "pillow>=13.0.0",
+    "pyobjc-framework-vision>=11 ; sys_platform == 'darwin'",
     "uvicorn>=0.54.0",
 ]
 

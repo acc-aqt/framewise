@@ -64,7 +64,7 @@ const KIND_BADGES: Record<Frame['kind'], string> = {
       min-width: 0;
       display: flex;
       flex-direction: column;
-      background: #202124;
+      background: var(--color-surface);
       border-radius: 4px;
       overflow: hidden;
     }
@@ -81,19 +81,19 @@ const KIND_BADGES: Record<Frame['kind'], string> = {
       padding: 1px 6px;
       border-radius: 3px;
       font-size: 0.7rem;
-      background: rgb(0 0 0 / 0.7);
+      background: var(--color-overlay);
     }
     .badge {
       left: 6px;
     }
     .rating {
       right: 6px;
-      color: #fdd663;
+      color: var(--color-rating);
     }
     figcaption {
       padding: 4px 6px;
       font-size: 0.7rem;
-      color: #9aa0a6;
+      color: var(--color-text-muted);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;

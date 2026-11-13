@@ -50,7 +50,7 @@ import { SessionSummary } from './session-api';
     }
     dt {
       font-size: 0.75rem;
-      color: #9aa0a6;
+      color: var(--color-text-muted);
       text-transform: uppercase;
       letter-spacing: 0.05em;
     }
@@ -62,7 +62,7 @@ import { SessionSummary } from './session-api';
     .skipped {
       margin-top: 0.5rem;
       font-size: 0.85rem;
-      color: #c4c7c5;
+      color: var(--color-text-secondary);
     }
   `,
 })

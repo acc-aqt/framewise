@@ -8,21 +8,19 @@ import {
   ElementRef,
   inject,
   input,
+  output,
   signal,
 } from '@angular/core';
-import { CameraRating, Frame } from './session-api';
+import { FrameTile } from './frame-tile';
+import { Group } from './session-api';
 
 const TILE_WIDTH_PX = 220;
 const ROW_HEIGHT_PX = 200;
-const KIND_BADGES: Record<Frame['kind'], string> = {
-  'jpg-only': 'JPG-only',
-  'raw+jpg': 'RAW+JPG',
-};
 
 @Component({
-  selector: 'app-frame-grid',
+  selector: 'app-group-grid',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ScrollingModule],
+  imports: [ScrollingModule, FrameTile],
   template: `
     <cdk-virtual-scroll-viewport [itemSize]="rowHeight" class="viewport">
       <div
@@ -31,15 +29,17 @@ const KIND_BADGES: Record<Frame['kind'], string> = {
         [style.height.px]="rowHeight"
         [style.grid-template-columns]="'repeat(' + columns() + ', 1fr)'"
       >
-        @for (frame of row; track frame.id) {
-          <figure class="tile" data-testid="frame-tile">
-            <img [src]="frame.thumbnail_url" [alt]="frame.jpg_path" loading="lazy" />
-            <span class="badge" data-testid="kind-badge">{{ kindBadges[frame.kind] }}</span>
-            @if (ratingText(frame.camera_rating); as rating) {
-              <span class="rating" data-testid="camera-rating">{{ rating }}</span>
-            }
-            <figcaption>{{ frame.jpg_path }}</figcaption>
-          </figure>
+        @for (group of row; track group.id) {
+          <button
+            type="button"
+            class="group"
+            data-testid="group-tile"
+            [attr.aria-label]="'Open Group of ' + frameCount(group)"
+            (click)="open.emit(group.id)"
+          >
+            <app-frame-tile class="cover" [frame]="group.frames[0]" />
+            <span class="count" data-testid="frame-count">{{ frameCount(group) }}</span>
+          </button>
         }
       </div>
     </cdk-virtual-scroll-viewport>
@@ -58,55 +58,43 @@ const KIND_BADGES: Record<Frame['kind'], string> = {
       padding-bottom: 8px;
       box-sizing: border-box;
     }
-    .tile {
+    .group {
       position: relative;
-      margin: 0;
-      min-width: 0;
       display: flex;
-      flex-direction: column;
-      background: var(--color-surface);
-      border-radius: 4px;
-      overflow: hidden;
+      min-width: 0;
+      padding: 0;
+      border: 0;
+      background: none;
+      color: inherit;
+      font: inherit;
+      text-align: inherit;
+      cursor: pointer;
     }
-    img {
+    .group:focus-visible {
+      outline: 2px solid var(--color-focus);
+      outline-offset: 2px;
+    }
+    .cover {
       flex: 1;
-      min-height: 0;
-      width: 100%;
-      object-fit: contain;
     }
-    .badge,
-    .rating {
+    .count {
       position: absolute;
-      top: 6px;
+      right: 6px;
+      bottom: 28px;
       padding: 1px 6px;
       border-radius: 3px;
       font-size: 0.7rem;
       background: var(--color-overlay);
     }
-    .badge {
-      left: 6px;
-    }
-    .rating {
-      right: 6px;
-      color: var(--color-rating);
-    }
-    figcaption {
-      padding: 4px 6px;
-      font-size: 0.7rem;
-      color: var(--color-text-muted);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
   `,
 })
-export class FrameGrid {
-  readonly frames = input.required<Frame[]>();
+export class GroupGrid {
+  readonly groups = input.required<Group[]>();
+  readonly open = output<number>();
 
   protected readonly rowHeight = ROW_HEIGHT_PX;
-  protected readonly kindBadges = KIND_BADGES;
   protected readonly columns = signal(4);
-  protected readonly rows = computed(() => chunk(this.frames(), this.columns()));
+  protected readonly rows = computed(() => chunk(this.groups(), this.columns()));
 
   constructor() {
     const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
@@ -123,9 +111,8 @@ export class FrameGrid {
     });
   }
 
-  protected ratingText(rating: CameraRating): string {
-    const stars = '★'.repeat(Math.max(0, rating.stars ?? 0));
-    return [stars, rating.label].filter(Boolean).join(' ');
+  protected frameCount(group: Group): string {
+    return group.frames.length === 1 ? '1 Frame' : `${group.frames.length} Frames`;
   }
 }
 

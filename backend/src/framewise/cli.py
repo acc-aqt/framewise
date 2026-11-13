@@ -9,6 +9,7 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI
 
+from framewise.analyzer import FrameAnalyzer
 from framewise.review import open_session, resolve_data_dir
 from framewise.server import create_app
 
@@ -38,6 +39,7 @@ def main(
     argv: list[str] | None = None,
     serve: Serve = serve_with_uvicorn,
     open_browser: Callable[[str], object] = webbrowser.open,
+    analyzer: FrameAnalyzer | None = None,
 ) -> None:
     parser = argparse.ArgumentParser(prog="framewise")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -49,7 +51,12 @@ def main(
     if not args.session_folder.is_dir():
         parser.error(f"not a folder: {args.session_folder}")
 
-    store = open_session(args.session_folder, resolve_data_dir())
+    if analyzer is None:
+        # Imported here so the rest of framewise imports where Apple Vision doesn't exist.
+        from framewise.vision_analyzer import VisionAnalyzer
+
+        analyzer = VisionAnalyzer()
+    store = open_session(args.session_folder, resolve_data_dir(), analyzer)
     url = f"http://{HOST}:{args.port}/"
     print(f"framewise: {len(store.frames())} Frames in {store.root}, Review UI at {url}")
     if not (UI_DIR / "index.html").is_file():

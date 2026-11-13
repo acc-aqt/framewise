@@ -2,7 +2,7 @@ import io
 from pathlib import Path
 
 import pytest
-from conftest import make_jpg, make_raw, make_sidecar
+from conftest import FakeAnalyzer, make_jpg, make_raw, make_sidecar
 from fastapi.testclient import TestClient
 from PIL import Image
 
@@ -152,7 +152,7 @@ def test_the_review_ui_build_is_served_at_the_root(session_dir, data_dir, tmp_pa
     ui_dir.mkdir()
     (ui_dir / "index.html").write_text("<app-root></app-root>")
     (ui_dir / "main.js").write_text("console.log('framewise')")
-    client = TestClient(create_app(open_session(session_dir, data_dir), ui_dir))
+    client = TestClient(create_app(open_session(session_dir, data_dir, FakeAnalyzer()), ui_dir))
 
     assert "<app-root>" in client.get("/").text
     assert "framewise" in client.get("/main.js").text

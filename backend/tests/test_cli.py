@@ -1,5 +1,5 @@
 import pytest
-from conftest import make_jpg
+from conftest import FakeAnalyzer, make_jpg
 from fastapi.testclient import TestClient
 
 from framewise.cli import main
@@ -29,7 +29,12 @@ def test_review_scans_the_folder_serves_on_localhost_and_opens_the_browser(
     server = FakeServer()
     opened = []
 
-    main(["review", str(session_dir), "--port", "9123"], serve=server, open_browser=opened.append)
+    main(
+        ["review", str(session_dir), "--port", "9123"],
+        serve=server,
+        open_browser=opened.append,
+        analyzer=FakeAnalyzer(),
+    )
 
     assert (server.host, server.port) == ("127.0.0.1", 9123)
     assert opened == ["http://127.0.0.1:9123/"]
@@ -39,7 +44,12 @@ def test_review_scans_the_folder_serves_on_localhost_and_opens_the_browser(
 
 def test_review_refuses_a_folder_that_does_not_exist(tmp_path, isolated_data_dir):
     with pytest.raises(SystemExit) as exit_info:
-        main(["review", str(tmp_path / "missing")], serve=FakeServer(), open_browser=print)
+        main(
+            ["review", str(tmp_path / "missing")],
+            serve=FakeServer(),
+            open_browser=print,
+            analyzer=FakeAnalyzer(),
+        )
 
     assert exit_info.value.code == 2
 
@@ -49,6 +59,11 @@ def test_review_warns_when_the_review_ui_has_not_been_built(
 ):
     monkeypatch.setattr("framewise.cli.UI_DIR", tmp_path / "missing-build")
 
-    main(["review", str(session_dir)], serve=FakeServer(), open_browser=print)
+    main(
+        ["review", str(session_dir)],
+        serve=FakeServer(),
+        open_browser=print,
+        analyzer=FakeAnalyzer(),
+    )
 
     assert "ng build" in capsys.readouterr().err

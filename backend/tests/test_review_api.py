@@ -50,6 +50,29 @@ def test_a_raw_without_a_matching_jpg_is_reported_as_skipped(session_dir, review
     assert summary["skipped"] == ["L1000001-Pano.dng"]
 
 
+def test_raws_sharing_a_base_name_without_a_jpg_are_all_reported_as_skipped(session_dir, review):
+    make_raw(session_dir / "DSCF0001.RAF")
+    make_raw(session_dir / "DSCF0001.DNG")
+
+    summary = review().get("/api/session").json()
+
+    assert summary["total_frames"] == 0
+    assert summary["skipped"] == ["DSCF0001.DNG", "DSCF0001.RAF"]
+
+
+def test_only_one_of_several_raws_sharing_a_base_name_pairs_with_the_jpg(session_dir, review):
+    make_raw(session_dir / "DSCF0001.RAF")
+    make_raw(session_dir / "DSCF0001.DNG")
+    make_jpg(session_dir / "DSCF0001.JPG")
+
+    client = review()
+    summary = client.get("/api/session").json()
+    [frame] = client.get("/api/frames").json()
+
+    assert summary["raw_jpg_count"] == 1
+    assert sorted([frame["raw_path"], *summary["skipped"]]) == ["DSCF0001.DNG", "DSCF0001.RAF"]
+
+
 def test_subfolders_are_scanned_and_pairing_stays_within_one_folder(session_dir, review):
     make_raw(session_dir / "day1" / "DSCF0001.RAF")
     make_jpg(session_dir / "day1" / "DSCF0001.JPG")

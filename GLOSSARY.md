@@ -31,6 +31,16 @@ _Avoid_: Existing rating, prior rating
 The per-Session SQLite database under `~/Library/Application Support/framewise/` that holds a Session's Frames and their thumbnails. framewise never writes it into the Session folder.
 _Avoid_: Cache, catalog, index
 
+## Analysis
+
+**Capability**:
+One kind of signal framewise reads from a Frame's Analysis source, such as its fingerprint, its faces, whether those faces' eyes are open, face quality or aesthetics.
+_Avoid_: Feature, model, check
+
+**Provider**:
+An interchangeable implementation of one Capability, built into framewise or installed as a plug-in. Each Capability is served by one Provider at a time.
+_Avoid_: Backend, engine, analyzer, model
+
 ## Judging
 
 **Group**:

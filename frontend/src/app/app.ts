@@ -32,9 +32,14 @@ export class App {
     },
     { defaultValue: [] },
   );
-  protected readonly openGroupId = signal<number | null>(null);
+  // Tracks the Frame the photographer opened rather than the Group id, which changes when a
+  // Group gains an earlier Frame during analysis.
+  protected readonly openedFrameId = signal<number | null>(null);
   protected readonly openGroup = computed(
-    () => this.groups.value().find((group) => group.id === this.openGroupId()) ?? null,
+    () =>
+      this.groups
+        .value()
+        .find((group) => group.frames.some((frame) => frame.id === this.openedFrameId())) ?? null,
   );
 
   constructor() {

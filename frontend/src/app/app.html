@@ -16,8 +16,8 @@
   @if (groups.error()) {
     <p class="error">Could not load the Groups.</p>
   } @else if (openGroup(); as group) {
-    <app-group-view [group]="group" (back)="openGroupId.set(null)" />
+    <app-group-view [group]="group" (back)="openedFrameId.set(null)" />
   } @else {
-    <app-group-grid [groups]="groups.value()" (open)="openGroupId.set($event)" />
+    <app-group-grid [groups]="groups.value()" (open)="openedFrameId.set($event.frames[0].id)" />
   }
 </main>

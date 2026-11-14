@@ -7,6 +7,7 @@ store before its first write, so undo can restore them however often write-back 
 
 import os
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -59,6 +60,16 @@ class WriteBackResult:
 
 
 @dataclass(frozen=True)
+class WriteBackProgress:
+    """How far a running write-back or undo is. `files_total` is None while the files' current
+    ratings are still being read."""
+
+    running: bool = False
+    files_done: int = 0
+    files_total: int | None = None
+
+
+@dataclass(frozen=True)
 class ReviewedFrame:
     """A Frame's final Verdict, and the stars and color label of its Override, if any."""
 
@@ -83,6 +94,10 @@ class RatingWriteBack:
         self._store = store
         self._exiftool = exiftool
         self._lock = threading.Lock()
+        self._progress = WriteBackProgress()
+
+    def progress(self) -> WriteBackProgress:
+        return self._progress
 
     def dry_run(self, reviewed: list[ReviewedFrame], label_set: LabelSet) -> list[FileChange]:
         planned = [(item, path) for item in reviewed for path in _files_of(item.frame)]
@@ -101,31 +116,52 @@ class RatingWriteBack:
 
     def apply(self, reviewed: list[ReviewedFrame], label_set: LabelSet) -> WriteBackResult:
         with self._lock:
-            written, failed = [], []
-            for change in self.dry_run(reviewed, label_set):
-                if change.old == change.new:
-                    continue
-                error = self._apply_change(change)
-                if error is None:
-                    written.append(change.path)
-                else:
-                    failed.append(FileFailure(change.path, error))
-            return WriteBackResult(written, failed)
+            self._progress = WriteBackProgress(running=True)
+            try:
+                changes = [
+                    change
+                    for change in self.dry_run(reviewed, label_set)
+                    if change.old != change.new
+                ]
+                return self._each(changes, lambda change: change.path, self._apply_change)
+            finally:
+                self._progress = WriteBackProgress()
 
     def undo(self) -> WriteBackResult:
         with self._lock:
-            written, failed = [], []
-            for original in self._store.write_back_originals():
-                error = self._restore(original)
-                if error is None:
-                    self._store.forget_write_back_original(original.path)
-                    written.append(original.path)
-                else:
-                    failed.append(FileFailure(original.path, error))
-            return WriteBackResult(written, failed)
+            self._progress = WriteBackProgress(running=True)
+            try:
+                return self._each(
+                    self._store.write_back_originals(),
+                    lambda original: original.path,
+                    self._restore_and_forget,
+                )
+            finally:
+                self._progress = WriteBackProgress()
 
     def can_undo(self) -> bool:
         return bool(self._store.write_back_originals())
+
+    def _each[T](
+        self, items: list[T], path_of: Callable[[T], str], change: Callable[[T], str | None]
+    ) -> WriteBackResult:
+        """Changes each item's file, counting progress, and collects what was written."""
+        written, failed = [], []
+        self._progress = WriteBackProgress(running=True, files_total=len(items))
+        for done, item in enumerate(items, start=1):
+            error = change(item)
+            if error is None:
+                written.append(path_of(item))
+            else:
+                failed.append(FileFailure(path_of(item), error))
+            self._progress = WriteBackProgress(True, done, len(items))
+        return WriteBackResult(written, failed)
+
+    def _restore_and_forget(self, original: WrittenFileOriginal) -> str | None:
+        error = self._restore(original)
+        if error is None:
+            self._store.forget_write_back_original(original.path)
+        return error
 
     def _apply_change(self, change: FileChange) -> str | None:
         target = self._absolute(change.written_to)

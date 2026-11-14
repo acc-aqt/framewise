@@ -1,7 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { WriteBackDryRun, WriteBackFile } from './session-api';
+import { WriteBackDryRun, WriteBackFile, WriteBackProgress } from './session-api';
 import { WriteBackView } from './write-back';
 
 const dryRun: WriteBackDryRun = {
@@ -40,6 +40,8 @@ const dryRun: WriteBackDryRun = {
   can_undo: false,
 };
 
+const idle: WriteBackProgress = { running: false, files_done: 0, files_total: null };
+
 describe('Rating write-back', () => {
   let fixture: ComponentFixture<WriteBackView>;
   let http: HttpTestingController;
@@ -75,7 +77,14 @@ describe('Rating write-back', () => {
 
   async function showDryRun(response: WriteBackDryRun = dryRun): Promise<void> {
     http.expectOne({ method: 'GET', url: '/api/write-back' }).flush(response);
+    flushProgress();
     await settle();
+  }
+
+  function flushProgress(progress: WriteBackProgress = idle): void {
+    for (const request of http.match('/api/write-back/progress')) {
+      request.flush(progress);
+    }
   }
 
   async function click(testId: string): Promise<void> {
@@ -167,6 +176,51 @@ describe('Rating write-back', () => {
 
     expect(text('[data-testid="write-back-result"]')).toBe('Restored 2 files.');
     expect(all('[data-testid="write-back-undo"]')).toEqual([]);
+  });
+
+  it('says that it is reading the files while the preview loads', async () => {
+    flushProgress();
+    await settle();
+
+    expect(text('[data-testid="write-back-loading"]')).toBe(
+      'Reading the current rating of every file…',
+    );
+
+    await showDryRun();
+
+    expect(all('[data-testid="write-back-loading"]')).toEqual([]);
+  });
+
+  it('shows how many files are written while writing', async () => {
+    await showDryRun();
+
+    await click('write-back-apply');
+    await click('write-back-confirm');
+    expect(text('[data-testid="write-back-progress"]')).toBe(
+      'Writing ratings: reading the current ratings…',
+    );
+    flushProgress({ running: true, files_done: 1, files_total: 3 });
+    await settle();
+    expect(text('[data-testid="write-back-progress"]')).toBe('Writing ratings: 1 of 3 files');
+
+    http.expectOne({ method: 'POST', url: '/api/write-back' }).flush({ written: [], failed: [] });
+    await settle();
+    await showDryRun();
+    expect(all('[data-testid="write-back-progress"]')).toEqual([]);
+  });
+
+  it('shows a write-back that is still running after the page was reloaded', async () => {
+    http.expectOne({ method: 'GET', url: '/api/write-back' }).flush(dryRun);
+    flushProgress({ running: true, files_done: 120, files_total: 1243 });
+    await settle();
+
+    expect(text('[data-testid="write-back-progress"]')).toBe('Writing files: 120 of 1243 files');
+    expect(
+      element().querySelector<HTMLButtonElement>('[data-testid="write-back-apply"]')!.disabled,
+    ).toBe(true);
+    expect(
+      element().querySelector<HTMLButtonElement>('[data-testid="session-reset"]')!.disabled,
+    ).toBe(true);
   });
 
   it('resets the Session only after the photographer confirms', async () => {

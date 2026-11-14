@@ -659,6 +659,7 @@ describe('Review UI', () => {
     await settle();
 
     http.expectOne('/api/write-back');
+    http.expectOne('/api/write-back/progress');
     expect(all('[data-testid="write-back"]').length).toBe(1);
     expect(all('[data-testid="group-tile"]')).toEqual([]);
   });

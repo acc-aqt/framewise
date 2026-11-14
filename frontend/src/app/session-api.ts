@@ -119,6 +119,12 @@ export interface WriteBackDryRun {
   can_undo: boolean;
 }
 
+export interface WriteBackProgress {
+  running: boolean;
+  files_done: number;
+  files_total: number | null;
+}
+
 export interface WriteBackResult {
   written: string[];
   failed: { path: string; error: string }[];

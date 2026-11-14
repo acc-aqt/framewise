@@ -2,6 +2,7 @@ import json
 import plistlib
 import shutil
 import subprocess
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -10,6 +11,9 @@ from conftest import make_jpg, make_raw, make_sidecar, wait_until
 from PIL import Image
 from test_review_api import camera_ratings
 from test_verdicts_api import keep_every_clean_frame
+
+from framewise import server
+from framewise.exiftool import ExifTool
 
 EXIFTOOL = shutil.which("exiftool") or "/opt/homebrew/bin/exiftool"
 START = datetime(2026, 6, 20, 14, 30, 0)
@@ -504,3 +508,36 @@ def test_reset_waits_until_analysis_has_finished(session_dir, live_review, analy
     analyzer.hold(make_jpg(session_dir / "DSCF0001.JPG"))
 
     assert live_review(**english).post("/api/session/reset").status_code == 409
+
+
+class PausingExifTool(ExifTool):
+    """Holds each write until the test lets it through, so a running write-back can be seen."""
+
+    let_through = threading.Semaphore(0)
+
+    def run(self, *args):
+        if "-overwrite_original" in args:
+            PausingExifTool.let_through.acquire()
+        return super().run(*args)
+
+
+def test_a_running_write_back_and_reset_report_their_progress(
+    session_dir, review, analyzer, english, monkeypatch
+):
+    monkeypatch.setattr(server, "ExifTool", PausingExifTool)
+    jpg(session_dir, analyzer, "DSCF0001.JPG")
+    jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3, **BLURRY)
+    client = review(**english)
+
+    def progress() -> dict:
+        return client.get("/api/write-back/progress").json()
+
+    for url in ("/api/write-back", "/api/session/reset"):
+        request = threading.Thread(target=client.post, args=(url,))
+        request.start()
+        wait_until(lambda: progress() == {"running": True, "files_done": 0, "files_total": 2})
+        PausingExifTool.let_through.release()
+        wait_until(lambda: progress()["files_done"] == 1)
+        PausingExifTool.let_through.release()
+        request.join()
+        assert progress() == {"running": False, "files_done": 0, "files_total": None}

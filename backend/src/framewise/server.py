@@ -244,6 +244,10 @@ def create_app(
             "can_undo": write_back.can_undo(),
         }
 
+    @app.get("/api/write-back/progress")
+    def write_back_progress() -> dict:
+        return asdict(write_back.progress())
+
     @app.post("/api/write-back")
     def write_back_apply() -> dict:
         require_finished_analysis()

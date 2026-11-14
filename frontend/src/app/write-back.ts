@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
   output,
   signal,
@@ -10,7 +11,15 @@ import {
 import { firstValueFrom } from 'rxjs';
 import { Icon } from './icon';
 import { VERDICT_LABELS } from './proposal';
-import { WriteBackDryRun, WriteBackFile, WriteBackRating, WriteBackResult } from './session-api';
+import {
+  WriteBackDryRun,
+  WriteBackFile,
+  WriteBackProgress,
+  WriteBackRating,
+  WriteBackResult,
+} from './session-api';
+
+const PROGRESS_POLL_INTERVAL_MS = 500;
 
 interface Outcome {
   ok: boolean;
@@ -36,6 +45,21 @@ interface Outcome {
       </button>
       <h2>Rating write-back</h2>
     </div>
+    @if (working()) {
+      <div class="working" role="status" data-testid="write-back-progress">
+        @if (progressValue(); as progress) {
+          <progress [value]="progress.files_done" [max]="progress.files_total"></progress>
+        } @else {
+          <progress></progress>
+        }
+        <p>{{ activity() }}: {{ progressText() }}</p>
+      </div>
+    } @else if (dryRun.isLoading()) {
+      <div class="working" role="status" data-testid="write-back-loading">
+        <progress></progress>
+        <p>Reading the current rating of every file…</p>
+      </div>
+    }
     @if (dryRun.error()) {
       <p class="error-message">
         <app-icon name="alert" [size]="14" />
@@ -84,7 +108,7 @@ interface Outcome {
                 type="button"
                 class="btn btn-primary"
                 data-testid="write-back-confirm"
-                [disabled]="busy()"
+                [disabled]="working()"
                 (click)="apply()"
               >
                 Write to {{ changing().length }} files
@@ -96,7 +120,7 @@ interface Outcome {
             type="button"
             class="btn btn-primary"
             data-testid="write-back-apply"
-            [disabled]="busy() || changing().length === 0"
+            [disabled]="working() || changing().length === 0"
             (click)="confirming.set('write')"
           >
             Write ratings…
@@ -107,7 +131,7 @@ interface Outcome {
             type="button"
             class="btn"
             data-testid="write-back-undo"
-            [disabled]="busy()"
+            [disabled]="working()"
             (click)="undo()"
           >
             <app-icon name="reset" [size]="14" />
@@ -133,7 +157,7 @@ interface Outcome {
                 type="button"
                 class="btn btn-primary"
                 data-testid="session-reset-confirm"
-                [disabled]="busy()"
+                [disabled]="working()"
                 (click)="reset()"
               >
                 Reset Session
@@ -145,7 +169,7 @@ interface Outcome {
             type="button"
             class="btn btn-ghost"
             data-testid="session-reset"
-            [disabled]="busy()"
+            [disabled]="working()"
             (click)="confirming.set('reset')"
           >
             Reset Session…
@@ -259,6 +283,22 @@ interface Outcome {
     .count {
       color: var(--color-text-secondary);
     }
+    .working {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      padding: var(--space-2) var(--space-3);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      background: var(--color-surface-1);
+      color: var(--color-text-secondary);
+      font-size: var(--text-sm);
+    }
+    .working progress {
+      width: 100%;
+      height: 4px;
+      accent-color: var(--color-text-secondary);
+    }
     .confirmation {
       display: flex;
       flex-wrap: wrap;
@@ -360,11 +400,42 @@ export class WriteBackView {
   protected readonly dryRun = httpResource<WriteBackDryRun>(() => '/api/write-back');
   protected readonly confirming = signal<'write' | 'reset' | null>(null);
   protected readonly busy = signal(false);
+  protected readonly progress = httpResource<WriteBackProgress>(() => '/api/write-back/progress');
+  /** Files are being written, by this page or by a write-back still running after a reload. */
+  protected readonly working = computed(
+    () => this.busy() || (this.progress.hasValue() && this.progress.value().running),
+  );
+  protected readonly activity = signal('Writing files');
+  /** The progress once the number of files to write is known. */
+  protected readonly progressValue = computed(() => {
+    const progress = this.progress.hasValue() ? this.progress.value() : null;
+    if (progress === null || !progress.running || progress.files_total === null) {
+      return null;
+    }
+    return { files_done: progress.files_done, files_total: progress.files_total };
+  });
+  protected readonly progressText = computed(() => {
+    const progress = this.progressValue();
+    if (progress === null) {
+      return 'reading the current ratings…';
+    }
+    return `${progress.files_done} of ${files(progress.files_total)}`;
+  });
   protected readonly outcome = signal<Outcome | null>(null);
   protected readonly changing = computed(() =>
     this.dryRun.hasValue() ? this.dryRun.value().files.filter((file) => this.changes(file)) : [],
   );
   protected readonly verdictLabels = VERDICT_LABELS;
+
+  constructor() {
+    effect((onCleanup) => {
+      if (!this.working() || this.progress.isLoading()) {
+        return;
+      }
+      const timer = setTimeout(() => this.progress.reload(), PROGRESS_POLL_INTERVAL_MS);
+      onCleanup(() => clearTimeout(timer));
+    });
+  }
 
   protected changes(file: WriteBackFile): boolean {
     return file.old.stars !== file.new.stars || file.old.label !== file.new.label;
@@ -376,15 +447,21 @@ export class WriteBackView {
   }
 
   protected async apply(): Promise<void> {
-    await this.run('/api/write-back', 'Wrote');
+    await this.run('/api/write-back', 'Writing ratings', 'Wrote');
   }
 
   protected async undo(): Promise<void> {
-    await this.run('/api/write-back/undo', 'Restored');
+    await this.run('/api/write-back/undo', 'Restoring ratings', 'Restored');
   }
 
   protected async reset(): Promise<void> {
-    if (await this.run('/api/session/reset', 'Reset the Session and restored', 'Reset failed.')) {
+    const reset = await this.run(
+      '/api/session/reset',
+      'Resetting the Session',
+      'Reset the Session and restored',
+      'Reset failed.',
+    );
+    if (reset) {
       this.sessionReset.emit();
     }
   }
@@ -392,11 +469,14 @@ export class WriteBackView {
   /** Posts to `url` and reports the outcome. Returns whether the request succeeded. */
   private async run(
     url: string,
+    activity: string,
     verb: string,
     failure = 'Rating write-back failed.',
   ): Promise<boolean> {
+    this.activity.set(activity);
     this.busy.set(true);
     this.confirming.set(null);
+    this.progress.reload();
     try {
       const result = await firstValueFrom(this.http.post<WriteBackResult>(url, null));
       this.outcome.set({
@@ -410,6 +490,8 @@ export class WriteBackView {
       return false;
     } finally {
       this.busy.set(false);
+      this.activity.set('Writing files');
+      this.progress.reload();
       this.dryRun.reload();
     }
   }

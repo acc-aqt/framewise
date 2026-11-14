@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
+import { FaceBadges } from './face-badges';
 import { scoreBreakdown, VERDICT_LABELS } from './proposal';
 import { CameraRating, ColorLabel, Frame } from './session-api';
 
@@ -10,9 +11,27 @@ const KIND_BADGES: Record<Frame['kind'], string> = {
 @Component({
   selector: 'app-frame-tile',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [FaceBadges],
   host: { '[attr.title]': 'breakdown()' },
   template: `
-    <img [src]="frame().thumbnail_url" [alt]="frame().jpg_path" loading="lazy" />
+    <div class="stage">
+      <div
+        class="picture"
+        [style.aspect-ratio]="aspectRatio()"
+        [style.width]="fittedWidth()"
+        [style.height]="aspectRatio() === null ? null : 'auto'"
+      >
+        <img
+          [src]="frame().thumbnail_url"
+          [alt]="frame().jpg_path"
+          loading="lazy"
+          (load)="measure($event)"
+        />
+        @if (showFaces()) {
+          <app-face-badges [faces]="frame().faces" />
+        }
+      </div>
+    </div>
     <span class="badge" data-testid="kind-badge">{{ kindBadges[frame().kind] }}</span>
     @if (ratingText(frame().camera_rating); as rating) {
       <span class="rating" data-testid="camera-rating">{{ rating }}</span>
@@ -44,10 +63,23 @@ const KIND_BADGES: Record<Frame['kind'], string> = {
       border-radius: 4px;
       overflow: hidden;
     }
-    img {
+    .stage {
       flex: 1;
       min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      container-type: size;
+    }
+    .picture {
+      position: relative;
       width: 100%;
+      height: 100%;
+    }
+    img {
+      display: block;
+      width: 100%;
+      height: 100%;
       object-fit: contain;
     }
     .badge,
@@ -111,6 +143,16 @@ const KIND_BADGES: Record<Frame['kind'], string> = {
 })
 export class FrameTile {
   readonly frame = input.required<Frame>();
+  /** Marks each face of the Frame on its image. */
+  readonly showFaces = input(false);
+
+  /** The image's width over its height once loaded, so the picture fits it exactly and face
+   * badges land on their faces. */
+  protected readonly aspectRatio = signal<number | null>(null);
+  protected readonly fittedWidth = computed(() => {
+    const ratio = this.aspectRatio();
+    return ratio === null ? null : `min(100cqw, ${ratio * 100}cqh)`;
+  });
 
   protected readonly kindBadges = KIND_BADGES;
   protected readonly verdictLabels = VERDICT_LABELS;
@@ -126,6 +168,13 @@ export class FrameTile {
     }
     return this.ratingText({ stars: override.stars, label: labelName(override.label) });
   });
+
+  protected measure(event: Event): void {
+    const image = event.target as HTMLImageElement;
+    if (image.naturalWidth > 0 && image.naturalHeight > 0) {
+      this.aspectRatio.set(image.naturalWidth / image.naturalHeight);
+    }
+  }
 
   protected ratingText(rating: CameraRating): string {
     const stars = '★'.repeat(Math.max(0, rating.stars ?? 0));

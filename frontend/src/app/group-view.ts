@@ -34,7 +34,12 @@ import { Frame, Group } from './session-api';
           (click)="select.emit(frame)"
           (dblclick)="openLoupe.emit(frame)"
         >
-          <app-frame-tile class="tile" data-testid="frame-tile" [frame]="frame" />
+          <app-frame-tile
+            class="tile"
+            data-testid="frame-tile"
+            [frame]="frame"
+            [showFaces]="true"
+          />
           @if (frame.verdict !== 'winner') {
             <button
               type="button"

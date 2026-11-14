@@ -124,6 +124,7 @@ class FakeAnalyzer:
         self.analyzed: list[Path] = []
         self.signature = {"fingerprint": "fake-fingerprint@1"}
         self.similarity = SimilarityThresholds(burst=0.8, near_duplicate=0.9)
+        self.lineup = {}
         self.in_flight = 0
         self.peak_in_flight = 0
         self.at_background_priority: list[bool] = []

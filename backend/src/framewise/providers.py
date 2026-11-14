@@ -8,7 +8,15 @@ from importlib.metadata import EntryPoint, entry_points
 from pathlib import Path
 from typing import Protocol
 
-from framewise.analyzer import Face, FrameSignals, ProviderSignature, SimilarityThresholds
+from framewise.analyzer import (
+    ActiveProvider,
+    CapabilityLineup,
+    Face,
+    FrameSignals,
+    ProviderLineup,
+    ProviderSignature,
+    SimilarityThresholds,
+)
 from framewise.image_measures import Region, measure_image
 
 FINGERPRINT = "fingerprint"
@@ -89,12 +97,14 @@ class ProviderAnalyzer:
         eye_state: EyeStateProvider | None = None,
         face_quality: FaceQualityProvider | None = None,
         aesthetics: AestheticsProvider | None = None,
+        lineup: ProviderLineup | None = None,
     ):
         self.fingerprint = fingerprint
         self.face_detection = face_detection
         self.eye_state = eye_state
         self.face_quality = face_quality
         self.aesthetics = aesthetics
+        self.lineup = lineup or {}
 
     @property
     def similarity(self) -> SimilarityThresholds:
@@ -219,6 +229,7 @@ def discover_providers(found: Iterable[EntryPoint] | None = None) -> list[Provid
 def compose_analyzer(
     providers: Iterable[Provider], overrides: Mapping[str, str] | None = None
 ) -> ProviderAnalyzer:
+    overrides = dict(overrides or {})
     chosen = select_providers(providers, overrides)
     if FINGERPRINT not in chosen:
         raise MissingCapabilityError(
@@ -231,6 +242,26 @@ def compose_analyzer(
         eye_state=chosen.get(EYE_STATE),
         face_quality=chosen.get(FACE_QUALITY),
         aesthetics=chosen.get(AESTHETICS),
+        lineup=describe_lineup(chosen, overrides),
+    )
+
+
+def describe_lineup(chosen: Mapping[str, Provider], overrides: Mapping[str, str]) -> ProviderLineup:
+    return {
+        capability: CapabilityLineup(
+            active=_active_provider(chosen.get(capability), capability in overrides)
+        )
+        for capability in CAPABILITIES
+    }
+
+
+def _active_provider(provider: Provider | None, configured: bool) -> ActiveProvider | None:
+    if provider is None:
+        return None
+    return ActiveProvider(
+        id=provider.id,
+        version=provider.version,
+        source="config" if configured else "automatic",
     )
 
 

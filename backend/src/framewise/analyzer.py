@@ -1,7 +1,7 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
 
 # Bump whenever the built-in image maths or the shape of FrameSignals changes, so a re-run
 # re-analyses Frames whose saved analysis predates it. A Provider's own changes are covered by
@@ -10,6 +10,26 @@ ANALYSIS_VERSION = 5
 
 ProviderSignature = Mapping[str, str]
 """The Provider that served each Capability of an analysis, as "<id>@<version>" by Capability."""
+
+ProviderSource = Literal["automatic", "config"]
+
+
+@dataclass(frozen=True)
+class ActiveProvider:
+    id: str
+    version: int
+    source: ProviderSource
+    """Whether it was picked as the highest-priority available Provider or chosen in the config."""
+
+
+@dataclass(frozen=True)
+class CapabilityLineup:
+    active: ActiveProvider | None
+    """None where no Provider serves the Capability."""
+
+
+ProviderLineup = Mapping[str, CapabilityLineup]
+"""What serves each Capability in the running analyzer, by Capability in the fixed order."""
 
 
 @dataclass(frozen=True)
@@ -65,5 +85,7 @@ class FrameAnalyzer(Protocol):
     signature: ProviderSignature
     """Saved with each analysis, so a re-run re-analyses the Frames whose Providers changed."""
     similarity: SimilarityThresholds
+    lineup: ProviderLineup
+    """Shown in the Review UI, so the photographer can see how new analyses are made."""
 
     def analyze(self, jpg_path: Path) -> FrameSignals: ...

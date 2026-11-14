@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.types import Receive, Scope, Send
 
+from framewise.analyzer import ProviderLineup
 from framewise.exiftool import ExifTool
 from framewise.judge import DEFAULT_KEEPER_BUDGET, FaceCheck, Judgement, Proposal, Verdict, judge
 from framewise.lightroom import read_label_set
@@ -58,8 +59,12 @@ def create_app(
     analysis: SessionAnalysis,
     ui_dir: Path | None = None,
     lightroom_preferences: Path | None = None,
+    providers: ProviderLineup | None = None,
 ) -> FastAPI:
     app = FastAPI(title="framewise")
+    providers_json = {
+        capability: asdict(lineup) for capability, lineup in (providers or {}).items()
+    }
     write_back = RatingWriteBack(store, ExifTool())
 
     def _groups() -> list[list[AnalyzedFrame]]:
@@ -106,6 +111,7 @@ def create_app(
             "raw_jpg_count": summary.raw_jpg_count,
             "skipped": summary.skipped,
             "keeper_budget": _keeper_budget(),
+            "providers": providers_json,
         }
 
     @app.get("/api/progress")

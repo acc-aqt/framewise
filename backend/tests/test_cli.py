@@ -5,9 +5,11 @@ import pytest
 from conftest import BACKGROUND_PRIORITY_PLATFORMS, FakeAnalyzer, make_jpg, wait_until
 from fastapi.testclient import TestClient
 from test_models import CONTENT, hosted_model
+from test_providers import FakeFingerprint
 from test_write_back_api import rating
 
 from framewise.cli import main
+from framewise.providers import compose_analyzer
 
 
 class FakeServer:
@@ -303,3 +305,22 @@ def test_models_download_fails_with_the_reason_when_a_model_cannot_be_fetched(
 
     assert exit_info.value.code == 1
     assert "cannot be downloaded" in capsys.readouterr().err
+
+
+def test_review_shows_the_providers_of_the_running_analyzer(session_dir, isolated_data_dir):
+    server = FakeServer()
+
+    main(
+        ["review", str(session_dir)],
+        serve=server,
+        open_browser=print,
+        analyzer=compose_analyzer([FakeFingerprint(id="fake-fingerprint", version=2)]),
+        keep_awake=FakeWakeLock(),
+    )
+
+    providers = TestClient(server.app).get("/api/session").json()["providers"]
+    assert providers["fingerprint"]["active"] == {
+        "id": "fake-fingerprint",
+        "version": 2,
+        "source": "automatic",
+    }

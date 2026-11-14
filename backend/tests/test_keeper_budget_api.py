@@ -201,3 +201,19 @@ def test_a_camera_rating_lifts_a_frame_within_the_keeper_budget(session_dir, rev
         "DSCF0003.JPG": "keeper",
         "DSCF0004.JPG": "reject",
     }
+
+
+def test_rating_write_back_follows_the_keeper_budget(session_dir, review, analyzer):
+    five_of_falling_quality(session_dir, analyzer)
+    client = review()
+
+    set_keeper_budget(client, 0.4)
+
+    dry_run = client.get("/api/write-back").json()
+    assert {file["path"]: file["verdict"] for file in dry_run["files"]} == {
+        "DSCF0001.JPG": "winner",
+        "DSCF0002.JPG": "keeper",
+        "DSCF0003.JPG": "reject",
+        "DSCF0004.JPG": "reject",
+        "DSCF0005.JPG": "reject",
+    }

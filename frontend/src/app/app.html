@@ -3,6 +3,16 @@
   @if (summary.hasValue()) {
     <p class="root">{{ summary.value().root }}</p>
     <app-session-summary [summary]="summary.value()" />
+    @if (keeperBudget() !== null) {
+      <app-keeper-budget
+        [share]="keeperBudget()!"
+        [groups]="groups.value()"
+        (changeShare)="changeKeeperBudget($event)"
+      />
+    }
+    @if (keeperBudgetFailed()) {
+      <p class="error" data-testid="keeper-budget-error">Could not save the Keeper budget.</p>
+    }
   } @else if (summary.error()) {
     <p class="error">Could not load the Session.</p>
   }

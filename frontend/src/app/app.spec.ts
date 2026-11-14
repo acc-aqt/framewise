@@ -18,6 +18,7 @@ const summary: SessionSummary = {
   jpg_only_count: 1,
   raw_jpg_count: 2,
   skipped: ['100LEICA/L1000009-Pano.dng'],
+  keeper_budget: 0.4,
 };
 
 describe('Review UI', () => {
@@ -107,6 +108,82 @@ describe('Review UI', () => {
     expect(text('[data-testid="raw-jpg-count"]')).toBe('2');
     expect(text('[data-testid="skipped-count"]')).toBe('1');
     expect(text('[data-testid="skipped-files"]')).toContain('100LEICA/L1000009-Pano.dng');
+  });
+
+  describe('Keeper budget', () => {
+    const judged = [
+      group(1, [
+        frame(1, 'jpg-only', { verdict: 'winner' }),
+        frame(2, 'jpg-only', { verdict: 'keeper' }),
+        frame(3, 'jpg-only', { verdict: 'reject' }),
+      ]),
+      group(4, [frame(4, 'jpg-only', { verdict: 'winner' }), frame(5, 'jpg-only')]),
+    ];
+
+    function slider(): HTMLInputElement {
+      return fixture.nativeElement.querySelector('[data-testid="keeper-budget"]');
+    }
+
+    async function slideTo(percent: number): Promise<void> {
+      slider().value = String(percent);
+      slider().dispatchEvent(new Event('input'));
+      slider().dispatchEvent(new Event('change'));
+      await settle();
+    }
+
+    it("shows the Session's Keeper budget and the resulting number of Keepers", async () => {
+      await respond(summary, judged);
+
+      expect(slider().value).toBe('40');
+      expect(text('[data-testid="keeper-budget-percent"]')).toBe('40%');
+      expect(text('[data-testid="keeper-count"]')).toBe('2 Keepers · 4 of 5 Frames kept');
+    });
+
+    it('shows the slider at a Keeper budget of 0', async () => {
+      await respond({ ...summary, keeper_budget: 0 }, judged);
+
+      expect(slider().value).toBe('0');
+      expect(text('[data-testid="keeper-budget-percent"]')).toBe('0%');
+    });
+
+    it('saves a new Keeper budget and shows the Keepers it results in', async () => {
+      await respond(summary, judged);
+
+      await slideTo(20);
+
+      const request = http.expectOne('/api/session');
+      expect(request.request.method).toBe('PATCH');
+      expect(request.request.body).toEqual({ keeper_budget: 0.2 });
+      request.flush({ ...summary, keeper_budget: 0.2 });
+      await settle();
+      http
+        .expectOne((reload) => reload.url.startsWith('/api/groups'))
+        .flush([
+          group(1, [
+            frame(1, 'jpg-only', { verdict: 'winner' }),
+            frame(2, 'jpg-only', { verdict: 'reject' }),
+            frame(3, 'jpg-only', { verdict: 'reject' }),
+          ]),
+          group(4, [
+            frame(4, 'jpg-only', { verdict: 'winner' }),
+            frame(5, 'jpg-only', { verdict: 'reject' }),
+          ]),
+        ]);
+      await settle();
+
+      expect(text('[data-testid="keeper-budget-percent"]')).toBe('20%');
+      expect(text('[data-testid="keeper-count"]')).toBe('0 Keepers · 2 of 5 Frames kept');
+    });
+
+    it('says so when the Keeper budget could not be saved', async () => {
+      await respond(summary, judged);
+
+      await slideTo(60);
+      http.expectOne('/api/session').flush('boom', { status: 500, statusText: 'Server Error' });
+      await settle();
+
+      expect(text('[data-testid="keeper-budget-error"]')).toBe('Could not save the Keeper budget.');
+    });
   });
 
   it('shows a tile per Group with its Frame count', async () => {
@@ -356,6 +433,25 @@ describe('Review UI', () => {
     const frames = all('[data-testid="group-view"] [data-testid="frame-details"]');
     expect(text('[data-testid="score-breakdown"]', frames[0])).toContain('Face quality 0.64');
     expect(text('[data-testid="score-breakdown"]', frames[1])).not.toContain('Face quality');
+  });
+
+  it('shows the hint a Camera rating gave in the score breakdown', async () => {
+    await respond(summary, [
+      group(1, [
+        frame(1, 'jpg-only', {
+          verdict: 'winner',
+          camera_rating: { stars: 1, label: null },
+          scores: { ...SCORES, camera_rating: 0.05 },
+        }),
+        frame(2, 'jpg-only'),
+      ]),
+    ]);
+    all('[data-testid="group-tile"]')[0].click();
+    await fixture.whenStable();
+
+    const frames = all('[data-testid="group-view"] [data-testid="frame-details"]');
+    expect(text('[data-testid="score-breakdown"]', frames[0])).toContain('Camera rating +0.05');
+    expect(text('[data-testid="score-breakdown"]', frames[1])).not.toContain('Camera rating');
   });
 
   it('returns from an open Group to the grid of Groups', async () => {
@@ -909,6 +1005,7 @@ const SCORES: Frame['scores'] = {
   exposure: 1,
   aesthetics: 0.5,
   face_quality: null,
+  camera_rating: 0,
   total: 0.8,
 };
 

@@ -270,3 +270,19 @@ def test_reset_of_a_folder_without_a_session_store_changes_nothing(
     main(["reset", str(session_dir)])
 
     assert "nothing to reset" in capsys.readouterr().out
+
+
+def test_review_refuses_to_start_with_a_broken_config(session_dir, isolated_data_dir, capsys):
+    isolated_data_dir.mkdir(parents=True)
+    (isolated_data_dir / "config.toml").write_text("[providers\n")
+
+    with pytest.raises(SystemExit) as exit_info:
+        main(
+            ["review", str(session_dir)],
+            serve=FakeServer(),
+            open_browser=print,
+            keep_awake=FakeWakeLock(),
+        )
+
+    assert exit_info.value.code == 1
+    assert "config.toml: invalid TOML" in capsys.readouterr().err

@@ -17,7 +17,7 @@ from starlette.types import ASGIApp
 from framewise.analyzer import FrameAnalyzer
 from framewise.exiftool import ExifTool
 from framewise.lightroom import LIGHTROOM_PREFERENCES
-from framewise.providers import MissingCapabilityError, resolve_analyzer
+from framewise.providers import ProviderError, resolve_analyzer
 from framewise.review import (
     SessionAnalysis,
     hard_reset_session,
@@ -219,7 +219,7 @@ def main(
 
 def _resolve_analyzer() -> FrameAnalyzer:
     try:
-        return resolve_analyzer()
-    except MissingCapabilityError as error:
+        return resolve_analyzer(resolve_data_dir() / "config.toml")
+    except ProviderError as error:
         print(f"framewise: error: {error}", file=sys.stderr)
         sys.exit(1)

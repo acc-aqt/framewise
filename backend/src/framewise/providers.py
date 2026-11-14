@@ -2,7 +2,8 @@
 FrameAnalyzer with the built-in image maths."""
 
 import sys
-from collections.abc import Iterable
+import tomllib
+from collections.abc import Iterable, Mapping
 from importlib.metadata import EntryPoint, entry_points
 from pathlib import Path
 from typing import Protocol
@@ -19,8 +20,16 @@ CAPABILITIES = (FINGERPRINT, FACE_DETECTION, EYE_STATE, FACE_QUALITY, AESTHETICS
 ENTRY_POINT_GROUP = "framewise.providers"
 
 
-class MissingCapabilityError(RuntimeError):
+class ProviderError(RuntimeError):
+    """The Providers cannot be composed into an analyzer."""
+
+
+class MissingCapabilityError(ProviderError):
     """No available Provider for a mandatory Capability."""
+
+
+class ProviderConfigError(ProviderError):
+    """The Provider choices in the config cannot be honoured."""
 
 
 class Provider(Protocol):
@@ -152,9 +161,35 @@ class ProviderAnalyzer:
         ]
 
 
-def resolve_analyzer() -> ProviderAnalyzer:
-    """The analyzer made of the installed Providers, framewise's own included."""
-    return compose_analyzer(discover_providers())
+def resolve_analyzer(config_path: Path | None = None) -> ProviderAnalyzer:
+    """The analyzer made of the installed Providers, framewise's own included, with the
+    Providers chosen in the config file at config_path, if there is one."""
+    overrides = read_provider_overrides(config_path) if config_path else {}
+    try:
+        return compose_analyzer(discover_providers(), overrides)
+    except ProviderConfigError as error:
+        raise ProviderConfigError(f"{config_path}: {error}") from error
+
+
+def read_provider_overrides(config_path: Path) -> dict[str, str]:
+    """The [providers] table of a config file, mapping Capability to Provider id. A missing
+    file chooses nothing."""
+    try:
+        with config_path.open("rb") as file:
+            config = tomllib.load(file)
+    except FileNotFoundError:
+        return {}
+    except tomllib.TOMLDecodeError as error:
+        raise ProviderConfigError(f"{config_path}: invalid TOML: {error}") from error
+    overrides = config.get("providers", {})
+    if not isinstance(overrides, dict):
+        raise ProviderConfigError(f"{config_path}: [providers] must be a table")
+    for capability, provider_id in overrides.items():
+        if not isinstance(provider_id, str):
+            raise ProviderConfigError(
+                f"{config_path}: the {capability} Provider must be a Provider id in quotes"
+            )
+    return overrides
 
 
 def discover_providers(found: Iterable[EntryPoint] | None = None) -> list[Provider]:
@@ -175,8 +210,10 @@ def discover_providers(found: Iterable[EntryPoint] | None = None) -> list[Provid
     return providers
 
 
-def compose_analyzer(providers: Iterable[Provider]) -> ProviderAnalyzer:
-    chosen = select_providers(providers)
+def compose_analyzer(
+    providers: Iterable[Provider], overrides: Mapping[str, str] | None = None
+) -> ProviderAnalyzer:
+    chosen = select_providers(providers, overrides)
     if FINGERPRINT not in chosen:
         raise MissingCapabilityError(
             f"no available Provider for the {FINGERPRINT} Capability, which framewise needs "
@@ -191,8 +228,12 @@ def compose_analyzer(providers: Iterable[Provider]) -> ProviderAnalyzer:
     )
 
 
-def select_providers(providers: Iterable[Provider]) -> dict[str, Provider]:
-    """The highest-priority available Provider of each Capability."""
+def select_providers(
+    providers: Iterable[Provider], overrides: Mapping[str, str] | None = None
+) -> dict[str, Provider]:
+    """The Provider that overrides names for a Capability, else the highest-priority available
+    one."""
+    providers = list(providers)
     chosen: dict[str, Provider] = {}
     for provider in providers:
         if not _is_available(provider):
@@ -200,7 +241,24 @@ def select_providers(providers: Iterable[Provider]) -> dict[str, Provider]:
         current = chosen.get(provider.capability)
         if current is None or provider.priority > current.priority:
             chosen[provider.capability] = provider
+    for capability, provider_id in (overrides or {}).items():
+        chosen[capability] = _overriding_provider(providers, capability, provider_id)
     return chosen
+
+
+def _overriding_provider(providers: list[Provider], capability: str, provider_id: str) -> Provider:
+    if capability not in CAPABILITIES:
+        raise ProviderConfigError(
+            f'unknown Capability "{capability}", expected one of {", ".join(CAPABILITIES)}'
+        )
+    for provider in providers:
+        if provider.capability == capability and provider.id == provider_id:
+            if not _is_available(provider):
+                raise ProviderConfigError(
+                    f'the {capability} Provider "{provider_id}" is not available on this machine'
+                )
+            return provider
+    raise ProviderConfigError(f'the {capability} Provider "{provider_id}" is not installed')
 
 
 def _is_available(provider: Provider) -> bool:

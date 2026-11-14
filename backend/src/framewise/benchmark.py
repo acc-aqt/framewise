@@ -22,8 +22,8 @@ from pathlib import Path
 from framewise.analyzer import FrameAnalyzer
 from framewise.judge import KEPT, Proposal, Verdict, judge
 from framewise.lightroom import LIGHTROOM_PREFERENCES
-from framewise.providers import MissingCapabilityError, resolve_analyzer
-from framewise.review import SessionAnalysis, open_session
+from framewise.providers import ProviderError, resolve_analyzer
+from framewise.review import SessionAnalysis, open_session, resolve_data_dir
 from framewise.store import Frame
 
 ACTIVE_CATALOG_KEY = "libraryToLoad20"
@@ -286,7 +286,7 @@ def _path_key(path: Path | str) -> str:
 
 def _resolve_analyzer() -> FrameAnalyzer:
     try:
-        return resolve_analyzer()
-    except MissingCapabilityError as error:
+        return resolve_analyzer(resolve_data_dir() / "config.toml")
+    except ProviderError as error:
         print(f"framewise-benchmark: error: {error}", file=sys.stderr)
         sys.exit(1)

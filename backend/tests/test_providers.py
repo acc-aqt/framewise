@@ -4,7 +4,14 @@ from pathlib import Path
 import pytest
 from PIL import Image, ImageDraw, ImageFilter
 
-from framewise.providers import MissingCapabilityError, compose_analyzer, discover_providers
+from framewise.providers import (
+    MissingCapabilityError,
+    ProviderConfigError,
+    compose_analyzer,
+    discover_providers,
+    read_provider_overrides,
+    select_providers,
+)
 
 
 def draw_frame(path: Path) -> Path:
@@ -230,3 +237,72 @@ def test_a_provider_whose_availability_check_raises_counts_as_unavailable(tmp_pa
     analyzer = compose_analyzer([BrokenFingerprint(), FakeFingerprint(id="fallback")])
 
     assert analyzer.analyze(frame).fingerprint == [float(len("fallback"))]
+
+
+def test_an_override_wins_over_the_higher_priority_default():
+    providers = without("eye-state") + [
+        FakeEyeState(id="default", priority=9),
+        FakeEyeState(id="chosen", priority=1),
+    ]
+
+    chosen = select_providers(providers, {"eye-state": "chosen"})
+
+    assert chosen["eye-state"].id == "chosen"
+    assert chosen["fingerprint"].id == "fake-fingerprint"
+
+
+def test_overriding_with_an_unknown_provider_is_an_error():
+    with pytest.raises(
+        ProviderConfigError, match='the eye-state Provider "mediapipe" is not installed'
+    ):
+        select_providers(full_stack(), {"eye-state": "mediapipe"})
+
+
+def test_overriding_with_an_unavailable_provider_is_an_error():
+    providers = without("eye-state") + [FakeEyeState(id="mediapipe", available=False)]
+
+    with pytest.raises(
+        ProviderConfigError,
+        match='the eye-state Provider "mediapipe" is not available on this machine',
+    ):
+        select_providers(providers, {"eye-state": "mediapipe"})
+
+
+def test_overriding_an_unknown_capability_is_an_error():
+    with pytest.raises(ProviderConfigError, match='unknown Capability "eyes"'):
+        select_providers(full_stack(), {"eyes": "fake-eye-state"})
+
+
+def test_the_config_file_chooses_the_providers(tmp_path):
+    frame = draw_frame(tmp_path / "frame.jpg")
+    config = tmp_path / "config.toml"
+    config.write_text('[providers]\nfingerprint = "chosen"\n')
+    providers = [FakeFingerprint(id="default", priority=9), FakeFingerprint(id="chosen")]
+
+    analyzer = compose_analyzer(providers, read_provider_overrides(config))
+
+    assert analyzer.analyze(frame).fingerprint == [float(len("chosen"))]
+
+
+def test_without_a_config_file_the_automatic_defaults_are_chosen(tmp_path):
+    providers = full_stack() + [FakeEyeState(id="lower", priority=-1)]
+
+    overrides = read_provider_overrides(tmp_path / "config.toml")
+
+    assert select_providers(providers, overrides) == select_providers(providers)
+
+
+def test_a_config_file_that_is_not_toml_is_an_error(tmp_path):
+    config = tmp_path / "config.toml"
+    config.write_text("[providers\n")
+
+    with pytest.raises(ProviderConfigError, match="invalid TOML"):
+        read_provider_overrides(config)
+
+
+def test_a_provider_id_that_is_not_a_string_is_an_error(tmp_path):
+    config = tmp_path / "config.toml"
+    config.write_text("[providers]\neye-state = 3\n")
+
+    with pytest.raises(ProviderConfigError, match="eye-state"):
+        read_provider_overrides(config)

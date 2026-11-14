@@ -118,6 +118,7 @@ export class App {
   );
   protected readonly keeperBudgetFailed = signal(false);
   protected readonly paletteOpen = signal(false);
+  protected readonly paletteAvailable = computed(() => !this.noSession() && !this.writingBack());
   protected readonly commands = COMMANDS;
   protected readonly commandContext = computed<CommandContext>(() => {
     const frame = this.currentFrame();
@@ -155,7 +156,7 @@ export class App {
 
   protected onKeydown(event: KeyboardEvent): void {
     if (isPaletteKey(event)) {
-      if (!this.writingBack()) {
+      if (this.paletteAvailable()) {
         event.preventDefault();
         this.paletteOpen.update((open) => !open);
       }
@@ -310,8 +311,6 @@ export class App {
         return this.moveFrame(frame, shortcut.by);
       case 'makeWinner':
         return this.changeOverride(frame, { verdict: 'winner' });
-      case 'writeBack':
-        return this.openWriteBack();
     }
   }
 

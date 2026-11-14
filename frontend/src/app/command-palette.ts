@@ -7,6 +7,7 @@ import {
   input,
   output,
   signal,
+  OnDestroy,
   viewChild,
 } from '@angular/core';
 import { Command, CommandContext } from './shortcuts';
@@ -121,7 +122,7 @@ import { Command, CommandContext } from './shortcuts';
     }
   `,
 })
-export class CommandPalette {
+export class CommandPalette implements OnDestroy {
   readonly commands = input.required<readonly Command[]>();
   readonly context = input.required<CommandContext>();
   readonly run = output<Command>();
@@ -139,9 +140,16 @@ export class CommandPalette {
   });
 
   private readonly search = viewChild.required<ElementRef<HTMLInputElement>>('search');
+  private readonly focusedBefore = document.activeElement;
 
   constructor() {
     afterNextRender(() => this.search().nativeElement.focus());
+  }
+
+  ngOnDestroy(): void {
+    if (this.focusedBefore instanceof HTMLElement && this.focusedBefore.isConnected) {
+      this.focusedBefore.focus();
+    }
   }
 
   protected setQuery(query: string): void {
@@ -150,20 +158,21 @@ export class CommandPalette {
   }
 
   protected onKeydown(event: KeyboardEvent): void {
+    if (['ArrowDown', 'ArrowUp', 'Enter', 'Escape', 'Tab'].includes(event.key)) {
+      // The palette owns these keys, so neither focus nor the Review UI's shortcuts act on them.
+      event.preventDefault();
+      event.stopPropagation();
+    }
     switch (event.key) {
       case 'ArrowDown':
-        event.preventDefault();
         return this.moveHighlight(1);
       case 'ArrowUp':
-        event.preventDefault();
         return this.moveHighlight(-1);
       case 'Enter': {
-        event.preventDefault();
         const command = this.matches()[this.highlighted()];
         return command === undefined ? undefined : this.choose(command);
       }
       case 'Escape':
-        event.preventDefault();
         return this.close.emit();
     }
   }
@@ -176,6 +185,9 @@ export class CommandPalette {
 
   private moveHighlight(by: 1 | -1): void {
     const last = this.matches().length - 1;
+    if (last < 0) {
+      return;
+    }
     this.highlighted.update((index) => Math.min(last, Math.max(0, index + by)));
   }
 }

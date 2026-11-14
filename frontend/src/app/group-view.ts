@@ -84,7 +84,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
               class="btn btn-icon btn-ghost"
               data-testid="merge-previous"
               aria-label="Merge with previous"
-              appTooltip="Merge with previous"
+              [appTooltip]="mergePreviousTooltip"
               (click)="merge.emit(-1)"
             >
               <app-icon name="merge-previous" [size]="14" />
@@ -97,7 +97,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
               class="btn btn-icon btn-ghost"
               data-testid="merge-next"
               aria-label="Merge with next"
-              appTooltip="Merge with next"
+              [appTooltip]="mergeNextTooltip"
               (click)="merge.emit(1)"
             >
               <app-icon name="merge-next" [size]="14" />
@@ -199,7 +199,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
                   class="btn btn-icon btn-ghost"
                   data-testid="split-here"
                   aria-label="Split here"
-                  appTooltip="Split here"
+                  [appTooltip]="splitHereTooltip"
                   (click)="splitAt($index)"
                 >
                   <app-icon name="scissors" [size]="14" />
@@ -211,7 +211,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
                   class="btn btn-icon btn-ghost"
                   data-testid="move-previous"
                   aria-label="Move to previous Group"
-                  appTooltip="Move to previous Group"
+                  [appTooltip]="movePreviousTooltip"
                   (click)="move.emit({ frame, by: -1 })"
                 >
                   <app-icon name="arrow-left" [size]="14" />
@@ -223,7 +223,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
                   class="btn btn-icon btn-ghost"
                   data-testid="move-next"
                   aria-label="Move to next Group"
-                  appTooltip="Move to next Group"
+                  [appTooltip]="moveNextTooltip"
                   (click)="move.emit({ frame, by: 1 })"
                 >
                   <app-icon name="arrow-right" [size]="14" />
@@ -235,7 +235,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
                   class="btn btn-icon make-winner"
                   data-testid="make-winner"
                   aria-label="Make Winner"
-                  appTooltip="Make Winner"
+                  [appTooltip]="makeWinnerTooltip"
                   (click)="makeWinner.emit(frame)"
                 >
                   <app-icon name="crown" [size]="14" />
@@ -421,9 +421,15 @@ export class GroupView {
   );
   protected readonly pinnedWinnerCollapsed = signal(readPinnedWinnerCollapsed());
   protected readonly allGroupsTooltip: TooltipContent = {
-    label: 'All Groups',
+    ...commandById('all-groups'),
     key: commandById('close').key,
   };
+  protected readonly mergePreviousTooltip = commandById('merge-previous');
+  protected readonly mergeNextTooltip = commandById('merge-next');
+  protected readonly splitHereTooltip = commandById('split-here');
+  protected readonly movePreviousTooltip = commandById('move-previous');
+  protected readonly moveNextTooltip = commandById('move-next');
+  protected readonly makeWinnerTooltip = commandById('make-winner');
   protected readonly pinnedWinnerToggleLabel = computed(() =>
     this.pinnedWinnerCollapsed() ? 'Show Winner' : 'Hide Winner',
   );

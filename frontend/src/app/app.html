@@ -39,7 +39,7 @@
       </p>
     }
     <div class="status">
-      @if (!writingBack()) {
+      @if (paletteAvailable()) {
         <button
           type="button"
           class="btn btn-ghost"
@@ -112,7 +112,7 @@
       />
     }
   </main>
-  @if (paletteOpen() && !writingBack()) {
+  @if (paletteOpen() && paletteAvailable()) {
     <app-command-palette
       [commands]="commands"
       [context]="commandContext()"

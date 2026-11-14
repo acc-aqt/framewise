@@ -200,6 +200,17 @@ describe('Review UI', () => {
       expect(all('[data-testid="group-tile"]').length).toBe(1);
     });
 
+    it('opens no command palette before a Session is chosen', async () => {
+      await respondWithoutSession();
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+      await settle();
+      await choose({ opened: true });
+      await respond(summary, [group(1, [frame(1, 'jpg-only')])]);
+
+      expect(all('[data-testid="command-palette"]')).toEqual([]);
+    });
+
     it('keeps offering to choose a folder when the dialog is cancelled', async () => {
       await respondWithoutSession();
 
@@ -719,13 +730,13 @@ describe('Review UI', () => {
     await respondToPoll({ frames_done: 1, frames_left: 2, seconds_remaining: 4 }, []);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
     await settle();
-    expect(paletteCommand('Write back')!.getAttribute('aria-disabled')).toBe('true');
+    expect(paletteCommand('Rating write-back')!.getAttribute('aria-disabled')).toBe('true');
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
     await settle();
 
     await nextPoll();
     await respondToPoll({ frames_done: 3, frames_left: 0, seconds_remaining: 0 }, []);
-    await runFromPalette('Write back');
+    await runFromPalette('Rating write-back');
 
     http.expectOne('/api/write-back');
     http.expectOne('/api/write-back/progress');
@@ -1204,6 +1215,56 @@ describe('Review UI', () => {
         expect(all('[data-testid="loupe"]').length).toBe(1);
       });
 
+      it('keeps keyboard focus in the palette', async () => {
+        await openFirstGroup();
+        await openPalette();
+        expect(document.activeElement).toBe(search());
+
+        const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+        search().dispatchEvent(tab);
+
+        expect(tab.defaultPrevented).toBe(true);
+      });
+
+      it('runs no Review UI shortcut when focus has left the search', async () => {
+        await openFirstGroup();
+        await openPalette();
+        search().blur();
+
+        await press('x');
+
+        http.expectNone((request) => request.url.includes('/override'));
+        expect(palette()).toBeDefined();
+      });
+
+      it('gives focus back to where it was when the palette closes', async () => {
+        await openFirstGroup();
+        const back = all('[data-testid="back-to-groups"]')[0];
+        back.focus();
+        await openPalette();
+
+        await pressInSearch('Escape');
+
+        expect(document.activeElement).toBe(back);
+      });
+
+      it('highlights nothing and runs nothing when no command matches', async () => {
+        await openFirstGroup();
+        await openPalette();
+
+        await type('no such command');
+        await pressInSearch('ArrowDown');
+        await pressInSearch('Enter');
+        http.expectNone((request) => request.url.includes('/override'));
+
+        await type('reject');
+        await pressInSearch('Enter');
+
+        expect(http.expectOne('/api/frames/1/override').request.body).toEqual({
+          verdict: 'reject',
+        });
+      });
+
       it('runs no shortcut while the photographer types in the search', async () => {
         await openFirstGroup();
         await openPalette();
@@ -1555,7 +1616,7 @@ describe('Review UI', () => {
       it('returns to all Groups', async () => {
         await openGroup(1);
 
-        await runFromPalette('Show all Groups');
+        await runFromPalette('All Groups');
         await fixture.whenStable();
 
         expect(all('[data-testid="group-view"]')).toEqual([]);

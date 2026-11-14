@@ -129,7 +129,7 @@ export const COMMANDS: readonly Command[] = [
   frameCommand('compare', 'Compare with Winner', 'C', 'c', { kind: 'compare' }),
   frameCommand('zoom', 'Zoom Fit/100%', 'Z', 'z', { kind: 'zoom' }),
   frameCommand('close', 'Close', 'Esc', 'Escape', { kind: 'close' }),
-  paletteCommand('all-groups', 'Show all Groups', { kind: 'allGroups' }, whenFrameOpen),
+  paletteCommand('all-groups', 'All Groups', { kind: 'allGroups' }, whenFrameOpen),
   paletteCommand(
     'merge-previous',
     'Merge with previous',
@@ -168,7 +168,7 @@ export const COMMANDS: readonly Command[] = [
   ),
   paletteCommand(
     'write-back',
-    'Write back',
+    'Rating write-back',
     { kind: 'writeBack' },
     (context) => context.writeBackAvailable,
   ),

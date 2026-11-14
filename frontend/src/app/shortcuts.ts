@@ -9,6 +9,7 @@ export type Shortcut =
   | { kind: 'clear' }
   | { kind: 'step'; by: 1 | -1; withinGroup: boolean }
   | { kind: 'loupe' }
+  | { kind: 'compare' }
   | { kind: 'zoom' }
   | { kind: 'close' };
 
@@ -24,6 +25,7 @@ const LETTER_SHORTCUTS: Record<string, Shortcut> = {
   x: { kind: 'reject' },
   u: { kind: 'clear' },
   e: { kind: 'loupe' },
+  c: { kind: 'compare' },
   z: { kind: 'zoom' },
 };
 

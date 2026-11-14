@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  computed,
+  inject,
+  input,
+  output,
+} from '@angular/core';
 import { FramePicture } from './frame-picture';
 import { Icon } from './icon';
 import { VERDICT_LABELS } from './proposal';
@@ -10,24 +18,38 @@ export type LoupeZoom = 'fit' | '100%';
   selector: 'app-loupe',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FramePicture, Icon],
-  host: { 'data-testid': 'loupe', role: 'dialog', '[attr.aria-label]': 'frame().jpg_path' },
+  host: { 'data-testid': 'loupe', role: 'dialog', '[attr.aria-label]': 'label()' },
   template: `
-    <div class="stage" [class.actual-size]="zoom() === '100%'" (click)="toggleZoom.emit()">
-      <app-frame-picture
-        class="picture"
-        imageTestId="loupe-image"
-        [src]="frame().image_url"
-        [alt]="frame().jpg_path"
-        [faces]="frame().faces"
-        [fit]="zoom() === 'fit'"
-      />
+    <div class="sides">
+      @for (frame of frames(); track $index) {
+        <section class="side" data-testid="loupe-side">
+          <div
+            #stage
+            class="stage"
+            [class.actual-size]="zoom() === '100%'"
+            (click)="toggleZoom.emit()"
+            (scroll)="alignStages(stage)"
+          >
+            <app-frame-picture
+              class="picture"
+              imageTestId="loupe-image"
+              [src]="frame.image_url"
+              [alt]="frame.jpg_path"
+              [faces]="frame.faces"
+              [fit]="zoom() === 'fit'"
+            />
+          </div>
+          <div class="caption">
+            <span [class]="'verdict ' + frame.verdict" data-testid="loupe-verdict">
+              <span class="dot"></span>
+              {{ verdictLabels[frame.verdict] }}
+            </span>
+            <span class="file">{{ frame.jpg_path }}</span>
+          </div>
+        </section>
+      }
     </div>
     <div class="bar">
-      <span class="file">{{ frame().jpg_path }}</span>
-      <span [class]="'verdict ' + frame().verdict">
-        <span class="dot"></span>
-        {{ verdictLabels[frame().verdict] }}
-      </span>
       <button type="button" class="btn" data-testid="loupe-zoom" (click)="toggleZoom.emit()">
         <app-icon name="zoom" [size]="14" />
         {{ zoom() === '100%' ? '100%' : 'Fit' }}
@@ -53,8 +75,21 @@ export type LoupeZoom = 'fit' | '100%';
       flex-direction: column;
       background: var(--color-loupe);
     }
+    .sides {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      gap: 2px;
+    }
+    .side {
+      position: relative;
+      flex: 1;
+      min-width: 0;
+      display: flex;
+    }
     .stage {
       flex: 1;
+      min-width: 0;
       min-height: 0;
       display: flex;
       overflow: hidden;
@@ -73,6 +108,20 @@ export type LoupeZoom = 'fit' | '100%';
       flex: none;
       margin: auto;
     }
+    .caption {
+      position: absolute;
+      top: var(--space-3);
+      left: var(--space-3);
+      max-width: calc(100% - 2 * var(--space-3));
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: var(--space-1) var(--space-3) var(--space-1) var(--space-1);
+      border-radius: var(--radius-pill);
+      background: color-mix(in srgb, var(--color-surface-1) 85%, transparent);
+      backdrop-filter: blur(8px);
+      pointer-events: none;
+    }
     .bar {
       position: absolute;
       bottom: var(--space-5);
@@ -82,7 +131,7 @@ export type LoupeZoom = 'fit' | '100%';
       display: flex;
       align-items: center;
       gap: var(--space-3);
-      padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+      padding: var(--space-2);
       border: 1px solid var(--color-border);
       border-radius: var(--radius-lg);
       background: color-mix(in srgb, var(--color-surface-1) 90%, transparent);
@@ -133,10 +182,28 @@ export type LoupeZoom = 'fit' | '100%';
   `,
 })
 export class Loupe {
-  readonly frame = input.required<Frame>();
+  /** One Frame, or the current Frame and the Group's Winner to compare side by side. */
+  readonly frames = input.required<Frame[]>();
   readonly zoom = input.required<LoupeZoom>();
   readonly toggleZoom = output<void>();
   readonly close = output<void>();
 
   protected readonly verdictLabels = VERDICT_LABELS;
+  protected readonly label = computed(() =>
+    this.frames()
+      .map((frame) => frame.jpg_path)
+      .join(' and '),
+  );
+
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+
+  /** Scrolls every side to where `source` is, so at 100% they show the same region. */
+  protected alignStages(source: HTMLElement): void {
+    for (const stage of this.host.querySelectorAll<HTMLElement>('.stage')) {
+      if (stage !== source) {
+        stage.scrollLeft = source.scrollLeft;
+        stage.scrollTop = source.scrollTop;
+      }
+    }
+  }
 }

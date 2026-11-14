@@ -931,6 +931,130 @@ describe('Review UI', () => {
       expect(all('[data-testid="loupe-image"]')).toEqual([]);
     });
 
+    describe('Compare loupe', () => {
+      function compareSides(): { image: string | null | undefined; verdict: string }[] {
+        return all('[data-testid="loupe-side"]').map((side) => ({
+          image: side.querySelector('img')?.getAttribute('src'),
+          verdict: text('[data-testid="loupe-verdict"]', side),
+        }));
+      }
+
+      it('shows the current Frame beside the Winner, each with its Verdict and face badges', async () => {
+        await openFirstGroup([
+          group(1, [
+            frame(1, 'jpg-only', { verdict: 'winner', faces: [face(0.1, 'open', 'sharp')] }),
+            frame(2, 'jpg-only', { faces: [face(0.6, 'closed', 'soft')] }),
+          ]),
+        ]);
+        await press('ArrowRight');
+
+        await press('c');
+
+        expect(compareSides()).toEqual([
+          { image: '/api/frames/2/image', verdict: 'Keeper' },
+          { image: '/api/frames/1/image', verdict: 'Winner' },
+        ]);
+        expect(
+          all('[data-testid="loupe-side"]').map((side) => text('[data-testid="face-badge"]', side)),
+        ).toEqual(['Eyes closed · Soft', 'Eyes open · Sharp']);
+      });
+
+      it('zooms both sides together', async () => {
+        await openFirstGroup();
+        await press('c');
+
+        await press('z');
+
+        expect(text('[data-testid="loupe-zoom"]')).toBe('100%');
+        expect(all('[data-testid="loupe-side"]').length).toBe(2);
+        expect(all('[data-testid="loupe"] app-frame-picture.fit')).toEqual([]);
+      });
+
+      it('steps the current Frame within the Group while the Winner stays put', async () => {
+        await openFirstGroup();
+        await press('c');
+
+        await press('ArrowRight', { altKey: true });
+        expect(compareSides().map((side) => side.image)).toEqual([
+          '/api/frames/2/image',
+          '/api/frames/1/image',
+        ]);
+
+        await press('ArrowRight', { altKey: true });
+        expect(compareSides().map((side) => side.image)).toEqual([
+          '/api/frames/3/image',
+          '/api/frames/1/image',
+        ]);
+      });
+
+      it('keeps plain arrows within the Group while comparing', async () => {
+        await openFirstGroup();
+        await press('c');
+
+        await press('ArrowRight');
+        await press('ArrowRight');
+        await press('ArrowRight');
+
+        expect(compareSides().map((side) => side.image)).toEqual([
+          '/api/frames/3/image',
+          '/api/frames/1/image',
+        ]);
+      });
+
+      it('lets plain arrows leave the Group again once closed', async () => {
+        await openFirstGroup();
+        await press('c');
+        await press('Escape');
+
+        await press('ArrowRight');
+        await press('ArrowRight');
+        await press('ArrowRight');
+
+        expect(openFrameThumbnails()).toEqual(['/api/frames/4/thumbnail']);
+      });
+
+      it('rates the current Frame', async () => {
+        await openFirstGroup();
+        await press('c');
+        await press('ArrowRight', { altKey: true });
+
+        await press('x');
+
+        const request = http.expectOne('/api/frames/2/override');
+        expect(request.request.body).toEqual({ verdict: 'reject' });
+        request.flush({});
+        await settle();
+        await expectGroupsReloaded();
+      });
+
+      it('shows the Winner on both sides when it is the current Frame', async () => {
+        await openFirstGroup();
+
+        await press('c');
+
+        expect(compareSides()).toEqual([
+          { image: '/api/frames/1/image', verdict: 'Winner' },
+          { image: '/api/frames/1/image', verdict: 'Winner' },
+        ]);
+      });
+
+      it('closes with Escape, back to the open Group', async () => {
+        await openFirstGroup();
+        await press('c');
+
+        await press('Escape');
+
+        expect(all('[data-testid="loupe"]')).toEqual([]);
+        expect(all('[data-testid="group-view"]').length).toBe(1);
+      });
+
+      it('is listed in the shortcut legend', async () => {
+        await openFirstGroup();
+
+        expect(text('[data-testid="group-view"] .keys')).toContain('C compare');
+      });
+    });
+
     it("tells the photographer's Overrides apart from framewise's Verdicts", async () => {
       await openFirstGroup([
         group(1, [

@@ -16,7 +16,7 @@ import { Icon } from './icon';
 import { KeeperBudget } from './keeper-budget';
 import { Loupe, LoupeZoom } from './loupe';
 import { OverrideApi } from './override-api';
-import { NO_FILTER, ProposalFilter } from './proposal';
+import { findWinner, NO_FILTER, ProposalFilter } from './proposal';
 import { ProposalFilters } from './proposal-filters';
 import { AnalysisProgress, Frame, Group, OverrideChange, SessionSummary } from './session-api';
 import { SessionChangeApi } from './session-change-api';
@@ -83,6 +83,17 @@ export class App {
     () => this.openGroup()?.frames.find((frame) => frame.id === this.openedFrameId()) ?? null,
   );
   protected readonly loupeZoom = signal<LoupeZoom | null>(null);
+  /** Whether the loupe compares the current Frame with the Group's Winner. */
+  protected readonly comparing = signal(false);
+  protected readonly loupeFrames = computed(() => {
+    const frame = this.currentFrame();
+    const group = this.openGroup();
+    if (frame === null || group === null) {
+      return [];
+    }
+    const winner = this.comparing() ? findWinner(group) : undefined;
+    return winner === undefined ? [frame] : [frame, winner];
+  });
   protected readonly overrideFailed = signal(false);
   protected readonly keeperBudget = linkedSignal(() =>
     this.summary.hasValue() ? this.summary.value().keeper_budget : null,
@@ -167,8 +178,23 @@ export class App {
   }
 
   protected closeGroup(): void {
-    this.loupeZoom.set(null);
+    this.closeLoupe();
     this.openedFrameId.set(null);
+  }
+
+  protected openLoupe(): void {
+    this.comparing.set(false);
+    this.loupeZoom.set('fit');
+  }
+
+  protected openCompareLoupe(): void {
+    this.comparing.set(true);
+    this.loupeZoom.set('fit');
+  }
+
+  protected closeLoupe(): void {
+    this.comparing.set(false);
+    this.loupeZoom.set(null);
   }
 
   protected toggleZoom(): void {
@@ -193,14 +219,21 @@ export class App {
         return this.save(this.overrideApi.clear(frame.id));
       case 'step':
         return this.openedFrameId.set(
-          stepFrom(this.groups.value(), frame.id, shortcut.by, shortcut.withinGroup),
+          stepFrom(
+            this.groups.value(),
+            frame.id,
+            shortcut.by,
+            shortcut.withinGroup || this.comparing(),
+          ),
         );
       case 'loupe':
-        return this.loupeZoom.set('fit');
+        return this.openLoupe();
+      case 'compare':
+        return this.openCompareLoupe();
       case 'zoom':
         return this.toggleZoom();
       case 'close':
-        return this.loupeZoom() === null ? this.closeGroup() : this.loupeZoom.set(null);
+        return this.loupeZoom() === null ? this.closeGroup() : this.closeLoupe();
     }
   }
 

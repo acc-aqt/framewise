@@ -36,6 +36,10 @@ def resolve_data_dir() -> Path:
     return default_data_dir(sys.platform, os.environ, Path.home())
 
 
+def resolve_config_path() -> Path:
+    return resolve_data_dir() / "config.toml"
+
+
 def session_database_path(root: Path, data_dir: Path) -> Path:
     digest = hashlib.sha256(str(root).encode()).hexdigest()[:16]
     return data_dir / f"{root.name}-{digest}.sqlite"

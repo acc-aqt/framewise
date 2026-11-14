@@ -40,12 +40,6 @@ class FakeWakeLock:
             self.held = False
 
 
-@pytest.fixture
-def isolated_data_dir(data_dir, monkeypatch):
-    monkeypatch.setenv("FRAMEWISE_DATA_DIR", str(data_dir))
-    return data_dir
-
-
 def test_review_scans_the_folder_serves_on_localhost_and_opens_the_browser(
     session_dir, isolated_data_dir
 ):

@@ -90,6 +90,12 @@ def data_dir(tmp_path: Path) -> Path:
     return tmp_path / "app-support"
 
 
+@pytest.fixture
+def isolated_data_dir(data_dir, monkeypatch):
+    monkeypatch.setenv("FRAMEWISE_DATA_DIR", str(data_dir))
+    return data_dir
+
+
 CLEAN_SIGNALS = {
     "sharpness": 0.9,
     "motion_blur": 0.05,

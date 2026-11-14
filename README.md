@@ -37,7 +37,7 @@ By default each Capability (`fingerprint`, `face-detection`, `eye-state`, `face-
 eye-state = "apple-vision-eye-state"
 ```
 
-Capabilities left out keep the default. A Provider that is not installed or not available on the machine is an error, never a silent fallback. `framewise-benchmark` reads the same file.
+Capabilities left out keep the default. A Provider that is not installed or not available on the machine is an error, never a silent fallback. `framewise-benchmark` reads the same file, and `--provider <capability>=<id>`, repeatable, overrides it for one run, so Providers can be compared against your Reference ratings; its report names the Provider that served each Capability.
 
 In an open Group, review with Lightroom Classic's shortcuts: `1`–`5` set stars (`0` clears them), `6`–`9` set color labels, `P` / `X` / `U` keep, reject and clear, `W` makes the current Frame the Group's Winner, `←` / `→` move between Frames and `⌥←` / `⌥→` step through the current Group. `E` opens the loupe, `Z` zooms to 100% and `Esc` closes it. Overrides are saved in the Session store as you go (ADR-0003). The Keeper budget never changes them, and the Frames you keep count towards it. Fix wrong grouping in an open Group: split it at a Frame or split off the selected Frames, move a Frame to the previous or next Group, or merge the Group with its neighbour. Fixed Groups are kept on later re-runs (ADR-0004); "Reset grouping" hands a fixed Group back to framewise's grouping.
 

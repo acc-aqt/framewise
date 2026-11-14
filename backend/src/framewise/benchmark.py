@@ -22,8 +22,8 @@ from pathlib import Path
 from framewise.analyzer import FrameAnalyzer
 from framewise.judge import KEPT, Proposal, Verdict, judge
 from framewise.lightroom import LIGHTROOM_PREFERENCES
-from framewise.providers import ProviderError, resolve_analyzer
-from framewise.review import SessionAnalysis, open_session, resolve_data_dir
+from framewise.providers import Provider, ProviderError, resolve_analyzer
+from framewise.review import SessionAnalysis, open_session, resolve_config_path
 from framewise.store import Frame
 
 ACTIVE_CATALOG_KEY = "libraryToLoad20"
@@ -149,6 +149,7 @@ def main(
     argv: list[str] | None = None,
     analyzer: FrameAnalyzer | None = None,
     clock: Callable[[], float] = time.perf_counter,
+    providers: list[Provider] | None = None,
 ) -> None:
     parser = argparse.ArgumentParser(
         prog="framewise-benchmark",
@@ -161,6 +162,15 @@ def main(
         help="Lightroom Classic catalog to copy (default: the active one from Lightroom's prefs)",
     )
     parser.add_argument("--report", type=Path, default=Path("framewise-benchmark.json"))
+    parser.add_argument(
+        "--provider",
+        dest="overrides",
+        metavar="CAPABILITY=ID",
+        type=_provider_override,
+        action="append",
+        default=[],
+        help="Use this Provider for the Capability, over config.toml's choice (repeatable)",
+    )
     args = parser.parse_args(argv)
 
     session_root = args.session_folder.resolve()
@@ -175,7 +185,7 @@ def main(
         parser.error(f"no catalog at {catalog}")
 
     if analyzer is None:
-        analyzer = _resolve_analyzer()
+        analyzer = _resolve_analyzer(dict(args.overrides), providers)
 
     with tempfile.TemporaryDirectory(prefix="framewise-benchmark-") as temp:
         catalog_copy = copy_catalog(catalog, Path(temp))
@@ -209,6 +219,7 @@ def _run(
         "session": str(session_root),
         "frames": len(frames),
         "frames_analysed": sum(len(group) for group in groups),
+        "providers": dict(analyzer.signature),
         "agreement": asdict(agreement(proposal, references)),
         "timing": asdict(timing(len(frames), judged - started)),
         "analysis_seconds": analysed - started,
@@ -245,6 +256,12 @@ def _summary(report: dict, catalog: Path, report_path: Path) -> str:
         [
             f"framewise benchmark: {report['frames']} Frames in {report['session']}",
             f"Reference ratings from a copy of {catalog}",
+            "",
+            "Providers",
+            *(
+                f"  {capability}: {provider}"
+                for capability, provider in report["providers"].items()
+            ),
             "",
             "Agreement",
             f"  Rated Frames: {result['with_reference']} of {report['frames']}",
@@ -284,9 +301,16 @@ def _path_key(path: Path | str) -> str:
     return str(path).lower()
 
 
-def _resolve_analyzer() -> FrameAnalyzer:
+def _provider_override(text: str) -> tuple[str, str]:
+    capability, separator, provider_id = text.partition("=")
+    if not separator or not capability or not provider_id:
+        raise argparse.ArgumentTypeError(f"expected CAPABILITY=ID, got {text!r}")
+    return capability, provider_id
+
+
+def _resolve_analyzer(overrides: dict[str, str], providers: list[Provider] | None) -> FrameAnalyzer:
     try:
-        return resolve_analyzer(resolve_data_dir() / "config.toml")
+        return resolve_analyzer(resolve_config_path(), overrides, providers)
     except ProviderError as error:
         print(f"framewise-benchmark: error: {error}", file=sys.stderr)
         sys.exit(1)

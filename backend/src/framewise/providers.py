@@ -153,14 +153,22 @@ class ProviderAnalyzer:
         ]
 
 
-def resolve_analyzer(config_path: Path | None = None) -> ProviderAnalyzer:
+def resolve_analyzer(
+    config_path: Path | None = None,
+    overrides: Mapping[str, str] | None = None,
+    providers: list[Provider] | None = None,
+) -> ProviderAnalyzer:
     """The analyzer made of the installed Providers, framewise's own included, with the
-    Providers chosen in the config file at config_path, if there is one."""
-    overrides = read_provider_overrides(config_path) if config_path else {}
+    Providers chosen in the config file at config_path, if there is one. overrides, such as
+    those given on the command line, win over the config file's."""
+    if providers is None:
+        providers = discover_providers()
+    configured = read_provider_overrides(config_path) if config_path else {}
     try:
-        return compose_analyzer(discover_providers(), overrides)
+        select_providers(providers, configured)
     except ProviderConfigError as error:
         raise ProviderConfigError(f"{config_path}: {error}") from error
+    return compose_analyzer(providers, configured | dict(overrides or {}))
 
 
 def read_provider_overrides(config_path: Path) -> dict[str, str]:

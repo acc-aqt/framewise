@@ -22,6 +22,7 @@ from framewise.review import (
     SessionAnalysis,
     hard_reset_session,
     open_session,
+    resolve_config_path,
     resolve_data_dir,
     session_database_path,
 )
@@ -219,7 +220,7 @@ def main(
 
 def _resolve_analyzer() -> FrameAnalyzer:
     try:
-        return resolve_analyzer(resolve_data_dir() / "config.toml")
+        return resolve_analyzer(resolve_config_path())
     except ProviderError as error:
         print(f"framewise: error: {error}", file=sys.stderr)
         sys.exit(1)

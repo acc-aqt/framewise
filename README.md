@@ -28,7 +28,7 @@ This scans the folder, starts the server on `http://127.0.0.1:8765/` and opens t
 - `--background` analyses on a quarter of the cores at background priority, so apps like Lightroom stay responsive.
 - `--allow-sleep` lets the Mac sleep during analysis. By default framewise keeps it awake until analysis finishes. `FRAMEWISE_DATA_DIR` overrides the Session store folder. If the Review UI has not been built, `framewise review` warns you to run `npx ng build` in `frontend/`.
 
-In an open Group, review with Lightroom Classic's shortcuts: `1`–`5` set stars (`0` clears them), `6`–`9` set color labels, `P` / `X` / `U` keep, reject and clear, `←` / `→` move between Frames and `⌥←` / `⌥→` step through the current Group. `E` opens the loupe, `Z` zooms to 100% and `Esc` closes it. Overrides are saved in the Session store as you go (ADR-0003).
+In an open Group, review with Lightroom Classic's shortcuts: `1`–`5` set stars (`0` clears them), `6`–`9` set color labels, `P` / `X` / `U` keep, reject and clear, `←` / `→` move between Frames and `⌥←` / `⌥→` step through the current Group. `E` opens the loupe, `Z` zooms to 100% and `Esc` closes it. Overrides are saved in the Session store as you go (ADR-0003). Fix wrong grouping in an open Group: split it at a Frame or split off the selected Frames, move a Frame to the previous or next Group, or merge the Group with its neighbour. Fixed Groups are kept on later re-runs (ADR-0004).
 
 ## Rating write-back
 

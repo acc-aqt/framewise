@@ -30,6 +30,12 @@ def reasons(frame: dict) -> list[str]:
     return [reason["text"] for reason in frame["reasons"]]
 
 
+def keep_every_clean_frame(client):
+    """Raises the Keeper budget to the whole Session, so every Frame without Flaws is kept."""
+    assert client.patch("/api/session", json={"keeper_budget": 1.0}).status_code == 200
+    return client
+
+
 def burst(session_dir, analyzer, *frames: tuple[str, dict], raw: bool = False) -> None:
     """Scripts Frames captured a fraction of a second apart that look alike, so they form one
     Group."""
@@ -62,7 +68,7 @@ def test_every_group_has_exactly_one_winner(session_dir, review, analyzer):
 def test_a_clean_winner_and_keepers_have_no_reasons(session_dir, review, analyzer):
     burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.4}), ("DSCF0002", {}))
 
-    frames = frames_by_name(review())
+    frames = frames_by_name(keep_every_clean_frame(review()))
 
     assert [(frame["verdict"], frame["reasons"]) for frame in frames.values()] == [
         ("winner", []),
@@ -166,7 +172,7 @@ def test_low_key_and_high_key_frames_are_not_penalised(session_dir, review, anal
         ("DSCF0003", {"exposure_stops": 2.5, "high_key": True}),
     )
 
-    frames = frames_by_name(review())
+    frames = frames_by_name(keep_every_clean_frame(review()))
 
     for name in ("DSCF0002.JPG", "DSCF0003.JPG"):
         assert frames[name]["verdict"] == "keeper"
@@ -202,6 +208,7 @@ def test_each_frame_carries_its_score_breakdown_and_signals(session_dir, review,
         "exposure",
         "aesthetics",
         "face_quality",
+        "camera_rating",
         "total",
     }
     assert frame["scores"]["face_quality"] is None
@@ -249,7 +256,7 @@ def test_verdicts_are_recomputed_as_more_frames_are_analysed(session_dir, live_r
     burst(session_dir, analyzer, ("DSCF0001", {}), ("DSCF0002", {"aesthetics": 0.6}))
     analyzer.hold(session_dir / "DSCF0002.JPG")
 
-    client = live_review()
+    client = keep_every_clean_frame(live_review())
     wait_until(lambda: client.get("/api/progress").json()["frames_done"] == 1)
     assert verdicts(client) == {"DSCF0001.JPG": "winner"}
 

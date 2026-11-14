@@ -53,6 +53,10 @@ CREATE TABLE IF NOT EXISTS write_back_originals (
     label TEXT,
     created INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS settings (
+    name TEXT PRIMARY KEY,
+    value
+);
 """
 
 # Columns added to tables after the first release. Adding them to an existing Session store keeps
@@ -239,6 +243,17 @@ class SessionStore:
                 "WHERE jpg_path IN (SELECT value FROM json_each(?)))",
                 (json.dumps(jpg_paths),),
             )
+
+    def save_keeper_budget(self, share: float) -> None:
+        with self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO settings (name, value) VALUES ('keeper_budget', ?)",
+                (share,),
+            )
+
+    def keeper_budget(self) -> float | None:
+        row = self._db.execute("SELECT value FROM settings WHERE name = 'keeper_budget'").fetchone()
+        return None if row is None else row["value"]
 
     def frame(self, frame_id: int) -> Frame | None:
         row = self._db.execute("SELECT * FROM frames WHERE id = ?", (frame_id,)).fetchone()

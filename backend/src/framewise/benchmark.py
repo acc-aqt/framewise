@@ -20,7 +20,7 @@ from pathlib import Path
 
 from framewise.analyzer import FrameAnalyzer
 from framewise.grouper import group_frames
-from framewise.judge import Proposal, Verdict, judge
+from framewise.judge import KEPT, Proposal, Verdict, judge
 from framewise.review import SessionAnalysis, open_session
 from framewise.store import Frame
 
@@ -28,7 +28,6 @@ LIGHTROOM_PREFS = Path.home() / "Library" / "Preferences" / "com.adobe.Lightroom
 ACTIVE_CATALOG_KEY = "libraryToLoad20"
 # ADR-0002: 15 minutes for a 200-Frame Session on the first pass.
 BUDGET_SECONDS_PER_FRAME = 15 * 60 / 200
-KEPT = {Verdict.WINNER, Verdict.KEEPER}
 NOT_KEPT = {Verdict.REJECT, Verdict.UNSURE}
 
 REFERENCE_RATINGS_QUERY = """

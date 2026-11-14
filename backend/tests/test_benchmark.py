@@ -101,7 +101,13 @@ def fingerprint_of(folder: Path) -> dict[str, str]:
 
 def judgement(verdict: Verdict) -> Judgement:
     scores = Scores(
-        sharpness=1, steadiness=1, exposure=1, aesthetics=None, face_quality=None, total=1
+        sharpness=1,
+        steadiness=1,
+        exposure=1,
+        aesthetics=None,
+        face_quality=None,
+        camera_rating=0,
+        total=1,
     )
     return Judgement(verdict, [], scores, faces=[])
 

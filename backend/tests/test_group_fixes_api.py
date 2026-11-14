@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 from conftest import make_jpg
+from test_verdicts_api import keep_every_clean_frame
 
 START = datetime(2026, 6, 20, 14, 30, 0)
 BEACH = [1.0, 0.0, 0.0]
@@ -72,7 +73,7 @@ def move(client, name: str, to: str):
 
 def test_splitting_a_group_at_a_frame_gives_each_part_one_winner(session_dir, review, analyzer):
     beach_burst(session_dir, analyzer)
-    client = review()
+    client = keep_every_clean_frame(review())
 
     response = split(client, "DSCF0003.JPG", "DSCF0004.JPG")
 
@@ -114,14 +115,14 @@ def test_merging_two_groups_leaves_one_winner(session_dir, review, analyzer):
 def test_moving_a_frame_re_judges_both_groups(session_dir, review, analyzer):
     beach_burst(session_dir, analyzer)
     mountain(session_dir, analyzer)
-    client = review()
+    client = keep_every_clean_frame(review())
 
     response = move(client, "DSCF0001.JPG", to="DSCF0009.JPG")
 
     assert response.status_code == 204
     assert groups(client) == [
-        [("DSCF0001.JPG", "winner"), ("DSCF0009.JPG", "reject")],
-        [("DSCF0002.JPG", "winner"), ("DSCF0003.JPG", "keeper"), ("DSCF0004.JPG", "reject")],
+        [("DSCF0001.JPG", "winner"), ("DSCF0009.JPG", "keeper")],
+        [("DSCF0002.JPG", "winner"), ("DSCF0003.JPG", "keeper"), ("DSCF0004.JPG", "keeper")],
     ]
 
 
@@ -187,7 +188,7 @@ def test_a_frame_analysed_after_a_group_fix_does_not_undo_it(session_dir, review
 def test_verdict_overrides_still_win_after_group_fixes(session_dir, review, analyzer):
     beach_burst(session_dir, analyzer)
     mountain(session_dir, analyzer)
-    client = review()
+    client = keep_every_clean_frame(review())
     [keeper_id, winner_id] = ids(client, "DSCF0002.JPG", "DSCF0004.JPG")
     client.patch(f"/api/frames/{keeper_id}/override", json={"verdict": "reject", "stars": 2})
     client.patch(f"/api/frames/{winner_id}/override", json={"verdict": "winner"})
@@ -228,7 +229,7 @@ def test_choosing_a_winner_after_a_split_keeps_the_other_parts_winner(
     session_dir, review, analyzer
 ):
     beach_burst(session_dir, analyzer)
-    client = review()
+    client = keep_every_clean_frame(review())
     [second_id] = ids(client, "DSCF0002.JPG")
     client.patch(f"/api/frames/{second_id}/override", json={"verdict": "winner"})
     split(client, "DSCF0003.JPG", "DSCF0004.JPG")
@@ -271,7 +272,7 @@ def test_group_fixes_of_unknown_frames_are_not_found(session_dir, review, analyz
 
 def test_rating_write_back_follows_the_fixed_groups(session_dir, review, analyzer):
     beach_burst(session_dir, analyzer)
-    client = review()
+    client = keep_every_clean_frame(review())
 
     split(client, "DSCF0003.JPG", "DSCF0004.JPG")
 

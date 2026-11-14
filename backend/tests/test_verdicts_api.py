@@ -95,12 +95,22 @@ def test_a_frame_with_motion_blur_becomes_a_reject(session_dir, review, analyzer
 
 
 def test_a_slightly_soft_frame_is_unsure(session_dir, review, analyzer):
-    burst(session_dir, analyzer, ("DSCF0001", {}), ("DSCF0002", {"sharpness": 0.4}))
+    burst(session_dir, analyzer, ("DSCF0001", {}), ("DSCF0002", {"sharpness": 0.3}))
 
     soft = frames_by_name(review())["DSCF0002.JPG"]
 
     assert soft["verdict"] == "unsure"
     assert reasons(soft) == ["Slightly soft"]
+
+
+def test_a_sharp_frame_with_a_shallow_depth_of_field_is_not_soft(session_dir, review, analyzer):
+    """A sharp subject before a blurred background or a plain wall measures about 0.45."""
+    burst(session_dir, analyzer, ("DSCF0001", {}), ("DSCF0002", {"sharpness": 0.45}))
+
+    frame = frames_by_name(keep_every_clean_frame(review()))["DSCF0002.JPG"]
+
+    assert frame["verdict"] == "keeper"
+    assert frame["reasons"] == []
 
 
 def test_the_sharp_frame_of_a_burst_wins_over_a_blurry_one_with_better_aesthetics(

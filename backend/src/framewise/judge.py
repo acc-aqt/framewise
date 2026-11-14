@@ -24,8 +24,13 @@ from framewise.analyzer import Face, FrameSignals
 from framewise.camera_rating import CameraRating
 from framewise.store import AnalyzedFrame, FrameKind
 
+# A whole Frame's sharpness counts its blurred background and plain walls too, so a Frame with a
+# sharp subject and a shallow depth of field measures about 0.45 (sewts benchmark, #24). A face
+# is measured on its own.
 BLURRY_BELOW = 0.25
-SOFT_BELOW = 0.5
+SOFT_BELOW = 0.4
+FACE_BLURRY_BELOW = 0.25
+FACE_SOFT_BELOW = 0.5
 MOTION_BLUR_FROM = 0.5
 POSSIBLE_MOTION_BLUR_FROM = 0.35
 EXPOSURE_TOLERANCE_STOPS = 0.7
@@ -282,7 +287,8 @@ def _face_quality(faces: list[Face]) -> float | None:
 
 
 def _check_face(face: Face) -> FaceCheck:
-    return FaceCheck(face, eyes_closed=face.eyes_open is False, soft=face.sharpness < SOFT_BELOW)
+    soft = face.sharpness < FACE_SOFT_BELOW
+    return FaceCheck(face, eyes_closed=face.eyes_open is False, soft=soft)
 
 
 def _sharpness_flaws(analyzed: AnalyzedFrame) -> list[Flaw]:
@@ -290,12 +296,14 @@ def _sharpness_flaws(analyzed: AnalyzedFrame) -> list[Flaw]:
     if analyzed.signals.faces:
         blurry = Reason("blurry-face", "Blurry face", "Blurry face")
         soft = Reason("soft-face", "Soft face", "Soft face")
+        blurry_below, soft_below = FACE_BLURRY_BELOW, FACE_SOFT_BELOW
     else:
         blurry = Reason("blurry", "Blurry", "Blurry")
         soft = Reason("soft", "Slightly soft", "Slightly soft")
-    if sharpness < BLURRY_BELOW:
+        blurry_below, soft_below = BLURRY_BELOW, SOFT_BELOW
+    if sharpness < blurry_below:
         return [Flaw(blurry, Verdict.REJECT)]
-    if sharpness < SOFT_BELOW:
+    if sharpness < soft_below:
         return [Flaw(soft, Verdict.UNSURE)]
     return []
 

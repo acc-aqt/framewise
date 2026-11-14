@@ -157,7 +157,7 @@ def test_the_rest_of_the_group_is_re_judged_against_the_new_winner(session_dir, 
         analyzer,
         ("DSCF0001", {"aesthetics": 0.4}),
         ("DSCF0002", {"aesthetics": 0.4, "sharpness": 0.1}),
-        ("DSCF0003", {"aesthetics": 0.4, "sharpness": 0.45}),
+        ("DSCF0003", {"aesthetics": 0.4, "sharpness": 0.35}),
     )
     client = keep_every_clean_frame(review())
 

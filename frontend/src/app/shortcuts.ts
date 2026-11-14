@@ -114,6 +114,15 @@ export function commandById(id: string): Command {
   return command;
 }
 
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent);
+
+/** The key that opens the command palette, as the photographer sees it. */
+export const PALETTE_KEY = IS_MAC ? '⌘K' : 'Ctrl+K';
+
+export function isPaletteKey(event: KeyboardEvent): boolean {
+  return (event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'k';
+}
+
 export function shortcutFor(event: KeyboardEvent): Shortcut | null {
   if (event.metaKey || event.ctrlKey || isTypingInto(event.target)) {
     return null;

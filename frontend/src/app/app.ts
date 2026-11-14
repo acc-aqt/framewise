@@ -22,7 +22,18 @@ import { AnalysisProgress, Frame, Group, OverrideChange, SessionSummary } from '
 import { SessionChangeApi } from './session-change-api';
 import { SessionPicker } from './session-picker';
 import { SessionSummaryView } from './session-summary';
-import { Shortcut, shortcutFor, stepFrom } from './shortcuts';
+import { CommandPalette } from './command-palette';
+import {
+  Command,
+  CommandContext,
+  COMMANDS,
+  isPaletteKey,
+  PALETTE_KEY,
+  Shortcut,
+  shortcutFor,
+  stepFrom,
+} from './shortcuts';
+import { Tooltip, TooltipContent } from './tooltip';
 import { WriteBackView } from './write-back';
 
 export const POLL_INTERVAL_MS = 1000;
@@ -33,6 +44,7 @@ export const POLL_INTERVAL_MS = 1000;
   host: { '(document:keydown)': 'onKeydown($event)' },
   imports: [
     AnalysisProgressView,
+    CommandPalette,
     GroupGrid,
     GroupView,
     Icon,
@@ -41,6 +53,7 @@ export const POLL_INTERVAL_MS = 1000;
     ProposalFilters,
     SessionPicker,
     SessionSummaryView,
+    Tooltip,
     WriteBackView,
   ],
   templateUrl: './app.html',
@@ -99,6 +112,13 @@ export class App {
     this.summary.hasValue() ? this.summary.value().keeper_budget : null,
   );
   protected readonly keeperBudgetFailed = signal(false);
+  protected readonly paletteOpen = signal(false);
+  protected readonly commands = COMMANDS;
+  protected readonly commandContext = computed<CommandContext>(() => ({
+    frameOpen: this.currentFrame() !== null,
+  }));
+  protected readonly paletteKey = PALETTE_KEY;
+  protected readonly paletteTooltip: TooltipContent = { label: 'Commands', key: PALETTE_KEY };
 
   private readonly overrideApi = inject(OverrideApi);
   private readonly sessionChangeApi = inject(SessionChangeApi);
@@ -119,6 +139,19 @@ export class App {
   }
 
   protected onKeydown(event: KeyboardEvent): void {
+    if (isPaletteKey(event)) {
+      if (!this.writingBack()) {
+        event.preventDefault();
+        this.paletteOpen.update((open) => !open);
+      }
+      return;
+    }
+    if (this.paletteOpen()) {
+      if (event.key === 'Escape') {
+        this.paletteOpen.set(false);
+      }
+      return;
+    }
     const frame = this.currentFrame();
     const shortcut = frame === null ? null : shortcutFor(event);
     if (frame === null || shortcut === null) {
@@ -126,6 +159,14 @@ export class App {
     }
     event.preventDefault();
     this.run(shortcut, frame);
+  }
+
+  protected runCommand(command: Command): void {
+    this.paletteOpen.set(false);
+    const frame = this.currentFrame();
+    if (frame !== null) {
+      this.run(command.shortcut, frame);
+    }
   }
 
   protected changeOverride(frame: Frame, change: OverrideChange): void {

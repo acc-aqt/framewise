@@ -681,6 +681,19 @@ describe('Review UI', () => {
     expect(all('[data-testid="group-tile"]')).toEqual([]);
   });
 
+  it('opens no command palette on the write-back screen', async () => {
+    await respond(summary, []);
+    all('[data-testid="open-write-back"]')[0].click();
+    await settle();
+    http.expectOne('/api/write-back');
+    http.expectOne('/api/write-back/progress');
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+    await settle();
+
+    expect(all('[data-testid="command-palette"]')).toEqual([]);
+  });
+
   it('virtualizes the grid so a large Session does not render every tile', async () => {
     const groups = Array.from({ length: 400 }, (_, index) =>
       group(index + 1, [frame(index + 1, 'jpg-only')]),
@@ -986,6 +999,143 @@ describe('Review UI', () => {
       await fixture.whenStable();
 
       expect(all('[data-testid="loupe-image"]')).toEqual([]);
+    });
+
+    describe('command palette', () => {
+      const palette = () => all('[data-testid="command-palette"]')[0];
+      const search = () => palette().querySelector<HTMLInputElement>('input')!;
+      const rows = () =>
+        all('[data-testid="command"]').map((row) =>
+          Array.from(row.children)
+            .map((part) => part.textContent?.trim())
+            .join(' '),
+        );
+
+      async function openPalette(): Promise<void> {
+        await press('k', { metaKey: true });
+      }
+
+      async function type(query: string): Promise<void> {
+        search().value = query;
+        search().dispatchEvent(new Event('input'));
+        await settle();
+      }
+
+      async function pressInSearch(key: string): Promise<void> {
+        search().dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+        await settle();
+      }
+
+      it('opens with Command-K and lists every command with its key', async () => {
+        await openFirstGroup();
+
+        await openPalette();
+
+        expect(palette()).toBeDefined();
+        expect(rows()).toContain('Mark as Keeper P');
+        expect(rows()).toContain('Next Frame in Group ⌥→');
+        expect(rows()).toContain('Close Esc');
+        expect(rows().length).toBe(21);
+      });
+
+      it('opens from the header button', async () => {
+        await respond(summary, groups());
+
+        all('[data-testid="open-command-palette"]')[0].click();
+        await settle();
+
+        expect(palette()).toBeDefined();
+      });
+
+      it('filters the commands by name as the photographer types', async () => {
+        await openFirstGroup();
+        await openPalette();
+
+        await type('WINNER');
+
+        expect(rows()).toEqual(['Compare with Winner C']);
+      });
+
+      it('runs the highlighted command on Enter, as its key would, and closes', async () => {
+        await openFirstGroup();
+        await press('ArrowRight');
+        await openPalette();
+
+        await type('keeper');
+        await pressInSearch('Enter');
+
+        const request = http.expectOne('/api/frames/2/override');
+        expect(request.request.body).toEqual({ verdict: 'keeper' });
+        expect(all('[data-testid="command-palette"]')).toEqual([]);
+        request.flush({});
+        await settle();
+        await expectGroupsReloaded();
+      });
+
+      it('moves the highlight with the arrow keys', async () => {
+        await openFirstGroup();
+        await openPalette();
+
+        await type('star');
+        await pressInSearch('ArrowDown');
+        await pressInSearch('ArrowDown');
+        await pressInSearch('ArrowUp');
+        await pressInSearch('Enter');
+
+        expect(http.expectOne('/api/frames/1/override').request.body).toEqual({ stars: 2 });
+      });
+
+      it('runs a command when it is clicked', async () => {
+        await openFirstGroup();
+        await openPalette();
+
+        all('[data-testid="command"]')
+          .find((row) => row.textContent?.includes('Open loupe'))!
+          .click();
+        await settle();
+
+        expect(all('[data-testid="loupe"]').length).toBe(1);
+        expect(all('[data-testid="command-palette"]')).toEqual([]);
+      });
+
+      it('greys out commands that do not apply, which then do nothing', async () => {
+        await respond(summary, groups());
+        await openPalette();
+
+        const keeper = all('[data-testid="command"]').find((row) =>
+          row.textContent?.includes('Mark as Keeper'),
+        )!;
+        expect(keeper.getAttribute('aria-disabled')).toBe('true');
+
+        await type('keeper');
+        await pressInSearch('Enter');
+        keeper.click();
+        await settle();
+
+        http.expectNone((request) => request.url.includes('/override'));
+        expect(palette()).toBeDefined();
+      });
+
+      it('closes only the palette on Escape, leaving the loupe open', async () => {
+        await openFirstGroup();
+        await press('e');
+        await openPalette();
+
+        await pressInSearch('Escape');
+
+        expect(all('[data-testid="command-palette"]')).toEqual([]);
+        expect(all('[data-testid="loupe"]').length).toBe(1);
+      });
+
+      it('runs no shortcut while the photographer types in the search', async () => {
+        await openFirstGroup();
+        await openPalette();
+
+        await pressInSearch('p');
+        await press('x');
+
+        http.expectNone((request) => request.url.includes('/override'));
+      });
     });
 
     describe('Compare loupe', () => {

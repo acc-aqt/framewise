@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter, ImageOps
 
 pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="Apple Vision runs on macOS only")
 
@@ -304,3 +304,48 @@ def test_the_real_analyzer_checks_every_face_in_a_group_shot(tmp_path):
     faces = sorted(VisionAnalyzer().analyze(group_shot).faces, key=lambda face: face.x)
 
     assert [face.eyes_open for face in faces] == [True, False, True]
+
+
+def beside(second_face: Image.Image, path: Path) -> Path:
+    """The reference face on the left of a light grey wall and `second_face` on the right."""
+    image = Image.new("RGB", (768, 512), (200, 200, 200))
+    with Image.open(FACES / "eyes-open.jpg") as face:
+        image.paste(face.convert("RGB"), (64, 128))
+    image.paste(second_face, (448, 128))
+    image.save(path, "JPEG", quality=90)
+    return path
+
+
+def faint_reflection() -> Image.Image:
+    """The reference face mirrored and faded into a bright veil, like a reflection in glass."""
+    with Image.open(FACES / "eyes-open.jpg") as face:
+        mirrored = ImageOps.mirror(face.convert("RGB"))
+    return Image.blend(Image.new("RGB", mirrored.size, (235, 235, 235)), mirrored, 0.2)
+
+
+def in_the_shade(tmp_path: Path) -> Image.Image:
+    shaded = re_exposed(FACES / "eyes-open.jpg", tmp_path / "shaded-face.jpg", stops=-2)
+    with Image.open(shaded) as face:
+        return face.convert("RGB")
+
+
+def test_a_faint_reflection_has_a_fraction_of_the_contrast_of_the_face_it_reflects(tmp_path):
+    from framewise.judge import FAINT_FACE_CONTRAST_SHARE
+    from framewise.vision_analyzer import VisionAnalyzer
+
+    frame = beside(faint_reflection(), tmp_path / "reflection.jpg")
+
+    face, reflection = sorted(VisionAnalyzer().analyze(frame).faces, key=lambda face: face.x)
+
+    assert reflection.contrast < FAINT_FACE_CONTRAST_SHARE * face.contrast
+
+
+def test_a_face_in_the_shade_keeps_most_of_its_contrast(tmp_path):
+    from framewise.judge import FAINT_FACE_CONTRAST_SHARE
+    from framewise.vision_analyzer import VisionAnalyzer
+
+    frame = beside(in_the_shade(tmp_path), tmp_path / "shade.jpg")
+
+    lit, shaded = sorted(VisionAnalyzer().analyze(frame).faces, key=lambda face: face.x)
+
+    assert shaded.contrast > 2 * FAINT_FACE_CONTRAST_SHARE * lit.contrast

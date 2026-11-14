@@ -7,7 +7,8 @@ Unsure or Rejects. The Keeper budget decides how many of the remaining Frames, b
 the whole Session, become Keepers; the rest are Rejects.
 
 A Frame with faces is judged on its faces: its sharpness is that of its softest face, and every
-face must have open eyes and be sharp for the Frame to pass.
+face must have open eyes and be sharp for the Frame to pass. A face much fainter than the Frame's
+other faces, such as a reflection in glass, is left out.
 
 The photographer's Verdict Overrides steer the Winner: a Frame they made the Winner wins its
 Group, and a Frame they overrode to another Verdict is not picked, so the rest of the Group is
@@ -16,7 +17,7 @@ re-judged against the Winner that remains. Applying the Overrides themselves is 
 
 import math
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from pathlib import PurePosixPath
 
@@ -51,6 +52,10 @@ WEIGHTS = {
     "face_quality": 0.2,
 }
 EYES_CLOSED = "eyes-closed"
+# Contrast is measured relative to a face's brightness, so a face in the shade keeps it. On sewts,
+# faces reflected in glass keep at most 0.15 of the contrast of the Frame's most contrasty face,
+# real faces at least 0.39, such as a pale child's face beside an adult's (#38).
+FAINT_FACE_CONTRAST_SHARE = 1 / 4
 
 
 class Verdict(StrEnum):
@@ -244,6 +249,8 @@ def _judge_flaws_against_winner(assessment: _Assessment, winner: _Assessment) ->
 
 
 def _assess(analyzed: AnalyzedFrame) -> _Assessment:
+    signals = analyzed.signals
+    analyzed = replace(analyzed, signals=replace(signals, faces=_judged_faces(signals.faces)))
     flaws = [flaw for check in FLAW_CHECKS for flaw in check(analyzed)]
     return _Assessment(analyzed, _scores(analyzed), flaws)
 
@@ -287,6 +294,14 @@ def _judged_sharpness(signals: FrameSignals) -> float:
     if signals.faces:
         return min(face.sharpness for face in signals.faces)
     return signals.sharpness
+
+
+def _judged_faces(faces: list[Face]) -> list[Face]:
+    """Leaves out faces much fainter than the Frame's most contrasty face."""
+    if not faces:
+        return []
+    contrast_from = FAINT_FACE_CONTRAST_SHARE * max(face.contrast for face in faces)
+    return [face for face in faces if face.contrast >= contrast_from]
 
 
 def _face_quality(faces: list[Face]) -> float | None:

@@ -1,10 +1,15 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-# Bump whenever FrameSignals gains or changes a signal, so a re-run re-analyses Frames whose
-# saved analysis predates it.
+# Bump whenever the built-in image maths or the shape of FrameSignals changes, so a re-run
+# re-analyses Frames whose saved analysis predates it. A Provider's own changes are covered by
+# its version, in the ProviderSignature.
 ANALYSIS_VERSION = 5
+
+ProviderSignature = Mapping[str, str]
+"""The Provider that served each Capability of an analysis, as "<id>@<version>" by Capability."""
 
 
 @dataclass(frozen=True)
@@ -46,4 +51,7 @@ class FrameSignals:
 
 
 class FrameAnalyzer(Protocol):
+    signature: ProviderSignature
+    """Saved with each analysis, so a re-run re-analyses the Frames whose Providers changed."""
+
     def analyze(self, jpg_path: Path) -> FrameSignals: ...

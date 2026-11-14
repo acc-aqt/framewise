@@ -7,7 +7,7 @@ from importlib.metadata import EntryPoint, entry_points
 from pathlib import Path
 from typing import Protocol
 
-from framewise.analyzer import Face, FrameSignals
+from framewise.analyzer import Face, FrameSignals, ProviderSignature
 from framewise.image_measures import Region, measure_image
 
 FINGERPRINT = "fingerprint"
@@ -80,6 +80,21 @@ class ProviderAnalyzer:
         self.eye_state = eye_state
         self.face_quality = face_quality
         self.aesthetics = aesthetics
+
+    @property
+    def signature(self) -> ProviderSignature:
+        providers = (
+            self.fingerprint,
+            self.face_detection,
+            self.eye_state,
+            self.face_quality,
+            self.aesthetics,
+        )
+        return {
+            provider.capability: f"{provider.id}@{provider.version}"
+            for provider in providers
+            if provider is not None
+        }
 
     def analyze(self, jpg_path: Path) -> FrameSignals:
         boxes = self.face_detection.detect_faces(jpg_path) if self.face_detection else []

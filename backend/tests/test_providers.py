@@ -182,6 +182,15 @@ def test_without_aesthetics_the_score_is_none(tmp_path):
     assert compose_analyzer(without("aesthetics")).analyze(frame).aesthetics is None
 
 
+def test_the_signature_names_the_provider_and_version_serving_each_capability():
+    analyzer = compose_analyzer([FakeFingerprint(version=3), FakeEyeState()])
+
+    assert analyzer.signature == {
+        "fingerprint": "fake-fingerprint@3",
+        "eye-state": "fake-eye-state@1",
+    }
+
+
 @dataclass
 class FakeEntryPoint:
     name: str

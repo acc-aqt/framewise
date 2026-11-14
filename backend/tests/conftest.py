@@ -116,6 +116,7 @@ class FakeAnalyzer:
         self.fingerprints: dict[Path, list[float]] = {}
         self.signals: dict[Path, dict] = {}
         self.analyzed: list[Path] = []
+        self.signature = {"fingerprint": "fake-fingerprint@1"}
         self.in_flight = 0
         self.peak_in_flight = 0
         self.at_background_priority: list[bool] = []

@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from framewise.analyzer import ANALYSIS_VERSION, Face, FrameSignals
+from framewise.analyzer import ANALYSIS_VERSION, Face, FrameSignals, ProviderSignature
 from framewise.camera_rating import CameraRating
 from framewise.scan import ScannedFrame
 
@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS analyses (
     fingerprint BLOB NOT NULL,
     captured_at TEXT,
     version INTEGER,
-    signals TEXT
+    signals TEXT,
+    providers TEXT
 );
 CREATE TABLE IF NOT EXISTS skipped_files (
     path TEXT PRIMARY KEY
@@ -61,8 +62,9 @@ CREATE TABLE IF NOT EXISTS settings (
 """
 
 # Columns added to tables after the first release. Adding them to an existing Session store keeps
-# its rows; analyses saved before then have no version, so they no longer count as current.
-ADDED_COLUMNS = {"analyses": {"version": "INTEGER", "signals": "TEXT"}}
+# its rows; analyses saved before then have no version or Providers, so they no longer count as
+# current.
+ADDED_COLUMNS = {"analyses": {"version": "INTEGER", "signals": "TEXT", "providers": "TEXT"}}
 
 FrameKind = Literal["jpg-only", "raw+jpg"]
 
@@ -182,28 +184,34 @@ class SessionStore:
     def has_current_thumbnail(self, jpg_path: Path) -> bool:
         return self._has_current_row("thumbnails", jpg_path)
 
-    def has_current_analysis(self, jpg_path: Path) -> bool:
+    def has_current_analysis(self, jpg_path: Path, signature: ProviderSignature) -> bool:
+        """Whether the JPG's saved analysis is of its current contents, made by the given
+        Providers."""
         row = self._db.execute(
-            "SELECT 1 FROM analyses "
-            "WHERE jpg_path = ? AND jpg_size = ? AND jpg_mtime_ns = ? AND version = ?",
-            (*self._file_key(jpg_path), ANALYSIS_VERSION),
+            "SELECT 1 FROM analyses WHERE jpg_path = ? AND jpg_size = ? AND jpg_mtime_ns = ? "
+            "AND version = ? AND providers = ?",
+            (*self._file_key(jpg_path), ANALYSIS_VERSION, _signature_text(signature)),
         ).fetchone()
         return row is not None
 
     def save_analysis(
-        self, jpg_path: Path, signals: FrameSignals, captured_at: datetime | None
+        self,
+        jpg_path: Path,
+        signals: FrameSignals,
+        captured_at: datetime | None,
+        signature: ProviderSignature,
     ) -> None:
         with self._db:
             self._db.execute(
-                "INSERT OR REPLACE INTO analyses "
-                "(jpg_path, jpg_size, jpg_mtime_ns, fingerprint, captured_at, version, signals) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT OR REPLACE INTO analyses (jpg_path, jpg_size, jpg_mtime_ns, fingerprint, "
+                "captured_at, version, signals, providers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     *self._file_key(jpg_path),
                     array("f", signals.fingerprint).tobytes(),
                     None if captured_at is None else captured_at.isoformat(),
                     ANALYSIS_VERSION,
                     json.dumps(_signals_without_fingerprint(signals)),
+                    _signature_text(signature),
                 ),
             )
 
@@ -333,12 +341,14 @@ class SessionStore:
         rows = self._db.execute("SELECT * FROM frames ORDER BY jpg_path")
         return [_frame(row) for row in rows]
 
-    def analyzed_frames(self) -> list[AnalyzedFrame]:
+    def analyzed_frames(self, signature: ProviderSignature) -> list[AnalyzedFrame]:
+        """The Frames whose saved analysis the given Providers made. Fingerprints from different
+        Providers can't be compared, so Frames waiting for re-analysis are left out."""
         rows = self._db.execute(
             "SELECT frames.*, analyses.fingerprint, analyses.signals, analyses.captured_at "
             "FROM frames JOIN analyses ON analyses.jpg_path = frames.jpg_path "
-            "WHERE analyses.version = ? ORDER BY frames.jpg_path",
-            (ANALYSIS_VERSION,),
+            "WHERE analyses.version = ? AND analyses.providers = ? ORDER BY frames.jpg_path",
+            (ANALYSIS_VERSION, _signature_text(signature)),
         )
         return [
             AnalyzedFrame(
@@ -396,6 +406,10 @@ class SessionStore:
 
     def _relative(self, path: Path | None) -> str | None:
         return None if path is None else path.relative_to(self.root).as_posix()
+
+
+def _signature_text(signature: ProviderSignature) -> str:
+    return json.dumps(dict(signature), sort_keys=True)
 
 
 def _signals_without_fingerprint(signals: FrameSignals) -> dict:

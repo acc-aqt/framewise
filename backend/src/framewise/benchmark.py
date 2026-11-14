@@ -20,7 +20,6 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from framewise.analyzer import FrameAnalyzer
-from framewise.grouper import group_frames
 from framewise.judge import KEPT, Proposal, Verdict, judge
 from framewise.lightroom import LIGHTROOM_PREFERENCES
 from framewise.providers import MissingCapabilityError, resolve_analyzer
@@ -197,10 +196,11 @@ def _run(
     """A cold first pass: a fresh Session store, so every Frame is analysed."""
     started = clock()
     store = open_session(session_root, data_dir)
-    SessionAnalysis(store, analyzer).run()
+    analysis = SessionAnalysis(store, analyzer)
+    analysis.run()
     analysed = clock()
-    analyzed_frames = store.analyzed_frames()
-    proposal = judge(group_frames(analyzed_frames))
+    groups = analysis.groups()
+    proposal = judge(groups)
     judged = clock()
 
     frames = store.frames()
@@ -208,7 +208,7 @@ def _run(
     return {
         "session": str(session_root),
         "frames": len(frames),
-        "frames_analysed": len(analyzed_frames),
+        "frames_analysed": sum(len(group) for group in groups),
         "agreement": asdict(agreement(proposal, references)),
         "timing": asdict(timing(len(frames), judged - started)),
         "analysis_seconds": analysed - started,

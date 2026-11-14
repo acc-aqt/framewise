@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field
 from starlette.types import Receive, Scope, Send
 
 from framewise.exiftool import ExifTool
-from framewise.grouper import group_frames
 from framewise.judge import DEFAULT_KEEPER_BUDGET, FaceCheck, Judgement, Proposal, Verdict, judge
 from framewise.lightroom import read_label_set
 from framewise.review import SessionAnalysis
@@ -64,7 +63,7 @@ def create_app(
     write_back = RatingWriteBack(store, ExifTool())
 
     def _groups() -> list[list[AnalyzedFrame]]:
-        return group_frames(store.analyzed_frames(), store.group_overrides())
+        return analysis.groups(store.group_overrides())
 
     def _group_paths() -> list[list[str]]:
         return [[analyzed.frame.jpg_path for analyzed in group] for group in _groups()]

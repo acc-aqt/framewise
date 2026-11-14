@@ -13,8 +13,9 @@ from framewise.analyzer import FrameAnalyzer, FrameSignals
 from framewise.camera_rating import CameraRating, read_camera_rating
 from framewise.capture_time import read_capture_time
 from framewise.exiftool import ExifTool
+from framewise.grouper import group_frames
 from framewise.scan import scan_session
-from framewise.store import SessionStore
+from framewise.store import AnalyzedFrame, SessionStore
 from framewise.thumbnails import make_thumbnail
 from framewise.write_back import RatingWriteBack, WriteBackResult
 
@@ -138,6 +139,10 @@ class SessionAnalysis:
                     )
                 self._count_done(item)
 
+    def groups(self, group_overrides: Mapping[str, str] | None = None) -> list[list[AnalyzedFrame]]:
+        """The Groups of the Frames analysed so far by the current Providers."""
+        return group_frames(self._store.analyzed_frames(self._analyzer.signature), group_overrides)
+
     def progress(self) -> AnalysisProgress:
         with self._lock:
             frames_left = self._frames_total - self._frames_done
@@ -163,7 +168,7 @@ class SessionAnalysis:
         return _FrameWork(
             jpg_path=jpg_path,
             needs_thumbnail=not self._store.has_current_thumbnail(jpg_path),
-            needs_analysis=not self._store.has_current_analysis(jpg_path),
+            needs_analysis=not self._store.has_current_analysis(jpg_path, self._analyzer.signature),
         )
 
     def _process(self, item: _FrameWork) -> _FrameResult:
@@ -181,7 +186,9 @@ class SessionAnalysis:
         if result.thumbnail is not None:
             self._store.save_thumbnail(result.jpg_path, result.thumbnail)
         if result.signals is not None:
-            self._store.save_analysis(result.jpg_path, result.signals, result.captured_at)
+            self._store.save_analysis(
+                result.jpg_path, result.signals, result.captured_at, self._analyzer.signature
+            )
 
     def _count_done(self, item: _FrameWork) -> None:
         with self._lock:

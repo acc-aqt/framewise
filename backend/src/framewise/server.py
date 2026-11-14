@@ -4,10 +4,13 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 
 from framewise.grouper import group_frames
+from framewise.review import SessionAnalysis
 from framewise.store import Frame, SessionStore
 
 
-def create_app(store: SessionStore, ui_dir: Path | None = None) -> FastAPI:
+def create_app(
+    store: SessionStore, analysis: SessionAnalysis, ui_dir: Path | None = None
+) -> FastAPI:
     app = FastAPI(title="framewise")
 
     @app.get("/api/session")
@@ -19,6 +22,15 @@ def create_app(store: SessionStore, ui_dir: Path | None = None) -> FastAPI:
             "jpg_only_count": summary.jpg_only_count,
             "raw_jpg_count": summary.raw_jpg_count,
             "skipped": summary.skipped,
+        }
+
+    @app.get("/api/progress")
+    def analysis_progress() -> dict:
+        progress = analysis.progress()
+        return {
+            "frames_done": progress.frames_done,
+            "frames_left": progress.frames_left,
+            "seconds_remaining": progress.seconds_remaining,
         }
 
     @app.get("/api/frames")

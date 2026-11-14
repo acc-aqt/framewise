@@ -36,6 +36,12 @@ CREATE TABLE IF NOT EXISTS analyses (
 CREATE TABLE IF NOT EXISTS skipped_files (
     path TEXT PRIMARY KEY
 );
+CREATE TABLE IF NOT EXISTS overrides (
+    jpg_path TEXT PRIMARY KEY,
+    verdict TEXT,
+    stars INTEGER,
+    label TEXT
+);
 """
 
 # Columns added to tables after the first release. Adding them to an existing Session store keeps
@@ -55,6 +61,21 @@ class Frame:
     @property
     def kind(self) -> FrameKind:
         return "jpg-only" if self.raw_path is None else "raw+jpg"
+
+
+@dataclass(frozen=True)
+class Override:
+    """The photographer's Override of one Frame. A field left None keeps framewise's judgement.
+
+    Keyed by the Frame's JPG path, so it survives re-analysis and Groups being recomputed."""
+
+    verdict: str | None = None
+    stars: int | None = None
+    label: str | None = None
+
+    @property
+    def is_empty(self) -> bool:
+        return self == Override()
 
 
 @dataclass(frozen=True)
@@ -152,6 +173,27 @@ class SessionStore:
                 "INSERT INTO skipped_files (path) VALUES (?)",
                 [(self._relative(path),) for path in paths],
             )
+
+    def save_override(self, jpg_path: str, override: Override) -> None:
+        with self._db:
+            if override.is_empty:
+                self._db.execute("DELETE FROM overrides WHERE jpg_path = ?", (jpg_path,))
+                return
+            self._db.execute(
+                "INSERT OR REPLACE INTO overrides (jpg_path, verdict, stars, label) "
+                "VALUES (?, ?, ?, ?)",
+                (jpg_path, override.verdict, override.stars, override.label),
+            )
+
+    def overrides(self) -> dict[str, Override]:
+        rows = self._db.execute("SELECT * FROM overrides")
+        return {
+            row["jpg_path"]: Override(row["verdict"], row["stars"], row["label"]) for row in rows
+        }
+
+    def frame(self, frame_id: int) -> Frame | None:
+        row = self._db.execute("SELECT * FROM frames WHERE id = ?", (frame_id,)).fetchone()
+        return None if row is None else _frame(row)
 
     def frames(self) -> list[Frame]:
         rows = self._db.execute("SELECT * FROM frames ORDER BY jpg_path")

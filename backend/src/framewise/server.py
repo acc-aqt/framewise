@@ -1,13 +1,27 @@
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Response
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
 from framewise.grouper import group_frames
-from framewise.judge import Judgement, judge
+from framewise.judge import Judgement, Verdict, judge
 from framewise.review import SessionAnalysis
-from framewise.store import AnalyzedFrame, Frame, SessionStore
+from framewise.store import AnalyzedFrame, Frame, Override, SessionStore
+
+ColorLabel = Literal["red", "yellow", "green", "blue", "purple"]
+
+
+class OverrideChange(BaseModel):
+    """The fields of an Override to change. A field sent as null is cleared; one left out is
+    kept."""
+
+    verdict: Verdict | None = None
+    stars: int | None = Field(default=None, ge=0, le=5)
+    label: ColorLabel | None = None
 
 
 def create_app(
@@ -42,16 +56,67 @@ def create_app(
     @app.get("/api/groups")
     def group_list() -> list[dict]:
         groups = group_frames(store.analyzed_frames())
-        proposal = judge(groups)
+        overrides = store.overrides()
+        verdict_overrides = {
+            path: Verdict(override.verdict)
+            for path, override in overrides.items()
+            if override.verdict is not None
+        }
+        proposal = judge(groups, verdict_overrides)
         return [
             {
                 "id": group[0].frame.id,
                 "frames": [
-                    _judged_frame_json(analyzed, proposal[analyzed.frame.id]) for analyzed in group
+                    _judged_frame_json(
+                        analyzed,
+                        proposal[analyzed.frame.id],
+                        overrides.get(analyzed.frame.jpg_path),
+                    )
+                    for analyzed in group
                 ],
             }
             for group in groups
         ]
+
+    @app.patch("/api/frames/{frame_id}/override")
+    def change_override(frame_id: int, change: OverrideChange) -> dict:
+        frame = _known_frame(frame_id)
+        current = store.overrides().get(frame.jpg_path, Override())
+        updated = replace(current, **change.model_dump(mode="json", exclude_unset=True))
+        store.save_override(frame.jpg_path, updated)
+        if updated.verdict == Verdict.WINNER:
+            _unchoose_other_winners(frame)
+        return _override_json(updated)
+
+    @app.delete("/api/frames/{frame_id}/override", status_code=204)
+    def clear_override(frame_id: int) -> None:
+        store.save_override(_known_frame(frame_id).jpg_path, Override())
+
+    @app.get("/api/frames/{frame_id}/image")
+    def frame_image(frame_id: int) -> FileResponse:
+        path = store.root / _known_frame(frame_id).jpg_path
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="JPG not found")
+        return FileResponse(path, media_type="image/jpeg")
+
+    def _known_frame(frame_id: int) -> Frame:
+        frame = store.frame(frame_id)
+        if frame is None:
+            raise HTTPException(status_code=404, detail="Frame not found")
+        return frame
+
+    def _unchoose_other_winners(winner: Frame) -> None:
+        """Keeps one Winner per Group: the Frames the photographer made the Winner before in the
+        new Winner's Group are judged by framewise again."""
+        overrides = store.overrides()
+        for group in group_frames(store.analyzed_frames()):
+            paths = [analyzed.frame.jpg_path for analyzed in group]
+            if winner.jpg_path not in paths:
+                continue
+            for path in paths:
+                override = overrides.get(path)
+                if path != winner.jpg_path and override and override.verdict == Verdict.WINNER:
+                    store.save_override(path, replace(override, verdict=None))
 
     @app.get("/api/frames/{frame_id}/thumbnail")
     def frame_thumbnail(frame_id: int) -> Response:
@@ -74,15 +139,35 @@ def _frame_json(frame: Frame) -> dict:
         "kind": frame.kind,
         "camera_rating": {"stars": frame.camera_rating.stars, "label": frame.camera_rating.label},
         "thumbnail_url": f"/api/frames/{frame.id}/thumbnail",
+        "image_url": f"/api/frames/{frame.id}/image",
     }
 
 
-def _judged_frame_json(analyzed: AnalyzedFrame, judgement: Judgement) -> dict:
+def _override_json(override: Override) -> dict:
+    return {"verdict": override.verdict, "stars": override.stars, "label": override.label}
+
+
+def _reviewed_verdict(judgement: Judgement, override: Override | None) -> tuple[Verdict, bool]:
+    """The Verdict to show and whether it is the photographer's Override. A Winner Override
+    that lost to another one after Groups merged falls back to framewise's Verdict."""
+    if override is None or override.verdict is None:
+        return judgement.verdict, False
+    if override.verdict == Verdict.WINNER:
+        return judgement.verdict, judgement.verdict == Verdict.WINNER
+    return Verdict(override.verdict), True
+
+
+def _judged_frame_json(
+    analyzed: AnalyzedFrame, judgement: Judgement, override: Override | None
+) -> dict:
     signals = asdict(analyzed.signals)
     del signals["fingerprint"]
+    verdict, overridden = _reviewed_verdict(judgement, override)
     return {
         **_frame_json(analyzed.frame),
-        "verdict": judgement.verdict.value,
+        "verdict": verdict.value,
+        "verdict_overridden": overridden,
+        "override": None if override is None else _override_json(override),
         "reasons": [asdict(reason) for reason in judgement.reasons],
         "scores": {
             name: None if value is None else round(value, 3)

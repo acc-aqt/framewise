@@ -1,4 +1,9 @@
 import hashlib
+import os
+import sys
+import threading
+import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -7,7 +12,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from framewise.analyzer import FrameSignals
-from framewise.review import open_session
+from framewise.review import SessionAnalysis, open_session
 from framewise.server import create_app
 
 EXIF_RATING_TAG = 0x4746
@@ -85,18 +90,49 @@ def data_dir(tmp_path: Path) -> Path:
 
 
 class FakeAnalyzer:
-    """Returns scripted fingerprints, and a fingerprint unlike any other for unscripted Frames."""
+    """Returns scripted fingerprints, and a fingerprint unlike any other for unscripted Frames.
+    A held Frame's analysis blocks until released, to observe a run in progress. Records whether
+    each analysing thread runs at Darwin background priority on macOS."""
 
     def __init__(self):
         self.fingerprints: dict[Path, list[float]] = {}
         self.analyzed: list[Path] = []
+        self.in_flight = 0
+        self.at_background_priority: list[bool] = []
+        self._held: dict[Path, threading.Event] = {}
+        self._failing: set[Path] = set()
+        self._lock = threading.Lock()
 
     def script(self, jpg_path: Path, fingerprint: list[float]) -> Path:
         self.fingerprints[jpg_path.resolve()] = fingerprint
         return jpg_path
 
+    def hold(self, jpg_path: Path) -> Path:
+        self._held[jpg_path.resolve()] = threading.Event()
+        return jpg_path
+
+    def fail(self, jpg_path: Path) -> Path:
+        self._failing.add(jpg_path.resolve())
+        return jpg_path
+
+    def release_all(self) -> None:
+        for gate in self._held.values():
+            gate.set()
+
     def analyze(self, jpg_path: Path) -> FrameSignals:
-        self.analyzed.append(jpg_path)
+        with self._lock:
+            self.in_flight += 1
+            if sys.platform == "darwin":
+                self.at_background_priority.append(os.getpriority(os.PRIO_DARWIN_THREAD, 0) != 0)
+        gate = self._held.get(jpg_path.resolve())
+        released = gate is None or gate.wait(timeout=5)
+        with self._lock:
+            self.in_flight -= 1
+            self.analyzed.append(jpg_path)
+        if not released:
+            raise TimeoutError(f"held Frame was never released: {jpg_path}")
+        if jpg_path.resolve() in self._failing:
+            raise RuntimeError(f"cannot analyse {jpg_path}")
         fingerprint = self.fingerprints.get(jpg_path.resolve()) or _unrelated_fingerprint(jpg_path)
         return FrameSignals(fingerprint=fingerprint)
 
@@ -106,14 +142,42 @@ def _unrelated_fingerprint(jpg_path: Path) -> list[float]:
     return [byte - 127.5 for byte in digest]
 
 
+def wait_until(condition: Callable[[], bool], timeout: float = 5) -> None:
+    deadline = time.monotonic() + timeout
+    while not condition():
+        if time.monotonic() > deadline:
+            raise AssertionError("condition not met in time")
+        time.sleep(0.01)
+
+
 @pytest.fixture
-def analyzer() -> FakeAnalyzer:
-    return FakeAnalyzer()
+def analyzer():
+    fake = FakeAnalyzer()
+    yield fake
+    fake.release_all()
 
 
 @pytest.fixture
 def review(session_dir: Path, data_dir: Path, analyzer: FakeAnalyzer):
+    """Opens the Review UI after analysis has finished."""
+
     def start() -> TestClient:
-        return TestClient(create_app(open_session(session_dir, data_dir, analyzer)))
+        store = open_session(session_dir, data_dir)
+        analysis = SessionAnalysis(store, analyzer)
+        analysis.run()
+        return TestClient(create_app(store, analysis))
+
+    return start
+
+
+@pytest.fixture
+def live_review(session_dir: Path, data_dir: Path, analyzer: FakeAnalyzer):
+    """Opens the Review UI while analysis runs in the background."""
+
+    def start(background: bool = False) -> TestClient:
+        store = open_session(session_dir, data_dir)
+        analysis = SessionAnalysis(store, analyzer, background=background)
+        threading.Thread(target=analysis.run, daemon=True).start()
+        return TestClient(create_app(store, analysis))
 
     return start

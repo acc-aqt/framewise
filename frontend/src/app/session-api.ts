@@ -24,3 +24,9 @@ export interface Group {
   id: number;
   frames: Frame[];
 }
+
+export interface AnalysisProgress {
+  frames_done: number;
+  frames_left: number;
+  seconds_remaining: number | null;
+}

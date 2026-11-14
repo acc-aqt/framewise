@@ -6,6 +6,11 @@
   } @else if (summary.error()) {
     <p class="error">Could not load the Session.</p>
   }
+  @if (analyzing()) {
+    <app-analysis-progress [progress]="progress.value()!" />
+  } @else if (progress.error()) {
+    <p class="error">Could not load the analysis progress.</p>
+  }
 </header>
 <main>
   @if (groups.error()) {

@@ -22,7 +22,11 @@ cd backend
 uv run framewise review /path/to/session-folder
 ```
 
-This scans the folder, analyses each Frame's JPG with Apple Vision (so it runs on macOS only), groups near-duplicate and burst Frames, stores the results in the Session store under `~/Library/Application Support/framewise/`, starts the server on `http://127.0.0.1:8765/` and opens the browser. Use `--port` to pick another port. `FRAMEWISE_DATA_DIR` overrides the Session store folder. If the Review UI has not been built, `framewise review` warns you to run `npx ng build` in `frontend/`.
+This scans the folder, starts the server on `http://127.0.0.1:8765/` and opens the browser straight away. It then analyses each Frame's JPG with Apple Vision (so it runs on macOS only), using every core. The Review UI shows progress and fills in with Groups of near-duplicate and burst Frames as analysis runs. Results are kept in the Session store under `~/Library/Application Support/framewise/`, so a re-run only analyses new or changed Frames.
+
+- `--port` picks another port.
+- `--background` analyses on a quarter of the cores at background priority, so apps like Lightroom stay responsive.
+- `--allow-sleep` lets the Mac sleep during analysis. By default framewise keeps it awake until analysis finishes. `FRAMEWISE_DATA_DIR` overrides the Session store folder. If the Review UI has not been built, `framewise review` warns you to run `npx ng build` in `frontend/`.
 
 ## Tests
 

@@ -110,6 +110,70 @@ describe('Review UI', () => {
     expect(text('[data-testid="skipped-files"]')).toContain('100LEICA/L1000009-Pano.dng');
   });
 
+  describe('without a Session', () => {
+    const notFound = { status: 404, statusText: 'Not Found' };
+
+    async function respondWithoutSession(): Promise<void> {
+      http.expectOne('/api/session').flush({ detail: 'No Session open' }, notFound);
+      http.expectOne('/api/progress').flush({ detail: 'Not Found' }, notFound);
+      await settle();
+      http.expectOne('/api/groups').flush({ detail: 'Not Found' }, notFound);
+      await settle();
+    }
+
+    function chooseButton(): HTMLButtonElement | null {
+      return (fixture.nativeElement as HTMLElement).querySelector('[data-testid="choose-session"]');
+    }
+
+    async function choose(
+      result: { opened: boolean } | string,
+      failure?: { status: number; statusText: string },
+    ): Promise<void> {
+      chooseButton()!.click();
+      await settle();
+      const request = http.expectOne('/api/session/choose');
+      expect(request.request.method).toBe('POST');
+      request.flush(result, failure);
+      await settle();
+    }
+
+    it('offers to choose a Session folder instead of the review screen', async () => {
+      await respondWithoutSession();
+
+      expect(chooseButton()).not.toBeNull();
+      expect(all('[data-testid="open-write-back"]')).toEqual([]);
+      expect(all('header .error')).toEqual([]);
+    });
+
+    it('opens the chosen Session', async () => {
+      await respondWithoutSession();
+
+      await choose({ opened: true });
+      await respond(summary, [group(1, [frame(1, 'jpg-only')])]);
+
+      expect(chooseButton()).toBeNull();
+      expect(text('.root')).toBe('/Volumes/card/DCIM');
+      expect(all('[data-testid="group-tile"]').length).toBe(1);
+    });
+
+    it('keeps offering to choose a folder when the dialog is cancelled', async () => {
+      await respondWithoutSession();
+
+      await choose({ opened: false });
+
+      expect(chooseButton()?.disabled).toBe(false);
+      expect(all('[data-testid="choose-session-error"]')).toEqual([]);
+    });
+
+    it('says so when the Session could not be opened', async () => {
+      await respondWithoutSession();
+
+      await choose('boom', { status: 500, statusText: 'Server Error' });
+
+      expect(text('[data-testid="choose-session-error"]')).toBe('Could not open the Session.');
+    });
+  });
+
   describe('Keeper budget', () => {
     const judged = [
       group(1, [

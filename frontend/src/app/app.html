@@ -1,75 +1,84 @@
-<header>
-  <h1>framewise</h1>
-  @if (summary.hasValue()) {
-    <p class="root">{{ summary.value().root }}</p>
-    <app-session-summary [summary]="summary.value()" />
-    @if (keeperBudget() !== null) {
-      <app-keeper-budget
-        [share]="keeperBudget()!"
-        [groups]="groups.value()"
-        (changeShare)="changeKeeperBudget($event)"
-      />
-    }
-    @if (keeperBudgetFailed()) {
-      <p class="error" data-testid="keeper-budget-error">Could not save the Keeper budget.</p>
-    }
-  } @else if (summary.error()) {
-    <p class="error">Could not load the Session.</p>
-  }
-  <button
-    type="button"
-    class="write-back"
-    data-testid="open-write-back"
-    [disabled]="analyzing()"
-    (click)="closeGroup(); writingBack.set(true)"
-  >
-    Rating write-back…
-  </button>
-  @if (analyzing()) {
-    <app-analysis-progress [progress]="progress.value()!" />
-  } @else if (progress.error()) {
-    <p class="error">Could not load the analysis progress.</p>
-  }
-</header>
-<main>
-  @if (groups.error()) {
-    <p class="error">Could not load the Groups.</p>
-  } @else if (writingBack()) {
-    <app-write-back (back)="writingBack.set(false)" />
-  } @else if (openGroup(); as group) {
-    @if (overrideFailed()) {
-      <p class="error" data-testid="override-error">Could not save the Override.</p>
-    }
-    <app-group-view
-      [group]="group"
-      [currentFrameId]="openedFrameId()"
-      (back)="closeGroup()"
-      (select)="openedFrameId.set($event.id)"
-      (openLoupe)="openedFrameId.set($event.id); loupeZoom.set('fit')"
-      (makeWinner)="changeOverride($event, { verdict: 'winner' })"
-      [hasPrevious]="neighbourGroup(-1) !== null"
-      [hasNext]="neighbourGroup(1) !== null"
-      (split)="splitGroup($event)"
-      (merge)="mergeGroup(group, $event)"
-      (move)="moveFrame($event.frame, $event.by)"
-      (resetGrouping)="resetGrouping(group)"
-    />
-    @if (loupeZoom(); as zoom) {
-      @if (currentFrame(); as frame) {
-        <app-loupe
-          [frame]="frame"
-          [zoom]="zoom"
-          (toggleZoom)="toggleZoom()"
-          (close)="loupeZoom.set(null)"
+@if (noSession()) {
+  <header>
+    <h1>framewise</h1>
+  </header>
+  <main>
+    <app-session-picker (opened)="openSession()" />
+  </main>
+} @else {
+  <header>
+    <h1>framewise</h1>
+    @if (summary.hasValue()) {
+      <p class="root">{{ summary.value().root }}</p>
+      <app-session-summary [summary]="summary.value()" />
+      @if (keeperBudget() !== null) {
+        <app-keeper-budget
+          [share]="keeperBudget()!"
+          [groups]="groups.value()"
+          (changeShare)="changeKeeperBudget($event)"
         />
       }
+      @if (keeperBudgetFailed()) {
+        <p class="error" data-testid="keeper-budget-error">Could not save the Keeper budget.</p>
+      }
+    } @else if (summary.error()) {
+      <p class="error">Could not load the Session.</p>
     }
-  } @else {
-    <app-proposal-filters [groups]="groups.value()" [(filter)]="filter" />
-    <app-group-grid
-      [groups]="groups.value()"
-      [filter]="filter()"
-      (open)="openedFrameId.set($event.id)"
-    />
-  }
-</main>
+    <button
+      type="button"
+      class="write-back"
+      data-testid="open-write-back"
+      [disabled]="analyzing()"
+      (click)="closeGroup(); writingBack.set(true)"
+    >
+      Rating write-back…
+    </button>
+    @if (analyzing()) {
+      <app-analysis-progress [progress]="progress.value()!" />
+    } @else if (progress.error()) {
+      <p class="error">Could not load the analysis progress.</p>
+    }
+  </header>
+  <main>
+    @if (groups.error()) {
+      <p class="error">Could not load the Groups.</p>
+    } @else if (writingBack()) {
+      <app-write-back (back)="writingBack.set(false)" />
+    } @else if (openGroup(); as group) {
+      @if (overrideFailed()) {
+        <p class="error" data-testid="override-error">Could not save the Override.</p>
+      }
+      <app-group-view
+        [group]="group"
+        [currentFrameId]="openedFrameId()"
+        (back)="closeGroup()"
+        (select)="openedFrameId.set($event.id)"
+        (openLoupe)="openedFrameId.set($event.id); loupeZoom.set('fit')"
+        (makeWinner)="changeOverride($event, { verdict: 'winner' })"
+        [hasPrevious]="neighbourGroup(-1) !== null"
+        [hasNext]="neighbourGroup(1) !== null"
+        (split)="splitGroup($event)"
+        (merge)="mergeGroup(group, $event)"
+        (move)="moveFrame($event.frame, $event.by)"
+        (resetGrouping)="resetGrouping(group)"
+      />
+      @if (loupeZoom(); as zoom) {
+        @if (currentFrame(); as frame) {
+          <app-loupe
+            [frame]="frame"
+            [zoom]="zoom"
+            (toggleZoom)="toggleZoom()"
+            (close)="loupeZoom.set(null)"
+          />
+        }
+      }
+    } @else {
+      <app-proposal-filters [groups]="groups.value()" [(filter)]="filter" />
+      <app-group-grid
+        [groups]="groups.value()"
+        [filter]="filter()"
+        (open)="openedFrameId.set($event.id)"
+      />
+    }
+  </main>
+}

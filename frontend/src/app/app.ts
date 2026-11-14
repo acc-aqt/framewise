@@ -1,4 +1,4 @@
-import { httpResource } from '@angular/common/http';
+import { HttpErrorResponse, httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -19,6 +19,7 @@ import { NO_FILTER, ProposalFilter } from './proposal';
 import { ProposalFilters } from './proposal-filters';
 import { AnalysisProgress, Frame, Group, OverrideChange, SessionSummary } from './session-api';
 import { SessionChangeApi } from './session-change-api';
+import { SessionPicker } from './session-picker';
 import { SessionSummaryView } from './session-summary';
 import { Shortcut, shortcutFor, stepFrom } from './shortcuts';
 import { WriteBackView } from './write-back';
@@ -36,6 +37,7 @@ export const POLL_INTERVAL_MS = 1000;
     KeeperBudget,
     Loupe,
     ProposalFilters,
+    SessionPicker,
     SessionSummaryView,
     WriteBackView,
   ],
@@ -44,6 +46,11 @@ export const POLL_INTERVAL_MS = 1000;
 })
 export class App {
   protected readonly summary = httpResource<SessionSummary>(() => '/api/session');
+  // framewise started without a Session folder, so the photographer chooses one here.
+  protected readonly noSession = computed(() => {
+    const error = this.summary.error();
+    return error instanceof HttpErrorResponse && error.status === 404;
+  });
   protected readonly progress = httpResource<AnalysisProgress>(() => '/api/progress');
   protected readonly analyzing = computed(
     () => this.progress.hasValue() && this.progress.value().frames_left > 0,
@@ -91,6 +98,11 @@ export class App {
       const timer = setTimeout(() => this.progress.reload(), POLL_INTERVAL_MS);
       onCleanup(() => clearTimeout(timer));
     });
+  }
+
+  protected openSession(): void {
+    this.summary.reload();
+    this.progress.reload();
   }
 
   protected onKeydown(event: KeyboardEvent): void {

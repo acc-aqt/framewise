@@ -1,3 +1,5 @@
+import threading
+from collections.abc import Callable
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Literal
@@ -6,6 +8,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.types import Receive, Scope, Send
 
 from framewise.exiftool import ExifTool
 from framewise.grouper import group_frames
@@ -259,10 +262,49 @@ def create_app(
             raise HTTPException(status_code=404, detail="Frame not found")
         return Response(content=thumbnail, media_type="image/jpeg")
 
+    _mount_review_ui(app, ui_dir)
+    return app
+
+
+class SessionPicker:
+    """Serves the Review UI without a Session until the photographer chooses a Session folder
+    in it, then hands every request to the app `start_session` makes for that folder."""
+
+    def __init__(
+        self,
+        choose_folder: Callable[[], Path | None],
+        start_session: Callable[[Path], FastAPI],
+        ui_dir: Path | None = None,
+    ):
+        self._choose_folder = choose_folder
+        self._start_session = start_session
+        self._session_app: FastAPI | None = None
+        self._lock = threading.Lock()
+        self._picker_app = FastAPI(title="framewise")
+
+        @self._picker_app.get("/api/session")
+        def no_session() -> None:
+            raise HTTPException(status_code=404, detail="No Session open")
+
+        @self._picker_app.post("/api/session/choose")
+        def choose_session() -> dict:
+            with self._lock:
+                if self._session_app is None:
+                    folder = self._choose_folder()
+                    if folder is None:
+                        return {"opened": False}
+                    self._session_app = self._start_session(folder)
+            return {"opened": True}
+
+        _mount_review_ui(self._picker_app, ui_dir)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        await (self._session_app or self._picker_app)(scope, receive, send)
+
+
+def _mount_review_ui(app: FastAPI, ui_dir: Path | None) -> None:
     if ui_dir is not None and (ui_dir / "index.html").is_file():
         app.mount("/", StaticFiles(directory=ui_dir, html=True), name="review-ui")
-
-    return app
 
 
 def _group_of(jpg_path: str, groups: list[list[str]]) -> list[str] | None:

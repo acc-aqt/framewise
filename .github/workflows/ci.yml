@@ -22,15 +22,24 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install ExifTool (Linux)
+      - name: Install ExifTool and OpenCV's libGL (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl
+        run: sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl libgl1
 
       - name: Install ExifTool (macOS)
         if: runner.os == 'macOS'
         run: brew install exiftool
 
-      - run: uv sync --locked
+      - name: Install (macOS)
+        if: runner.os == 'macOS'
+        run: uv sync --locked
+
+      - name: Install with the portable Providers and their models (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          uv sync --locked --extra portable
+          uv run python -c "import framewise.mediapipe_faces as m; assert m.MediaPipeFaceDetection().is_available()"
+          uv run framewise models download
 
       - run: uv run ruff check
 

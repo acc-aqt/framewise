@@ -6,7 +6,7 @@ import sys
 import threading
 import time
 import webbrowser
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from pathlib import Path
 
@@ -17,6 +17,7 @@ from starlette.types import ASGIApp
 from framewise.analyzer import FrameAnalyzer
 from framewise.exiftool import ExifTool
 from framewise.lightroom import LIGHTROOM_PREFERENCES
+from framewise.models import MODELS, Model, ModelError, ensure_model
 from framewise.providers import ProviderError, resolve_analyzer
 from framewise.review import (
     SessionAnalysis,
@@ -149,6 +150,17 @@ def hard_reset(folder: Path) -> None:
     )
 
 
+def download_models(models: Sequence[Model]) -> None:
+    data_dir = resolve_data_dir()
+    for model in models:
+        try:
+            path = ensure_model(model, data_dir)
+        except ModelError as error:
+            print(f"framewise: error: {error}", file=sys.stderr)
+            sys.exit(1)
+        print(f"framewise: {model.file_name} is ready at {path}")
+
+
 def main(
     argv: list[str] | None = None,
     serve: Serve = serve_with_uvicorn,
@@ -156,6 +168,7 @@ def main(
     analyzer: FrameAnalyzer | None = None,
     keep_awake: KeepAwake = keep_machine_awake,
     choose_folder: ChooseFolder = choose_folder_in_dialog,
+    models: Sequence[Model] = MODELS,
 ) -> None:
     parser = argparse.ArgumentParser(prog="framewise")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -183,7 +196,16 @@ def main(
         "so the next review analyses every Frame again",
     )
     reset.add_argument("session_folder", type=Path)
+    models_command = commands.add_parser("models", help="Manage the portable Providers' models")
+    models_actions = models_command.add_subparsers(dest="action", required=True)
+    models_actions.add_parser(
+        "download", help="Fetch every model the portable Providers need, for offline use"
+    )
     args = parser.parse_args(argv)
+
+    if args.command == "models":
+        download_models(models)
+        return
 
     if args.session_folder is not None and not args.session_folder.is_dir():
         parser.error(f"not a folder: {args.session_folder}")

@@ -4,6 +4,7 @@ from contextlib import contextmanager
 import pytest
 from conftest import BACKGROUND_PRIORITY_PLATFORMS, FakeAnalyzer, make_jpg, wait_until
 from fastapi.testclient import TestClient
+from test_models import CONTENT, hosted_model
 from test_write_back_api import rating
 
 from framewise.cli import main
@@ -280,3 +281,25 @@ def test_review_refuses_to_start_with_a_broken_config(session_dir, isolated_data
 
     assert exit_info.value.code == 1
     assert "config.toml: invalid TOML" in capsys.readouterr().err
+
+
+def test_models_download_fetches_every_model_into_the_data_dir(tmp_path, isolated_data_dir, capsys):
+    model = hosted_model(tmp_path)
+
+    main(["models", "download"], models=[model])
+
+    assert (isolated_data_dir / "models" / "detector.task").read_bytes() == CONTENT
+    assert "detector.task" in capsys.readouterr().out
+
+
+def test_models_download_fails_with_the_reason_when_a_model_cannot_be_fetched(
+    tmp_path, isolated_data_dir, capsys
+):
+    model = hosted_model(tmp_path)
+    (tmp_path / "hosted" / "detector.task").unlink()
+
+    with pytest.raises(SystemExit) as exit_info:
+        main(["models", "download"], models=[model])
+
+    assert exit_info.value.code == 1
+    assert "cannot be downloaded" in capsys.readouterr().err

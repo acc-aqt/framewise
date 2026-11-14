@@ -39,6 +39,8 @@ eye-state = "apple-vision-eye-state"
 
 Capabilities left out keep the default. A Provider that is not installed or not available on the machine is an error, never a silent fallback. `framewise-benchmark` reads the same file, and `--provider <capability>=<id>`, repeatable, overrides it for one run, so Providers can be compared against your Reference ratings; its report names the Provider that served each Capability.
 
+The portable Providers run on Linux and macOS with free, local models. Install them with the `portable` extra (`uv sync --extra portable`): MediaPipe's Face Landmarker then serves `face-detection` (`mediapipe-face-detection`) and `eye-state` (`mediapipe-eye-state`), ranked below Apple Vision, so on macOS Apple Vision stays the default. Their model files are downloaded on first use into a `models` folder next to the Session stores and checked against pinned SHA-256 checksums. On a machine that will analyse offline, fetch them ahead of time with `uv run framewise models download`.
+
 In an open Group, review with Lightroom Classic's shortcuts: `1`–`5` set stars (`0` clears them), `6`–`9` set color labels, `P` / `X` / `U` keep, reject and clear, `W` makes the current Frame the Group's Winner, `←` / `→` move between Frames and `⌥←` / `⌥→` step through the current Group. `E` opens the loupe, `Z` zooms to 100% and `Esc` closes it. Overrides are saved in the Session store as you go (ADR-0003). The Keeper budget never changes them, and the Frames you keep count towards it. Fix wrong grouping in an open Group: split it at a Frame or split off the selected Frames, move a Frame to the previous or next Group, or merge the Group with its neighbour. Fixed Groups are kept on later re-runs (ADR-0004); "Reset grouping" hands a fixed Group back to framewise's grouping.
 
 ## Rating write-back
@@ -58,4 +60,4 @@ cd backend && uv run pytest && uv run ruff check .
 cd frontend && npx ng test --watch=false
 ```
 
-Most backend tests use a fake Frame analyzer. `tests/test_providers.py` composes analysis from fake Providers. `tests/test_apple_vision.py` runs the real Apple Vision Providers on generated images and the public-domain reference faces in `tests/fixtures/faces/`, and is skipped on other platforms.
+Most backend tests use a fake Frame analyzer. `tests/test_providers.py` composes analysis from fake Providers. `tests/test_apple_vision.py` runs the real Apple Vision Providers on generated images and the public-domain reference faces in `tests/fixtures/faces/`, and is skipped on other platforms. `tests/test_mediapipe_faces.py` runs the MediaPipe Providers on the same faces, and is skipped unless the `portable` extra is installed and `framewise models download` has run.

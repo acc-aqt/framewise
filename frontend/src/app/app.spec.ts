@@ -49,6 +49,13 @@ describe('Review UI', () => {
     );
   }
 
+  function accessibleNames(selector: string): { label: string | null; title: string | null }[] {
+    return all(selector).map((element) => ({
+      label: element.getAttribute('aria-label'),
+      title: element.getAttribute('title'),
+    }));
+  }
+
   function all(selector: string, root?: HTMLElement): HTMLElement[] {
     return Array.from(
       (root ?? (fixture.nativeElement as HTMLElement)).querySelectorAll<HTMLElement>(selector),
@@ -898,6 +905,19 @@ describe('Review UI', () => {
       expect(all('[data-testid="group-view"]')).toEqual([]);
     });
 
+    it('names the icon-only loupe close button, which closes the loupe', async () => {
+      await openFirstGroup();
+      await press('e');
+
+      expect(accessibleNames('[data-testid="loupe-close"]')).toEqual([
+        { label: 'Close', title: 'Close' },
+      ]);
+      all('[data-testid="loupe-close"]')[0].click();
+      await settle();
+
+      expect(all('[data-testid="loupe-image"]')).toEqual([]);
+    });
+
     it('opens the next Group without the loupe after leaving one with the loupe open', async () => {
       await openFirstGroup();
       await press('e');
@@ -1019,6 +1039,35 @@ describe('Review UI', () => {
 
       expect(all('[data-testid="merge-next"]')).toEqual([]);
       expect(all('[data-testid="move-next"]')).toEqual([]);
+    });
+
+    it('names the icon-only Group buttons', async () => {
+      await openGroup(1);
+
+      expect(accessibleNames('[data-testid="back-to-groups"]')).toEqual([
+        { label: 'All Groups', title: 'All Groups' },
+      ]);
+      expect(accessibleNames('[data-testid="merge-previous"]')).toEqual([
+        { label: 'Merge with previous', title: 'Merge with previous' },
+      ]);
+      expect(accessibleNames('[data-testid="merge-next"]')).toEqual([
+        { label: 'Merge with next', title: 'Merge with next' },
+      ]);
+      const splitHere = { label: 'Split here', title: 'Split here' };
+      expect(accessibleNames('[data-testid="split-here"]')).toEqual([splitHere, splitHere]);
+      const movePrevious = { label: 'Move to previous Group', title: 'Move to previous Group' };
+      expect(accessibleNames('[data-testid="move-previous"]')).toEqual([
+        movePrevious,
+        movePrevious,
+        movePrevious,
+      ]);
+      const moveNext = { label: 'Move to next Group', title: 'Move to next Group' };
+      expect(accessibleNames('[data-testid="move-next"]')).toEqual([moveNext, moveNext, moveNext]);
+      const makeWinner = accessibleNames('[data-testid="make-winner"]');
+      expect(makeWinner.length).toBeGreaterThan(0);
+      expect(makeWinner).toEqual(
+        makeWinner.map(() => ({ label: 'Make Winner', title: 'Make Winner' })),
+      );
     });
 
     it('moves a Frame to the previous or next Group', async () => {

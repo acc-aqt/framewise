@@ -19,6 +19,13 @@ from framewise.store import Frame, SessionStore, WrittenFileOriginal
 EMBEDDED_XMP_EXTENSIONS = {".jpg", ".jpeg", ".dng"}
 SIDECAR_EXTENSION = ".xmp"
 READ_ONLY_ERROR = "File is read-only"
+# Each Verdict's stars and color label (ADR-0001).
+VERDICT_RATINGS: dict[Verdict, tuple[int, str | None]] = {
+    Verdict.WINNER: (3, None),
+    Verdict.KEEPER: (2, None),
+    Verdict.REJECT: (0, "red"),
+    Verdict.UNSURE: (0, "yellow"),
+}
 
 
 @dataclass(frozen=True)
@@ -51,16 +58,24 @@ class WriteBackResult:
     failed: list[FileFailure]
 
 
-ReviewedFrames = list[tuple[Frame, Verdict]]
+@dataclass(frozen=True)
+class ReviewedFrame:
+    """A Frame's final Verdict, and the stars and color label of its Override, if any."""
+
+    frame: Frame
+    verdict: Verdict
+    stars: int | None = None
+    color: str | None = None
 
 
-def rating_for(verdict: Verdict, label_set: LabelSet) -> Rating:
-    return {
-        Verdict.WINNER: Rating(3, None),
-        Verdict.KEEPER: Rating(2, None),
-        Verdict.REJECT: Rating(0, label_set.red),
-        Verdict.UNSURE: Rating(0, label_set.yellow),
-    }[verdict]
+def rating_for(reviewed: ReviewedFrame, label_set: LabelSet) -> Rating:
+    """The Verdict's stars and label, each replaced by the Override's if it has one."""
+    stars, color = VERDICT_RATINGS[reviewed.verdict]
+    if reviewed.stars is not None:
+        stars = reviewed.stars
+    if reviewed.color is not None:
+        color = reviewed.color
+    return Rating(stars, None if color is None else label_set.name(color))
 
 
 class RatingWriteBack:
@@ -69,26 +84,22 @@ class RatingWriteBack:
         self._exiftool = exiftool
         self._lock = threading.Lock()
 
-    def dry_run(self, reviewed: ReviewedFrames, label_set: LabelSet) -> list[FileChange]:
-        planned = [
-            (frame, verdict, path, _written_to(path))
-            for frame, verdict in reviewed
-            for path in _files_of(frame)
-        ]
-        old_ratings = self._read_ratings([self._rating_source(path) for *_, path in planned])
+    def dry_run(self, reviewed: list[ReviewedFrame], label_set: LabelSet) -> list[FileChange]:
+        planned = [(item, path) for item in reviewed for path in _files_of(item.frame)]
+        old_ratings = self._read_ratings([self._rating_source(path) for _, path in planned])
         return [
             FileChange(
-                frame_id=frame.id,
+                frame_id=item.frame.id,
                 path=path,
-                written_to=written_to,
-                verdict=verdict,
+                written_to=_written_to(path),
+                verdict=item.verdict,
                 old=old,
-                new=rating_for(verdict, label_set),
+                new=rating_for(item, label_set),
             )
-            for (frame, verdict, path, written_to), old in zip(planned, old_ratings, strict=True)
+            for (item, path), old in zip(planned, old_ratings, strict=True)
         ]
 
-    def apply(self, reviewed: ReviewedFrames, label_set: LabelSet) -> WriteBackResult:
+    def apply(self, reviewed: list[ReviewedFrame], label_set: LabelSet) -> WriteBackResult:
         with self._lock:
             written, failed = [], []
             for change in self.dry_run(reviewed, label_set):

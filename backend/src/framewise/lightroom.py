@@ -6,19 +6,27 @@ LIGHTROOM_PREFERENCES = (
     Path.home() / "Library" / "Preferences" / "com.adobe.LightroomClassicCC7.plist"
 )
 # Lightroom Classic keeps the names of the active color label set's labels in its preferences,
-# in the order red, yellow, green, blue, purple.
-RED_KEY = "label1"
-YELLOW_KEY = "label2"
+# as label1 to label5 in the order red, yellow, green, blue, purple.
+COLORS = ("red", "yellow", "green", "blue", "purple")
 
 
 @dataclass(frozen=True)
 class LabelSet:
     red: str
     yellow: str
+    green: str
+    blue: str
+    purple: str
     from_lightroom: bool
 
+    def name(self, color: str) -> str:
+        """The label name of a color, one of COLORS."""
+        return getattr(self, color)
 
-ENGLISH_DEFAULTS = LabelSet(red="Red", yellow="Yellow", from_lightroom=False)
+
+ENGLISH_DEFAULTS = LabelSet(
+    red="Red", yellow="Yellow", green="Green", blue="Blue", purple="Purple", from_lightroom=False
+)
 
 
 def read_label_set(preferences: Path | None) -> LabelSet:
@@ -30,7 +38,7 @@ def read_label_set(preferences: Path | None) -> LabelSet:
             values = plistlib.load(file)
     except (OSError, plistlib.InvalidFileException):
         return ENGLISH_DEFAULTS
-    red, yellow = values.get(RED_KEY), values.get(YELLOW_KEY)
-    if not (isinstance(red, str) and red and isinstance(yellow, str) and yellow):
+    names = [values.get(f"label{number}") for number in range(1, len(COLORS) + 1)]
+    if not all(isinstance(name, str) and name for name in names):
         return ENGLISH_DEFAULTS
-    return LabelSet(red=red, yellow=yellow, from_lightroom=True)
+    return LabelSet(**dict(zip(COLORS, names, strict=True)), from_lightroom=True)

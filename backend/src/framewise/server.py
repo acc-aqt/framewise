@@ -17,13 +17,13 @@ from framewise.write_back import (
     FileChange,
     Rating,
     RatingWriteBack,
-    ReviewedFrames,
+    ReviewedFrame,
     WriteBackResult,
 )
 
 ENGLISH_DEFAULTS_NOTICE = (
     "No Lightroom Classic color label set was found, so Lightroom's English defaults "
-    "Red and Yellow are used."
+    "Red, Yellow, Green, Blue and Purple are used."
 )
 
 ColorLabel = Literal["red", "yellow", "green", "blue", "purple"]
@@ -57,7 +57,7 @@ def create_app(
         }
         return groups, overrides, judge(groups, verdict_overrides)
 
-    def reviewed_frames() -> ReviewedFrames:
+    def reviewed_frames() -> list[ReviewedFrame]:
         groups, overrides, proposal = reviewed_proposal()
         reviewed = []
         for analyzed in sorted(
@@ -66,7 +66,7 @@ def create_app(
         ):
             override = overrides.get(analyzed.frame.jpg_path) or Override()
             verdict, _ = _reviewed_verdict(proposal[analyzed.frame.id], override)
-            reviewed.append((analyzed.frame, verdict))
+            reviewed.append(ReviewedFrame(analyzed.frame, verdict, override.stars, override.label))
         return reviewed
 
     def require_finished_analysis() -> None:

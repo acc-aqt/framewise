@@ -53,7 +53,13 @@ def make_dng(path: Path, stars: int | None = None, label: str | None = None) -> 
 
 def lightroom_preferences(folder: Path, red: str, yellow: str) -> Path:
     path = folder / "com.adobe.LightroomClassicCC7.plist"
-    labels = {"label1": red, "label2": yellow, "label3": "Grün", "label4": "Blau"}
+    labels = {
+        "label1": red,
+        "label2": yellow,
+        "label3": "Grün",
+        "label4": "Blau",
+        "label5": "Lila",
+    }
     path.write_bytes(plistlib.dumps(labels, fmt=plistlib.FMT_BINARY))
     return path
 
@@ -152,6 +158,20 @@ def test_a_dng_gets_embedded_xmp_and_keeps_its_metadata_and_image_data(
     assert not (session_dir / "L1000001.xmp").exists()
 
 
+def test_without_a_sidecar_the_dry_run_shows_the_rating_in_the_raw_itself(
+    session_dir, review, analyzer, english
+):
+    # A TIFF-based RAW, as ARW and NEF files are, carrying an in-camera rating.
+    arw = make_dng(session_dir / "DSC00001.ARW", stars=1)
+    jpg(session_dir, analyzer, "DSC00001.JPG")
+
+    dry_run = files_by_path(review(**english).get("/api/write-back").json())
+
+    assert dry_run["DSC00001.ARW"]["old"] == {"stars": 1, "label": None}
+    assert dry_run["DSC00001.ARW"]["written_to"] == "DSC00001.xmp"
+    assert rating(arw) == {"stars": 1, "label": None}
+
+
 @pytest.mark.parametrize(
     "raw_name", ["DSCF0001.RAF", "DSC00001.ARW", "DSC_0001.NEF", "IMG_0001.CR3"]
 )
@@ -228,7 +248,14 @@ def test_label_names_come_from_the_active_lightroom_color_label_set(
     dry_run = client.get("/api/write-back").json()
     client.post("/api/write-back")
 
-    assert dry_run["label_set"] == {"red": "Rot", "yellow": "Gelb", "from_lightroom": True}
+    assert dry_run["label_set"] == {
+        "red": "Rot",
+        "yellow": "Gelb",
+        "green": "Grün",
+        "blue": "Blau",
+        "purple": "Lila",
+        "from_lightroom": True,
+    }
     assert dry_run["notice"] is None
     assert rating(reject)["label"] == "Rot"
     assert rating(unsure)["label"] == "Gelb"
@@ -244,7 +271,9 @@ def test_without_a_lightroom_label_set_the_english_defaults_are_used_and_the_dry
     dry_run = client.get("/api/write-back").json()
     client.post("/api/write-back")
 
-    assert dry_run["label_set"] == {"red": "Red", "yellow": "Yellow", "from_lightroom": False}
+    assert dry_run["label_set"]["red"] == "Red"
+    assert dry_run["label_set"]["yellow"] == "Yellow"
+    assert dry_run["label_set"]["from_lightroom"] is False
     assert "English defaults" in dry_run["notice"]
     assert rating(reject)["label"] == "Red"
 
@@ -333,3 +362,61 @@ def test_frames_are_not_analysed_again_after_write_back(session_dir, review, ana
     review(**english)
 
     assert analyzer.analyzed == []
+
+
+def override(client, name: str, **change) -> None:
+    frames = client.get("/api/frames").json()
+    frame_id = next(frame["id"] for frame in frames if frame["jpg_path"] == name)
+    assert client.patch(f"/api/frames/{frame_id}/override", json=change).status_code == 200
+
+
+def test_the_final_verdict_with_overrides_is_written(session_dir, review, analyzer, english):
+    framewise_winner = jpg(session_dir, analyzer, "DSCF0001.JPG", aesthetics=0.5)
+    chosen_winner = jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3)
+    client = review(**english)
+
+    override(client, "DSCF0002.JPG", verdict="winner")
+    client.post("/api/write-back")
+
+    assert rating(chosen_winner) == {"stars": 3, "label": None}
+    assert rating(framewise_winner) == {"stars": 2, "label": None}
+
+
+def test_override_stars_and_label_beat_the_verdict_mapping(session_dir, review, analyzer, tmp_path):
+    winner = jpg(session_dir, analyzer, "DSCF0001.JPG", aesthetics=0.5)
+    reject = jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3, **BLURRY)
+    client = review(lightroom_preferences=lightroom_preferences(tmp_path, "Rot", "Gelb"))
+
+    override(client, "DSCF0001.JPG", stars=5)
+    override(client, "DSCF0002.JPG", label="green")
+    dry_run = files_by_path(client.get("/api/write-back").json())
+    client.post("/api/write-back")
+
+    assert dry_run["DSCF0001.JPG"]["new"] == {"stars": 5, "label": None}
+    assert dry_run["DSCF0002.JPG"]["new"] == {"stars": 0, "label": "Grün"}
+    assert rating(winner) == {"stars": 5, "label": None}
+    assert rating(reject) == {"stars": 0, "label": "Grün"}
+
+
+def test_re_applying_after_more_overrides_writes_the_final_state(
+    session_dir, review, analyzer, english
+):
+    first = jpg(session_dir, analyzer, "DSCF0001.JPG", stars=1, aesthetics=0.5)
+    raw = make_raw(session_dir / "DSCF0002.RAF")
+    second = jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3)
+    client = review(**english)
+    client.post("/api/write-back")
+
+    override(client, "DSCF0001.JPG", verdict="reject")
+    override(client, "DSCF0002.JPG", verdict="winner", stars=4)
+    assert client.post("/api/write-back").json()["failed"] == []
+
+    assert rating(first) == {"stars": 0, "label": "Red"}
+    assert rating(second) == {"stars": 4, "label": None}
+    assert rating(raw.with_suffix(".xmp")) == {"stars": 4, "label": None}
+
+    client.post("/api/write-back/undo")
+
+    assert rating(first) == {"stars": 1, "label": None}
+    assert rating(second) == {"stars": None, "label": None}
+    assert not raw.with_suffix(".xmp").exists()

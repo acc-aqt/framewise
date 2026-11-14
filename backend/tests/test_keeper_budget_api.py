@@ -98,7 +98,7 @@ def test_a_flawed_frame_never_becomes_a_keeper_however_large_the_budget(
         analyzer,
         ("DSCF0001", {}),
         ("DSCF0002", {"sharpness": 0.1}),
-        ("DSCF0003", {"sharpness": 0.4}),
+        ("DSCF0003", {"sharpness": 0.3}),
     )
     client = review()
 

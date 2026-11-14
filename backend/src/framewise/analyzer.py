@@ -4,7 +4,7 @@ from typing import Protocol
 
 # Bump whenever FrameSignals gains or changes a signal, so a re-run re-analyses Frames whose
 # saved analysis predates it.
-ANALYSIS_VERSION = 3
+ANALYSIS_VERSION = 4
 
 
 @dataclass(frozen=True)
@@ -37,7 +37,9 @@ class FrameSignals:
     low_key: bool
     """Dark overall but with bright highlights, so deliberately dark rather than underexposed."""
     high_key: bool
-    """Bright overall but with deep shadows, so deliberately bright rather than overexposed."""
+    """Bright overall but with its highlights intact, so deliberately bright rather than
+    overexposed. With faces, only the faces' highlights count, so a person against a blown-out
+    white wall is high key."""
     aesthetics: float | None
     """Apple Vision's overall aesthetics score from -1 to 1, or None where it is unavailable."""
     faces: list[Face]

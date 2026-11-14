@@ -234,6 +234,65 @@ def test_a_blurred_face_is_less_sharp(tmp_path):
     assert blurred_face.sharpness < 0.25 < sharp_face.sharpness
 
 
+EXIF_ORIENTATION_TAG = 0x0112
+ROTATED_90_CLOCKWISE = 8
+
+
+def portrait(path: Path, background: int, face: Path = FACES / "eyes-open.jpg") -> Path:
+    """The reference face on the left of a plain background, like a Frame of a person in a
+    room."""
+    image = Image.new("RGB", (768, 512), (background,) * 3)
+    with Image.open(face) as face_image:
+        image.paste(face_image.convert("RGB"), (64, 128))
+    image.save(path, "JPEG", quality=90)
+    return path
+
+
+def stored_rotated(source: Path, path: Path) -> Path:
+    """The same Frame as a camera held upright stores it: pixels on their side and an EXIF
+    orientation that turns them back."""
+    with Image.open(source) as image:
+        exif = Image.Exif()
+        exif[EXIF_ORIENTATION_TAG] = ROTATED_90_CLOCKWISE
+        image.transpose(Image.Transpose.ROTATE_270).save(path, "JPEG", quality=90, exif=exif)
+    return path
+
+
+def test_a_face_is_measured_where_it_appears_in_a_frame_stored_on_its_side(tmp_path):
+    from framewise.vision_analyzer import VisionAnalyzer
+
+    analyzer = VisionAnalyzer()
+    upright = portrait(tmp_path / "upright.jpg", background=128)
+    on_its_side = stored_rotated(upright, tmp_path / "on-its-side.jpg")
+
+    [upright_face] = analyzer.analyze(upright).faces
+    [face] = analyzer.analyze(on_its_side).faces
+
+    assert face.sharpness == pytest.approx(upright_face.sharpness, abs=0.05)
+
+
+def test_a_portrait_against_a_blown_out_white_wall_is_high_key(tmp_path):
+    from framewise.vision_analyzer import VisionAnalyzer
+
+    signals = VisionAnalyzer().analyze(portrait(tmp_path / "white-wall.jpg", background=255))
+
+    assert signals.exposure_stops > 1.25
+    assert signals.high_key
+
+
+def test_a_portrait_whose_face_is_blown_out_is_not_high_key(tmp_path):
+    from framewise.vision_analyzer import VisionAnalyzer
+
+    white_wall = portrait(tmp_path / "white-wall.jpg", background=255)
+    blown_out = re_exposed(white_wall, tmp_path / "blown-out.jpg", stops=1.5)
+
+    signals = VisionAnalyzer().analyze(blown_out)
+
+    assert signals.faces
+    assert signals.exposure_stops > 1.25
+    assert not signals.high_key
+
+
 def test_the_real_analyzer_checks_every_face_in_a_group_shot(tmp_path):
     from framewise.vision_analyzer import VisionAnalyzer
 

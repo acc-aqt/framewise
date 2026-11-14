@@ -15,7 +15,7 @@ EXIFTOOL = shutil.which("exiftool") or "/opt/homebrew/bin/exiftool"
 START = datetime(2026, 6, 20, 14, 30, 0)
 BEACH = [1.0, 0.0, 0.0]
 BLURRY = {"sharpness": 0.1}
-SOFT = {"sharpness": 0.4}
+SOFT = {"sharpness": 0.3}
 
 
 def exiftool(*args: str | Path) -> str:

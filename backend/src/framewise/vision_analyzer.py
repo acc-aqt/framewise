@@ -38,7 +38,7 @@ class VisionAnalyzer:
             low_key=measures.low_key,
             high_key=measures.high_key,
             aesthetics=aesthetics,
-            faces=_faces(vision_faces, measures.region_sharpness),
+            faces=_faces(vision_faces, measures.face_sharpness),
         )
 
 

@@ -1,13 +1,13 @@
 @if (noSession()) {
   <header>
-    <h1>framewise</h1>
+    <h1><img src="logo.svg" alt="" width="20" height="20" />framewise</h1>
   </header>
   <main>
     <app-session-picker (opened)="openSession()" />
   </main>
 } @else {
   <header>
-    <h1>framewise</h1>
+    <h1><img src="logo.svg" alt="" width="20" height="20" />framewise</h1>
     @if (summary.hasValue()) {
       <p class="root">{{ summary.value().root }}</p>
       <app-session-summary [summary]="summary.value()" />

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -1 32 32" width="32" height="32">
+  <style>
+    .side { stroke: #3c4043; }
+    .pick { fill: #1a73e8; }
+    @media (prefers-color-scheme: dark) {
+      .side { stroke: #e3e3e3; }
+      .pick { fill: #8ab4f8; }
+    }
+  </style>
+  <defs>
+    <mask id="behind" maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="32">
+      <rect width="32" height="32" fill="#fff"/>
+      <rect x="5" y="6" width="22" height="16" rx="4" fill="#000"/>
+    </mask>
+  </defs>
+  <g class="side" fill="none" stroke-width="2" mask="url(#behind)">
+    <rect x="2" y="14" width="10" height="6" rx="1"/>
+    <rect x="20" y="14" width="10" height="6" rx="1"/>
+  </g>
+  <rect class="pick" x="7" y="8" width="18" height="12" rx="2"/>
+</svg>

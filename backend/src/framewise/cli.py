@@ -16,6 +16,7 @@ from starlette.types import ASGIApp
 from framewise.analyzer import FrameAnalyzer
 from framewise.exiftool import ExifTool
 from framewise.lightroom import LIGHTROOM_PREFERENCES
+from framewise.providers import MissingCapabilityError, resolve_analyzer
 from framewise.review import (
     SessionAnalysis,
     hard_reset_session,
@@ -150,10 +151,7 @@ def main(
         return
 
     if analyzer is None:
-        # Imported here so the rest of framewise imports where Apple Vision doesn't exist.
-        from framewise.vision_analyzer import VisionAnalyzer
-
-        analyzer = VisionAnalyzer()
+        analyzer = _resolve_analyzer()
 
     def start_session(folder: Path) -> FastAPI:
         store = open_session(folder, resolve_data_dir())
@@ -176,3 +174,11 @@ def main(
             file=sys.stderr,
         )
     serve(app, HOST, args.port, lambda: open_browser(url))
+
+
+def _resolve_analyzer() -> FrameAnalyzer:
+    try:
+        return resolve_analyzer()
+    except MissingCapabilityError as error:
+        print(f"framewise: error: {error}", file=sys.stderr)
+        sys.exit(1)

@@ -49,4 +49,4 @@ cd backend && uv run pytest && uv run ruff check .
 cd frontend && npx ng test --watch=false
 ```
 
-Most backend tests use a fake Frame analyzer. `tests/test_vision_analyzer.py` runs the real Apple Vision analyzer on generated images and the public-domain reference faces in `tests/fixtures/faces/`, and is skipped on other platforms.
+Most backend tests use a fake Frame analyzer. `tests/test_providers.py` composes analysis from fake Providers. `tests/test_apple_vision.py` runs the real Apple Vision Providers on generated images and the public-domain reference faces in `tests/fixtures/faces/`, and is skipped on other platforms.

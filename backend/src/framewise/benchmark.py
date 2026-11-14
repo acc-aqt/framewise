@@ -11,6 +11,7 @@ import json
 import plistlib
 import shutil
 import sqlite3
+import sys
 import tempfile
 import time
 from collections import Counter
@@ -21,6 +22,7 @@ from pathlib import Path
 from framewise.analyzer import FrameAnalyzer
 from framewise.grouper import group_frames
 from framewise.judge import KEPT, Proposal, Verdict, judge
+from framewise.providers import MissingCapabilityError, resolve_analyzer
 from framewise.review import SessionAnalysis, open_session
 from framewise.store import Frame
 
@@ -165,10 +167,7 @@ def main(
         parser.error(f"no catalog at {catalog}")
 
     if analyzer is None:
-        # Imported here so the rest of framewise imports where Apple Vision doesn't exist.
-        from framewise.vision_analyzer import VisionAnalyzer
-
-        analyzer = VisionAnalyzer()
+        analyzer = _resolve_analyzer()
 
     with tempfile.TemporaryDirectory(prefix="framewise-benchmark-") as temp:
         catalog_copy = copy_catalog(catalog, Path(temp))
@@ -274,3 +273,11 @@ def _folder_key(folder: Path) -> str:
 
 def _path_key(path: Path | str) -> str:
     return str(path).lower()
+
+
+def _resolve_analyzer() -> FrameAnalyzer:
+    try:
+        return resolve_analyzer()
+    except MissingCapabilityError as error:
+        print(f"framewise-benchmark: error: {error}", file=sys.stderr)
+        sys.exit(1)

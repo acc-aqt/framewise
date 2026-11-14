@@ -9,19 +9,19 @@ ANALYSIS_VERSION = 5
 
 @dataclass(frozen=True)
 class Face:
-    """One face Apple Vision found in a Frame. Its box is a fraction of the Frame's width and
-    height, measured from the top left."""
+    """One face the face detection Provider found in a Frame. Its box is a fraction of the
+    Frame's width and height, measured from the top left."""
 
     x: float
     y: float
     width: float
     height: float
     eyes_open: bool | None
-    """None where Apple Vision could not place the eyes."""
+    """None where the eye state Provider could not tell, or there is none."""
     sharpness: float
     """Like the Frame's sharpness, measured on the face alone."""
     quality: float | None
-    """Apple Vision's face capture quality from 0 to 1, or None where it is unavailable."""
+    """The face quality Provider's score from 0 to 1, or None where it is unavailable."""
 
 
 @dataclass(frozen=True)
@@ -41,7 +41,7 @@ class FrameSignals:
     overexposed. With faces, only the faces' highlights count, so a person against a blown-out
     white wall is high key."""
     aesthetics: float | None
-    """Apple Vision's overall aesthetics score from -1 to 1, or None where it is unavailable."""
+    """The aesthetics Provider's score from -1 to 1, or None where it is unavailable."""
     faces: list[Face]
 
 

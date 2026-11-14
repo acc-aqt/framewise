@@ -1,8 +1,8 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { App } from './app';
-import { Frame, Group, SessionSummary } from './session-api';
+import { App, POLL_INTERVAL_MS } from './app';
+import { AnalysisProgress, Frame, Group, SessionSummary } from './session-api';
 
 const summary: SessionSummary = {
   root: '/Volumes/card/DCIM',
@@ -26,7 +26,10 @@ describe('Review UI', () => {
     TestBed.tick();
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    http.verify();
+    vi.useRealTimers();
+  });
 
   function text(selector: string): string {
     return (
@@ -42,8 +45,29 @@ describe('Review UI', () => {
 
   async function respond(session: SessionSummary, groups: Group[]): Promise<void> {
     http.expectOne('/api/session').flush(session);
-    http.expectOne('/api/groups').flush(groups);
-    await fixture.whenStable();
+    await respondToPoll(
+      { frames_done: session.total_frames, frames_left: 0, seconds_remaining: 0 },
+      groups,
+    );
+  }
+
+  // Drives change detection with tick() rather than whenStable(), which never settles while
+  // a request is open or under fake timers.
+  async function respondToPoll(progress: AnalysisProgress, groups: Group[]): Promise<void> {
+    http.expectOne('/api/progress').flush(progress);
+    await settle();
+    http.expectOne((request) => request.url.startsWith('/api/groups')).flush(groups);
+    await settle();
+  }
+
+  async function settle(): Promise<void> {
+    await Promise.resolve();
+    TestBed.tick();
+  }
+
+  async function nextPoll(): Promise<void> {
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    await settle();
   }
 
   it('shows the Session summary counts', async () => {
@@ -113,6 +137,57 @@ describe('Review UI', () => {
 
     expect(all('[data-testid="group-view"]')).toEqual([]);
     expect(all('[data-testid="group-tile"]').length).toBe(2);
+  });
+
+  it('fills the grid in as Frames are analysed and stops polling once analysis finishes', async () => {
+    vi.useFakeTimers();
+    const frames = [frame(1, 'jpg-only'), frame(2, 'jpg-only'), frame(3, 'jpg-only')];
+    http.expectOne('/api/session').flush(summary);
+
+    await respondToPoll({ frames_done: 1, frames_left: 2, seconds_remaining: 90 }, [
+      group(1, [frames[0]]),
+    ]);
+    expect(all('[data-testid="group-tile"]').length).toBe(1);
+
+    await nextPoll();
+    await respondToPoll({ frames_done: 2, frames_left: 1, seconds_remaining: 45 }, [
+      group(1, [frames[0]]),
+      group(2, [frames[1]]),
+    ]);
+    expect(all('[data-testid="group-tile"]').length).toBe(2);
+
+    await nextPoll();
+    await respondToPoll({ frames_done: 3, frames_left: 0, seconds_remaining: 0 }, [
+      group(1, [frames[0]]),
+      group(2, [frames[1]]),
+      group(3, [frames[2]]),
+    ]);
+    expect(all('[data-testid="group-tile"]').length).toBe(3);
+
+    await nextPoll();
+    http.expectNone('/api/progress');
+  });
+
+  it('shows Frames done, Frames left and the estimated time remaining while analysis runs', async () => {
+    http.expectOne('/api/session').flush(summary);
+    await respondToPoll({ frames_done: 12, frames_left: 188, seconds_remaining: 200 }, []);
+
+    expect(text('[data-testid="frames-done"]')).toBe('12');
+    expect(text('[data-testid="frames-left"]')).toBe('188');
+    expect(text('[data-testid="time-remaining"]')).toBe('about 4 min left');
+  });
+
+  it('says the time remaining is being estimated before the first Frame finishes', async () => {
+    http.expectOne('/api/session').flush(summary);
+    await respondToPoll({ frames_done: 0, frames_left: 3, seconds_remaining: null }, []);
+
+    expect(text('[data-testid="time-remaining"]')).toBe('estimating time left');
+  });
+
+  it('hides the progress once every Frame is analysed', async () => {
+    await respond(summary, []);
+
+    expect(all('[data-testid="analysis-progress"]')).toEqual([]);
   });
 
   it('virtualizes the grid so a large Session does not render every tile', async () => {

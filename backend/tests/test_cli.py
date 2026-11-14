@@ -4,6 +4,7 @@ from contextlib import contextmanager
 import pytest
 from conftest import FakeAnalyzer, make_jpg, wait_until
 from fastapi.testclient import TestClient
+from test_write_back_api import rating
 
 from framewise.cli import main
 
@@ -225,3 +226,44 @@ def test_review_without_a_folder_stays_without_a_session_when_the_dialog_is_canc
 
     assert client.post("/api/session/choose").json() == {"opened": False}
     assert client.get("/api/session").status_code == 404
+
+
+def test_reset_restores_the_files_and_deletes_the_session_store(
+    session_dir, isolated_data_dir, review, analyzer, capsys
+):
+    photo = make_jpg(session_dir / "DSCF0001.JPG", stars=1)
+    analyzer.script(photo, [1.0, 0.0, 0.0])
+    review().post("/api/write-back")
+    assert rating(photo) == {"stars": 3, "label": None}
+
+    main(["reset", str(session_dir)])
+
+    assert rating(photo) == {"stars": 1, "label": None}
+    assert list(isolated_data_dir.glob("*.sqlite*")) == []
+    assert "restored 1 files" in capsys.readouterr().out
+    analyzer.analyzed.clear()
+    review()
+    assert analyzer.analyzed == [photo]
+
+
+def test_reset_keeps_the_session_store_when_a_file_cannot_be_restored(
+    session_dir, isolated_data_dir, review, analyzer, capsys
+):
+    photo = make_jpg(session_dir / "DSCF0001.JPG", stars=1)
+    review().post("/api/write-back")
+    photo.chmod(0o444)
+
+    with pytest.raises(SystemExit) as exit_info:
+        main(["reset", str(session_dir)])
+
+    assert exit_info.value.code == 1
+    assert len(list(isolated_data_dir.glob("*.sqlite"))) == 1
+    assert "could not restore DSCF0001.JPG" in capsys.readouterr().err
+
+
+def test_reset_of_a_folder_without_a_session_store_changes_nothing(
+    session_dir, isolated_data_dir, capsys
+):
+    main(["reset", str(session_dir)])
+
+    assert "nothing to reset" in capsys.readouterr().out

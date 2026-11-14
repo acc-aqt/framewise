@@ -12,9 +12,11 @@ from pathlib import Path
 from framewise.analyzer import FrameAnalyzer, FrameSignals
 from framewise.camera_rating import CameraRating, read_camera_rating
 from framewise.capture_time import read_capture_time
+from framewise.exiftool import ExifTool
 from framewise.scan import scan_session
 from framewise.store import SessionStore
 from framewise.thumbnails import make_thumbnail
+from framewise.write_back import RatingWriteBack, WriteBackResult
 
 DEFAULT_DATA_DIR = Path.home() / "Library" / "Application Support" / "framewise"
 BACKGROUND_CORE_DIVISOR = 4
@@ -27,6 +29,25 @@ def resolve_data_dir() -> Path:
 def session_database_path(root: Path, data_dir: Path) -> Path:
     digest = hashlib.sha256(str(root).encode()).hexdigest()[:16]
     return data_dir / f"{root.name}-{digest}.sqlite"
+
+
+def hard_reset_session(folder: Path, data_dir: Path, exiftool: ExifTool) -> WriteBackResult | None:
+    """Undoes Rating write-back, then deletes the Session store, so the next review analyses
+    every Frame again. Keeps the store if a file fails to restore, so the reset can be retried.
+    None if the folder has no Session store."""
+    root = folder.resolve()
+    database = session_database_path(root, data_dir)
+    if not database.exists():
+        return None
+    store = SessionStore(database, root)
+    try:
+        result = RatingWriteBack(store, exiftool).undo()
+    finally:
+        store.close()
+    if not result.failed:
+        for suffix in ("", "-wal", "-shm"):
+            database.with_name(database.name + suffix).unlink(missing_ok=True)
+    return result
 
 
 def open_session(folder: Path, data_dir: Path) -> SessionStore:

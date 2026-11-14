@@ -14,8 +14,15 @@ from fastapi import FastAPI
 from starlette.types import ASGIApp
 
 from framewise.analyzer import FrameAnalyzer
+from framewise.exiftool import ExifTool
 from framewise.lightroom import LIGHTROOM_PREFERENCES
-from framewise.review import SessionAnalysis, open_session, resolve_data_dir
+from framewise.review import (
+    SessionAnalysis,
+    hard_reset_session,
+    open_session,
+    resolve_data_dir,
+    session_database_path,
+)
 from framewise.server import SessionPicker, create_app
 
 HOST = "127.0.0.1"
@@ -75,6 +82,30 @@ def analyze_in_background(analysis: SessionAnalysis, keep_awake: KeepAwake) -> N
     threading.Thread(target=run, daemon=True).start()
 
 
+def hard_reset(folder: Path) -> None:
+    data_dir = resolve_data_dir()
+    if not session_database_path(folder.resolve(), data_dir).exists():
+        print(f"framewise: no Session store for {folder.resolve()}, nothing to reset")
+        return
+    print("framewise: restoring the ratings framewise wrote, DNGs can take minutes")
+    exiftool = ExifTool()
+    try:
+        result = hard_reset_session(folder, data_dir, exiftool)
+    finally:
+        exiftool.close()
+    if result is None:
+        return
+    print(f"framewise: restored {len(result.written)} files")
+    if result.failed:
+        for failure in result.failed:
+            print(f"framewise: could not restore {failure.path}: {failure.error}", file=sys.stderr)
+        print("framewise: kept the Session store, so the reset can be retried", file=sys.stderr)
+        sys.exit(1)
+    print(
+        f"framewise: deleted the Session store, the next review analyses {folder.resolve()} again"
+    )
+
+
 def main(
     argv: list[str] | None = None,
     serve: Serve = serve_with_uvicorn,
@@ -103,10 +134,20 @@ def main(
         action="store_true",
         help="Let the Mac go to sleep while analysis runs",
     )
+    reset = commands.add_parser(
+        "reset",
+        help="Undo Rating write-back and delete the Session store, "
+        "so the next review analyses every Frame again",
+    )
+    reset.add_argument("session_folder", type=Path)
     args = parser.parse_args(argv)
 
     if args.session_folder is not None and not args.session_folder.is_dir():
         parser.error(f"not a folder: {args.session_folder}")
+
+    if args.command == "reset":
+        hard_reset(args.session_folder)
+        return
 
     if analyzer is None:
         # Imported here so the rest of framewise imports where Apple Vision doesn't exist.

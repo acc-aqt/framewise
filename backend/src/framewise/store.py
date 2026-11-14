@@ -144,6 +144,13 @@ class SessionStore:
             self._connections.connection = connection
         return connection
 
+    def close(self) -> None:
+        """Closes this thread's connection."""
+        connection = getattr(self._connections, "connection", None)
+        if connection is not None:
+            connection.close()
+            self._connections.connection = None
+
     def save_frame(self, frame: ScannedFrame, rating: CameraRating) -> None:
         with self._db:
             self._db.execute(

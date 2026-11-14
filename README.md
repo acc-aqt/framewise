@@ -38,6 +38,8 @@ Nothing is written to the photos until you ask. Once analysis has finished, **Ra
 
 **Reset Session…** on the same screen starts the review over: it undoes the write-back and clears all Overrides, fixed Groups and the Keeper budget. The analysis is kept, so nothing is analysed again. Stars and labels framewise didn't write, such as in-camera ratings, stay as they are.
 
+For development and demos, `uv run framewise reset /path/to/session-folder` resets harder: it undoes the write-back, then deletes the Session store, so the next `framewise review` analyses every Frame again. Quit `framewise review` first. If a file can't be restored, the store is kept so you can retry.
+
 Write-back needs [ExifTool](https://exiftool.org) (`brew install exiftool`).
 
 ## Tests

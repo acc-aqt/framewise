@@ -4,7 +4,7 @@ from typing import Protocol
 
 # Bump whenever FrameSignals gains or changes a signal, so a re-run re-analyses Frames whose
 # saved analysis predates it.
-ANALYSIS_VERSION = 4
+ANALYSIS_VERSION = 5
 
 
 @dataclass(frozen=True)

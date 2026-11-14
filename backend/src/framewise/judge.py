@@ -26,11 +26,13 @@ from framewise.store import AnalyzedFrame, FrameKind
 
 # A whole Frame's sharpness counts its blurred background and plain walls too, so a Frame with a
 # sharp subject and a shallow depth of field measures about 0.45 (sewts benchmark, #24). A face
-# is measured on its own.
+# is measured on its own. Skin has few hard edges, so a sharp face measures only about 0.67 and
+# scores full sharpness from there; sharp faces on sewts measure 0.57 to 1 (#30).
 BLURRY_BELOW = 0.25
 SOFT_BELOW = 0.4
 FACE_BLURRY_BELOW = 0.25
 FACE_SOFT_BELOW = 0.5
+FACE_SHARP_FROM = 0.67
 MOTION_BLUR_FROM = 0.5
 POSSIBLE_MOTION_BLUR_FROM = 0.35
 EXPOSURE_TOLERANCE_STOPS = 0.7
@@ -249,7 +251,7 @@ def _assess(analyzed: AnalyzedFrame) -> _Assessment:
 def _scores(analyzed: AnalyzedFrame) -> Scores:
     signals = analyzed.signals
     components = {
-        "sharpness": _clamp(_judged_sharpness(signals)),
+        "sharpness": _sharpness_score(signals),
         "steadiness": _clamp(1 - signals.motion_blur),
         "exposure": _exposure_score(signals, analyzed.frame.kind),
         "aesthetics": None if signals.aesthetics is None else _clamp((signals.aesthetics + 1) / 2),
@@ -273,6 +275,12 @@ def _exposure_score(signals: FrameSignals, kind: FrameKind) -> float:
         return 1.0
     excess = max(0.0, abs(signals.exposure_stops) - EXPOSURE_TOLERANCE_STOPS)
     return _clamp(1 - excess / (EXPOSURE_REJECT_BEYOND_STOPS[kind] - EXPOSURE_TOLERANCE_STOPS))
+
+
+def _sharpness_score(signals: FrameSignals) -> float:
+    if signals.faces:
+        return _clamp(_judged_sharpness(signals) / FACE_SHARP_FROM)
+    return _clamp(signals.sharpness)
 
 
 def _judged_sharpness(signals: FrameSignals) -> float:

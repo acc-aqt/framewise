@@ -150,8 +150,25 @@ def test_a_sharp_background_with_a_soft_face_does_not_win_over_a_sharp_face(
     frames = frames_by_name(review())
 
     assert frames["DSCF0002.JPG"]["verdict"] == "winner"
-    assert frames["DSCF0001.JPG"]["scores"]["sharpness"] == 0.55
-    assert frames["DSCF0002.JPG"]["scores"]["sharpness"] == 0.95
+    assert frames["DSCF0001.JPG"]["scores"]["sharpness"] < 1
+    assert frames["DSCF0002.JPG"]["scores"]["sharpness"] == 1
+
+
+def test_a_face_as_sharp_as_the_sharp_reference_face_scores_full_sharpness(
+    session_dir, review, analyzer
+):
+    """Skin has few hard edges, so a sharp face measures only about 0.67."""
+    burst(
+        session_dir,
+        analyzer,
+        ("DSCF0001", {"faces": [face(sharpness=0.67)], "aesthetics": 0.5}),
+        ("DSCF0002", {"faces": [face(sharpness=1.0)], "aesthetics": 0.3}),
+    )
+
+    frames = frames_by_name(review())
+
+    assert frames["DSCF0001.JPG"]["scores"]["sharpness"] == 1
+    assert frames["DSCF0001.JPG"]["verdict"] == "winner"
 
 
 def test_a_sharp_face_against_a_soft_background_is_not_soft(session_dir, review, analyzer):

@@ -768,6 +768,121 @@ describe('Review UI', () => {
       expect(text('[data-testid="override-rating"]', frames[1])).toBe('★★★★ Green');
     });
   });
+
+  describe('fixing Groups', () => {
+    const groups = (): Group[] => [
+      group(1, [frame(1, 'jpg-only', { verdict: 'winner' }), frame(2, 'jpg-only')]),
+      group(3, [
+        frame(3, 'jpg-only', { verdict: 'winner' }),
+        frame(4, 'jpg-only'),
+        frame(5, 'jpg-only'),
+      ]),
+      group(6, [frame(6, 'jpg-only', { verdict: 'winner' })]),
+    ];
+
+    async function openGroup(index: number): Promise<void> {
+      await respond(summary, groups());
+      all('[data-testid="group-tile"]')[index].click();
+      await fixture.whenStable();
+    }
+
+    function frameDetails(index: number): HTMLElement {
+      return all('[data-testid="frame-details"]')[index];
+    }
+
+    async function click(element: HTMLElement): Promise<void> {
+      element.click();
+      await settle();
+    }
+
+    async function expectFix(url: string, body: unknown): Promise<void> {
+      const request = http.expectOne(url);
+      expect(request.request.method).toBe('POST');
+      expect(request.request.body).toEqual(body);
+      request.flush(null);
+      await settle();
+      http.expectOne((request) => request.url.startsWith('/api/groups')).flush(groups());
+      await settle();
+    }
+
+    it('splits a Group at a chosen Frame', async () => {
+      await openGroup(1);
+
+      expect(all('[data-testid="split-here"]', frameDetails(0))).toEqual([]);
+      await click(all('[data-testid="split-here"]', frameDetails(1))[0]);
+
+      await expectFix('/api/groups/split', { frame_ids: [4, 5] });
+    });
+
+    it('splits off the selected Frames', async () => {
+      await openGroup(1);
+      const splitSelected = all('[data-testid="split-selected"]')[0] as HTMLButtonElement;
+      expect(splitSelected.disabled).toBe(true);
+
+      await click(all('[data-testid="select-frame"]', frameDetails(0))[0]);
+      await click(all('[data-testid="select-frame"]', frameDetails(2))[0]);
+      expect(text('[data-testid="split-selected"]')).toBe('Split off 2 selected');
+      await click(splitSelected);
+
+      await expectFix('/api/groups/split', { frame_ids: [3, 5] });
+    });
+
+    it('cannot split off every Frame of a Group', async () => {
+      await openGroup(0);
+
+      await click(all('[data-testid="select-frame"]', frameDetails(0))[0]);
+      await click(all('[data-testid="select-frame"]', frameDetails(1))[0]);
+
+      expect((all('[data-testid="split-selected"]')[0] as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it('merges a Group with the previous or next Group', async () => {
+      await openGroup(1);
+
+      await click(all('[data-testid="merge-previous"]')[0]);
+      await expectFix('/api/groups/merge', { frame_ids: [3, 1] });
+
+      await click(all('[data-testid="merge-next"]')[0]);
+      await expectFix('/api/groups/merge', { frame_ids: [3, 6] });
+    });
+
+    it('offers no merge or move past the first and last Group', async () => {
+      await openGroup(0);
+      expect(all('[data-testid="merge-previous"]')).toEqual([]);
+      expect(all('[data-testid="move-previous"]')).toEqual([]);
+      expect(all('[data-testid="merge-next"]').length).toBe(1);
+
+      all('[data-testid="back-to-groups"]')[0].click();
+      await fixture.whenStable();
+      all('[data-testid="group-tile"]')[2].click();
+      await fixture.whenStable();
+
+      expect(all('[data-testid="merge-next"]')).toEqual([]);
+      expect(all('[data-testid="move-next"]')).toEqual([]);
+    });
+
+    it('moves a Frame to the previous or next Group', async () => {
+      await openGroup(1);
+
+      await click(all('[data-testid="move-previous"]', frameDetails(1))[0]);
+      await expectFix('/api/frames/4/move', { to_frame_id: 1 });
+
+      await click(all('[data-testid="move-next"]', frameDetails(2))[0]);
+      await expectFix('/api/frames/5/move', { to_frame_id: 6 });
+    });
+
+    it('says so when a Group fix could not be saved', async () => {
+      await openGroup(1);
+
+      await click(all('[data-testid="merge-next"]')[0]);
+      http
+        .expectOne('/api/groups/merge')
+        .flush('boom', { status: 422, statusText: 'Unprocessable Entity' });
+      await settle();
+
+      expect(text('[data-testid="override-error"]')).toBe('Could not save the Override.');
+    });
+  });
 });
 
 const SCORES: Frame['scores'] = {

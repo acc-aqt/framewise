@@ -98,6 +98,31 @@ export class App {
     this.save(this.overrideApi.change(frame.id, change));
   }
 
+  /** The Group `by` Groups before or after the open Group, in capture order. */
+  protected neighbourGroup(by: -1 | 1): Group | null {
+    const groups = this.groups.value();
+    const index = groups.findIndex((group) => group === this.openGroup());
+    return index === -1 ? null : (groups[index + by] ?? null);
+  }
+
+  protected splitGroup(frames: Frame[]): void {
+    this.save(this.overrideApi.split(frames.map((frame) => frame.id)));
+  }
+
+  protected mergeGroup(group: Group, by: -1 | 1): void {
+    const neighbour = this.neighbourGroup(by);
+    if (neighbour !== null) {
+      this.save(this.overrideApi.merge([group.frames[0].id, neighbour.frames[0].id]));
+    }
+  }
+
+  protected moveFrame(frame: Frame, by: -1 | 1): void {
+    const neighbour = this.neighbourGroup(by);
+    if (neighbour !== null) {
+      this.save(this.overrideApi.move(frame.id, neighbour.frames[0].id));
+    }
+  }
+
   protected closeGroup(): void {
     this.loupeZoom.set(null);
     this.openedFrameId.set(null);

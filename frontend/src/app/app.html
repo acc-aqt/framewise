@@ -37,6 +37,11 @@
       (select)="openedFrameId.set($event.id)"
       (openLoupe)="openedFrameId.set($event.id); loupeZoom.set('fit')"
       (makeWinner)="changeOverride($event, { verdict: 'winner' })"
+      [hasPrevious]="neighbourGroup(-1) !== null"
+      [hasNext]="neighbourGroup(1) !== null"
+      (split)="splitGroup($event)"
+      (merge)="mergeGroup(group, $event)"
+      (move)="moveFrame($event.frame, $event.by)"
     />
     @if (loupeZoom(); as zoom) {
       @if (currentFrame(); as frame) {

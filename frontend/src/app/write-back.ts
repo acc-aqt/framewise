@@ -18,6 +18,7 @@ import {
   WriteBackRating,
   WriteBackResult,
 } from './session-api';
+import { Tooltip, TooltipContent } from './tooltip';
 
 const PROGRESS_POLL_INTERVAL_MS = 500;
 
@@ -31,7 +32,7 @@ interface Outcome {
   selector: 'app-write-back',
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { 'data-testid': 'write-back' },
-  imports: [Icon],
+  imports: [Icon, Tooltip],
   template: `
     <div class="toolbar">
       <button
@@ -121,6 +122,7 @@ interface Outcome {
             class="btn btn-primary"
             data-testid="write-back-apply"
             [disabled]="working() || changing().length === 0"
+            [appTooltip]="writeTooltip"
             (click)="confirming.set('write')"
           >
             Write ratings…
@@ -132,6 +134,7 @@ interface Outcome {
             class="btn"
             data-testid="write-back-undo"
             [disabled]="working()"
+            [appTooltip]="undoTooltip"
             (click)="undo()"
           >
             <app-icon name="reset" [size]="14" />
@@ -158,6 +161,7 @@ interface Outcome {
                 class="btn btn-primary"
                 data-testid="session-reset-confirm"
                 [disabled]="working()"
+                [appTooltip]="resetTooltip"
                 (click)="reset()"
               >
                 Reset Session
@@ -170,6 +174,7 @@ interface Outcome {
             class="btn btn-ghost"
             data-testid="session-reset"
             [disabled]="working()"
+            [appTooltip]="resetTooltip"
             (click)="confirming.set('reset')"
           >
             Reset Session…
@@ -426,6 +431,21 @@ export class WriteBackView {
     this.dryRun.hasValue() ? this.dryRun.value().files.filter((file) => this.changes(file)) : [],
   );
   protected readonly verdictLabels = VERDICT_LABELS;
+  protected readonly writeTooltip: TooltipContent = {
+    label: 'Write ratings',
+    explanation:
+      "Writes each Frame's reviewed Verdict into its files as a star rating and color label that Lightroom Classic reads on import.",
+  };
+  protected readonly undoTooltip: TooltipContent = {
+    label: 'Undo write-back',
+    explanation:
+      'Restores the rating and color label each file had before framewise first wrote to it, and removes the sidecars it created; your Overrides stay.',
+  };
+  protected readonly resetTooltip: TooltipContent = {
+    label: 'Reset Session',
+    explanation:
+      "Restores the ratings framewise wrote and clears every Override and the Keeper budget, so you review framewise's Proposal afresh; the analysis is kept.",
+  };
 
   constructor() {
     effect((onCleanup) => {

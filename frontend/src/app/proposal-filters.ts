@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, model } from '@ang
 import { Icon } from './icon';
 import { NO_FILTER, ProposalFilter, VERDICT_LABELS, VERDICTS } from './proposal';
 import { Group, Verdict } from './session-api';
+import { Tooltip } from './tooltip';
 
 interface ReasonOption {
   code: string;
@@ -12,11 +13,15 @@ interface ReasonOption {
 @Component({
   selector: 'app-proposal-filters',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon],
+  imports: [Icon, Tooltip],
   template: `
     <label class="filter" [class.active]="filter().verdict !== null">
       <span class="visually-hidden">Verdict</span>
-      <select data-testid="verdict-filter" (change)="setVerdict($event)">
+      <select
+        data-testid="verdict-filter"
+        appTooltip="Filter by Verdict"
+        (change)="setVerdict($event)"
+      >
         <option value="" [selected]="filter().verdict === null">All Verdicts</option>
         @for (option of verdictOptions(); track option.verdict) {
           <option [value]="option.verdict" [selected]="filter().verdict === option.verdict">
@@ -28,7 +33,11 @@ interface ReasonOption {
     </label>
     <label class="filter" [class.active]="filter().reason !== null">
       <span class="visually-hidden">Reason</span>
-      <select data-testid="reason-filter" (change)="setReason($event)">
+      <select
+        data-testid="reason-filter"
+        appTooltip="Filter by Reason"
+        (change)="setReason($event)"
+      >
         <option value="" [selected]="filter().reason === null">All Reasons</option>
         @for (option of reasonOptions(); track option.code) {
           <option [value]="option.code" [selected]="filter().reason === option.code">

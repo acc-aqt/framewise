@@ -22,7 +22,18 @@ import { AnalysisProgress, Frame, Group, OverrideChange, SessionSummary } from '
 import { SessionChangeApi } from './session-change-api';
 import { SessionPicker } from './session-picker';
 import { SessionSummaryView } from './session-summary';
-import { Shortcut, shortcutFor, stepFrom } from './shortcuts';
+import { CommandPalette } from './command-palette';
+import {
+  Command,
+  CommandContext,
+  COMMANDS,
+  isPaletteKey,
+  PALETTE_KEY,
+  Shortcut,
+  shortcutFor,
+  stepFrom,
+} from './shortcuts';
+import { Tooltip, TooltipContent } from './tooltip';
 import { WriteBackView } from './write-back';
 
 export const POLL_INTERVAL_MS = 1000;
@@ -33,6 +44,7 @@ export const POLL_INTERVAL_MS = 1000;
   host: { '(document:keydown)': 'onKeydown($event)' },
   imports: [
     AnalysisProgressView,
+    CommandPalette,
     GroupGrid,
     GroupView,
     Icon,
@@ -41,6 +53,7 @@ export const POLL_INTERVAL_MS = 1000;
     ProposalFilters,
     SessionPicker,
     SessionSummaryView,
+    Tooltip,
     WriteBackView,
   ],
   templateUrl: './app.html',
@@ -57,6 +70,11 @@ export class App {
   protected readonly analyzing = computed(
     () => this.progress.hasValue() && this.progress.value().frames_left > 0,
   );
+  protected readonly writeBackTooltip: TooltipContent = {
+    label: 'Rating write-back',
+    explanation:
+      "Previews the star ratings and color labels for your reviewed Verdicts, and writes them into the Frames' files only once you confirm.",
+  };
   // Keyed on Frames done, so the Groups are fetched again each time more Frames are analysed.
   // Without progress, the Groups are still fetched once so an analysed Session stays reviewable.
   protected readonly groups = httpResource<Group[]>(
@@ -99,6 +117,24 @@ export class App {
     this.summary.hasValue() ? this.summary.value().keeper_budget : null,
   );
   protected readonly keeperBudgetFailed = signal(false);
+  protected readonly paletteOpen = signal(false);
+  protected readonly paletteAvailable = computed(() => !this.noSession() && !this.writingBack());
+  protected readonly commands = COMMANDS;
+  protected readonly commandContext = computed<CommandContext>(() => {
+    const frame = this.currentFrame();
+    const group = this.openGroup();
+    const frameOpen = frame !== null && group !== null;
+    return {
+      frameOpen,
+      hasPreviousGroup: frameOpen && this.neighbourGroup(-1) !== null,
+      hasNextGroup: frameOpen && this.neighbourGroup(1) !== null,
+      canSplitHere: frameOpen && group.frames[0] !== frame,
+      canMakeWinner: frameOpen && frame.verdict !== 'winner',
+      writeBackAvailable: this.summary.hasValue() && !this.analyzing(),
+    };
+  });
+  protected readonly paletteKey = PALETTE_KEY;
+  protected readonly paletteTooltip: TooltipContent = { label: 'Commands', key: PALETTE_KEY };
 
   private readonly overrideApi = inject(OverrideApi);
   private readonly sessionChangeApi = inject(SessionChangeApi);
@@ -119,6 +155,19 @@ export class App {
   }
 
   protected onKeydown(event: KeyboardEvent): void {
+    if (isPaletteKey(event)) {
+      if (this.paletteAvailable()) {
+        event.preventDefault();
+        this.paletteOpen.update((open) => !open);
+      }
+      return;
+    }
+    if (this.paletteOpen()) {
+      if (event.key === 'Escape') {
+        this.paletteOpen.set(false);
+      }
+      return;
+    }
     const frame = this.currentFrame();
     const shortcut = frame === null ? null : shortcutFor(event);
     if (frame === null || shortcut === null) {
@@ -126,6 +175,22 @@ export class App {
     }
     event.preventDefault();
     this.run(shortcut, frame);
+  }
+
+  protected runCommand(command: Command): void {
+    this.paletteOpen.set(false);
+    if (command.shortcut.kind === 'writeBack') {
+      return this.openWriteBack();
+    }
+    const frame = this.currentFrame();
+    if (frame !== null) {
+      this.run(command.shortcut, frame);
+    }
+  }
+
+  protected openWriteBack(): void {
+    this.closeGroup();
+    this.writingBack.set(true);
   }
 
   protected changeOverride(frame: Frame, change: OverrideChange): void {
@@ -234,6 +299,20 @@ export class App {
         return this.toggleZoom();
       case 'close':
         return this.loupeZoom() === null ? this.closeGroup() : this.closeLoupe();
+      case 'allGroups':
+        return this.closeGroup();
+      case 'merge':
+        return this.mergeGroup(this.openGroup()!, shortcut.by);
+      case 'splitHere': {
+        const frames = this.openGroup()!.frames;
+        return this.splitGroup(frames.slice(frames.indexOf(frame)));
+      }
+      case 'move':
+        return this.moveFrame(frame, shortcut.by);
+      case 'makeWinner':
+        return frame.verdict === 'winner'
+          ? undefined
+          : this.changeOverride(frame, { verdict: 'winner' });
     }
   }
 

@@ -39,6 +39,18 @@
       </p>
     }
     <div class="status">
+      @if (paletteAvailable()) {
+        <button
+          type="button"
+          class="btn btn-ghost"
+          data-testid="open-command-palette"
+          aria-label="Commands"
+          [appTooltip]="paletteTooltip"
+          (click)="paletteOpen.set(true)"
+        >
+          {{ paletteKey }}
+        </button>
+      }
       @if (analyzing()) {
         <app-analysis-progress [progress]="progress.value()!" />
       } @else if (progress.error()) {
@@ -51,7 +63,8 @@
         class="btn btn-primary"
         data-testid="open-write-back"
         [disabled]="analyzing()"
-        (click)="closeGroup(); writingBack.set(true)"
+        [appTooltip]="writeBackTooltip"
+        (click)="openWriteBack()"
       >
         Rating write-back…
       </button>
@@ -99,4 +112,12 @@
       />
     }
   </main>
+  @if (paletteOpen() && paletteAvailable()) {
+    <app-command-palette
+      [commands]="commands"
+      [context]="commandContext()"
+      (run)="runCommand($event)"
+      (close)="paletteOpen.set(false)"
+    />
+  }
 }

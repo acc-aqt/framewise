@@ -1,6 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { TOOLTIP_DELAY_MS } from './tooltip';
 import { WriteBackDryRun, WriteBackFile, WriteBackProgress } from './session-api';
 import { WriteBackView } from './write-back';
 
@@ -56,7 +57,10 @@ describe('Rating write-back', () => {
     TestBed.tick();
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    http.verify();
+    vi.useRealTimers();
+  });
 
   function element(): HTMLElement {
     return fixture.nativeElement as HTMLElement;
@@ -90,6 +94,24 @@ describe('Rating write-back', () => {
   async function click(testId: string): Promise<void> {
     element().querySelector<HTMLButtonElement>(`[data-testid="${testId}"]`)!.click();
     await settle();
+  }
+
+  function button(testId: string): HTMLElement {
+    return element().querySelector<HTMLElement>(`[data-testid="${testId}"]`)!;
+  }
+
+  async function hover(target: HTMLElement): Promise<{ tooltip: string; description: string }> {
+    target.dispatchEvent(new MouseEvent('mouseenter'));
+    await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+    const tooltip = document.querySelector('[role="tooltip"]:not([hidden])');
+    const describedBy = document.getElementById(target.getAttribute('aria-describedby') ?? '');
+    target.dispatchEvent(new MouseEvent('mouseleave'));
+    return {
+      tooltip: Array.from(tooltip?.children ?? [])
+        .map((part) => part.textContent?.trim())
+        .join(' '),
+      description: describedBy?.textContent ?? '',
+    };
   }
 
   it('shows each file with its old and new rating and label', async () => {
@@ -245,6 +267,36 @@ describe('Rating write-back', () => {
       'Reset the Session and restored 1 file.',
     );
     expect(resets).toBe(1);
+  });
+
+  it('explains writing ratings, undo and reset in their tooltips', async () => {
+    await showDryRun({ ...dryRun, can_undo: true });
+    vi.useFakeTimers();
+    const write =
+      "Writes each Frame's reviewed Verdict into its files as a star rating and color label that Lightroom Classic reads on import.";
+    const undo =
+      'Restores the rating and color label each file had before framewise first wrote to it, and removes the sidecars it created; your Overrides stay.';
+    const reset =
+      "Restores the ratings framewise wrote and clears every Override and the Keeper budget, so you review framewise's Proposal afresh; the analysis is kept.";
+
+    expect(await hover(button('write-back-apply'))).toEqual({
+      tooltip: `Write ratings ${write}`,
+      description: write,
+    });
+    expect(await hover(button('write-back-undo'))).toEqual({
+      tooltip: `Undo write-back ${undo}`,
+      description: undo,
+    });
+    expect(await hover(button('session-reset'))).toEqual({
+      tooltip: `Reset Session ${reset}`,
+      description: reset,
+    });
+
+    await click('session-reset');
+    expect(await hover(button('session-reset-confirm'))).toEqual({
+      tooltip: `Reset Session ${reset}`,
+      description: reset,
+    });
   });
 });
 

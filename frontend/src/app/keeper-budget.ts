@@ -7,10 +7,12 @@ import {
   output,
 } from '@angular/core';
 import { Group } from './session-api';
+import { Tooltip, TooltipContent } from './tooltip';
 
 @Component({
   selector: 'app-keeper-budget',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [Tooltip],
   template: `
     <label>
       <span>Keeper budget</span>
@@ -20,6 +22,7 @@ import { Group } from './session-api';
         max="100"
         step="5"
         data-testid="keeper-budget"
+        [appTooltip]="tooltip"
         [value]="percent()"
         (input)="percent.set(valueOf($event))"
         (change)="changeShare.emit(valueOf($event) / 100)"
@@ -65,6 +68,12 @@ export class KeeperBudget {
   readonly share = input.required<number>();
   readonly groups = input.required<Group[]>();
   readonly changeShare = output<number>();
+
+  protected readonly tooltip: TooltipContent = {
+    label: 'Keeper budget',
+    explanation:
+      "Roughly the share of the Session's Frames to keep. Each Group's Winner is kept regardless.",
+  };
 
   protected readonly percent = linkedSignal(() => Math.round(this.share() * 100));
   private readonly frames = computed(() => this.groups().flatMap((group) => group.frames));

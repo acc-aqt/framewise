@@ -2,6 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { App, POLL_INTERVAL_MS } from './app';
+import { TOOLTIP_DELAY_MS } from './tooltip';
 import {
   AnalysisProgress,
   Face,
@@ -54,6 +55,42 @@ describe('Review UI', () => {
       label: element.getAttribute('aria-label'),
       title: element.getAttribute('title'),
     }));
+  }
+
+  async function hover(element: HTMLElement): Promise<void> {
+    element.dispatchEvent(new MouseEvent('mouseenter'));
+    await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+    await settle();
+  }
+
+  function visibleTooltip(): HTMLElement | null {
+    return document.querySelector<HTMLElement>('[role="tooltip"]:not([hidden])');
+  }
+
+  function tooltipText(): string {
+    return Array.from(visibleTooltip()?.children ?? [])
+      .map((part) => part.textContent?.trim())
+      .join(' ');
+  }
+
+  function paletteCommand(label: string): HTMLElement | undefined {
+    return all('[data-testid="command"]').find(
+      (row) => row.querySelector('.label')?.textContent?.trim() === label,
+    );
+  }
+
+  async function runFromPalette(label: string): Promise<void> {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+    await settle();
+    paletteCommand(label)!.click();
+    await settle();
+  }
+
+  function description(element: HTMLElement): string | undefined {
+    return (
+      document.getElementById(element.getAttribute('aria-describedby') ?? '')?.textContent ??
+      undefined
+    );
   }
 
   function all(selector: string, root?: HTMLElement): HTMLElement[] {
@@ -163,6 +200,17 @@ describe('Review UI', () => {
       expect(all('[data-testid="group-tile"]').length).toBe(1);
     });
 
+    it('opens no command palette before a Session is chosen', async () => {
+      await respondWithoutSession();
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+      await settle();
+      await choose({ opened: true });
+      await respond(summary, [group(1, [frame(1, 'jpg-only')])]);
+
+      expect(all('[data-testid="command-palette"]')).toEqual([]);
+    });
+
     it('keeps offering to choose a folder when the dialog is cancelled', async () => {
       await respondWithoutSession();
 
@@ -244,6 +292,18 @@ describe('Review UI', () => {
 
       expect(text('[data-testid="keeper-budget-percent"]')).toBe('20%');
       expect(text('[data-testid="keeper-count"]')).toBe('0 Keepers · 2 of 5 Frames kept');
+    });
+
+    it('explains the Keeper budget in its tooltip', async () => {
+      await respond(summary, judged);
+      vi.useFakeTimers();
+
+      await hover(slider());
+
+      const explanation =
+        "Roughly the share of the Session's Frames to keep. Each Group's Winner is kept regardless.";
+      expect(tooltipText()).toBe(`Keeper budget ${explanation}`);
+      expect(description(slider())).toBe(explanation);
     });
 
     it('says so when the Keeper budget could not be saved', async () => {
@@ -664,6 +724,64 @@ describe('Review UI', () => {
     expect(all('[data-testid="group-tile"]')).toEqual([]);
   });
 
+  it('opens the write-back screen from the command palette once analysis has finished', async () => {
+    vi.useFakeTimers();
+    http.expectOne('/api/session').flush(summary);
+    await respondToPoll({ frames_done: 1, frames_left: 2, seconds_remaining: 4 }, []);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+    await settle();
+    expect(paletteCommand('Rating write-back')!.getAttribute('aria-disabled')).toBe('true');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+    await settle();
+
+    await nextPoll();
+    await respondToPoll({ frames_done: 3, frames_left: 0, seconds_remaining: 0 }, []);
+    await runFromPalette('Rating write-back');
+
+    http.expectOne('/api/write-back');
+    http.expectOne('/api/write-back/progress');
+    expect(all('[data-testid="write-back"]').length).toBe(1);
+    expect(all('[data-testid="command-palette"]')).toEqual([]);
+  });
+
+  it('opens no command palette on the write-back screen', async () => {
+    await respond(summary, []);
+    all('[data-testid="open-write-back"]')[0].click();
+    await settle();
+    http.expectOne('/api/write-back');
+    http.expectOne('/api/write-back/progress');
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+    await settle();
+
+    expect(all('[data-testid="command-palette"]')).toEqual([]);
+  });
+
+  it('explains Rating write-back in the tooltip of its button', async () => {
+    await respond(summary, []);
+    vi.useFakeTimers();
+    const button = all('[data-testid="open-write-back"]')[0];
+
+    await hover(button);
+
+    const explanation =
+      "Previews the star ratings and color labels for your reviewed Verdicts, and writes them into the Frames' files only once you confirm.";
+    expect(tooltipText()).toBe(`Rating write-back ${explanation}`);
+    expect(description(button)).toBe(explanation);
+  });
+
+  it('names the Verdict and Reason filters in their tooltips', async () => {
+    await respond(summary, [group(1, [frame(1, 'jpg-only', { verdict: 'winner' })])]);
+    vi.useFakeTimers();
+
+    await hover(all('[data-testid="verdict-filter"]')[0]);
+    expect(tooltipText()).toBe('Filter by Verdict');
+    all('[data-testid="verdict-filter"]')[0].dispatchEvent(new MouseEvent('mouseleave'));
+
+    await hover(all('[data-testid="reason-filter"]')[0]);
+    expect(tooltipText()).toBe('Filter by Reason');
+  });
+
   it('virtualizes the grid so a large Session does not render every tile', async () => {
     const groups = Array.from({ length: 400 }, (_, index) =>
       group(index + 1, [frame(index + 1, 'jpg-only')]),
@@ -750,6 +868,23 @@ describe('Review UI', () => {
       await press('p');
 
       expect(http.expectOne('/api/frames/1/override').request.body).toEqual({ verdict: 'winner' });
+    });
+
+    it('makes the current Frame the Winner when pressing W', async () => {
+      await openFirstGroup();
+      await press('ArrowRight');
+
+      await press('w');
+
+      expect(http.expectOne('/api/frames/2/override').request.body).toEqual({ verdict: 'winner' });
+    });
+
+    it('saves nothing when pressing W on the Winner', async () => {
+      await openFirstGroup();
+
+      await press('w');
+
+      http.expectNone((request) => request.url.includes('/override'));
     });
 
     it('removes a color label when pressing its key again', async () => {
@@ -911,12 +1046,52 @@ describe('Review UI', () => {
       await press('e');
 
       expect(accessibleNames('[data-testid="loupe-close"]')).toEqual([
-        { label: 'Close', title: 'Close' },
+        { label: 'Close', title: null },
       ]);
       all('[data-testid="loupe-close"]')[0].click();
       await settle();
 
       expect(all('[data-testid="loupe-image"]')).toEqual([]);
+    });
+
+    it('shows the key of the loupe buttons in their tooltips', async () => {
+      await openFirstGroup();
+      await press('e');
+      vi.useFakeTimers();
+
+      await hover(all('[data-testid="loupe-zoom"]')[0]);
+      expect(tooltipText()).toBe('Zoom Fit/100% Z');
+      expect(visibleTooltip()?.querySelector('.key')?.textContent).toBe('Z');
+      all('[data-testid="loupe-zoom"]')[0].dispatchEvent(new MouseEvent('mouseleave'));
+
+      await hover(all('[data-testid="loupe-close"]')[0]);
+      expect(tooltipText()).toBe('Close Esc');
+    });
+
+    it('shows a tooltip only after a short delay, and hides it on leaving', async () => {
+      await openFirstGroup();
+      await press('e');
+      vi.useFakeTimers();
+      const zoom = all('[data-testid="loupe-zoom"]')[0];
+
+      zoom.dispatchEvent(new MouseEvent('mouseenter'));
+      await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS - 50);
+      expect(visibleTooltip()).toBeNull();
+      await vi.advanceTimersByTimeAsync(50);
+      expect(tooltipText()).toBe('Zoom Fit/100% Z');
+
+      zoom.dispatchEvent(new MouseEvent('mouseleave'));
+      expect(visibleTooltip()).toBeNull();
+    });
+
+    it('shows a tooltip when a button gets keyboard focus', async () => {
+      await openFirstGroup();
+      vi.useFakeTimers();
+
+      all('[data-testid="back-to-groups"]')[0].focus();
+      await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+
+      expect(tooltipText()).toBe('All Groups Esc');
     });
 
     it('opens the next Group without the loupe after leaving one with the loupe open', async () => {
@@ -929,6 +1104,194 @@ describe('Review UI', () => {
       await fixture.whenStable();
 
       expect(all('[data-testid="loupe-image"]')).toEqual([]);
+    });
+
+    describe('command palette', () => {
+      const palette = () => all('[data-testid="command-palette"]')[0];
+      const search = () => palette().querySelector<HTMLInputElement>('input')!;
+      const rows = () =>
+        all('[data-testid="command"]').map((row) =>
+          Array.from(row.children)
+            .map((part) => part.textContent?.trim())
+            .join(' '),
+        );
+
+      async function openPalette(): Promise<void> {
+        await press('k', { metaKey: true });
+      }
+
+      async function type(query: string): Promise<void> {
+        search().value = query;
+        search().dispatchEvent(new Event('input'));
+        await settle();
+      }
+
+      async function pressInSearch(key: string): Promise<void> {
+        search().dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+        await settle();
+      }
+
+      it('opens with Command-K and lists every command with its key', async () => {
+        await openFirstGroup();
+
+        await openPalette();
+
+        expect(palette()).toBeDefined();
+        expect(rows()).toContain('Mark as Keeper P');
+        expect(rows()).toContain('Next Frame in Group ⌥→');
+        expect(rows()).toContain('Close Esc');
+        expect(rows()).toContain('Make Winner W');
+        expect(rows().length).toBe(29);
+      });
+
+      it('opens from the header button', async () => {
+        await respond(summary, groups());
+
+        all('[data-testid="open-command-palette"]')[0].click();
+        await settle();
+
+        expect(palette()).toBeDefined();
+      });
+
+      it('filters the commands by name as the photographer types', async () => {
+        await openFirstGroup();
+        await openPalette();
+
+        await type('WINNER');
+
+        expect(rows()).toEqual(['Compare with Winner C', 'Make Winner W']);
+      });
+
+      it('runs the highlighted command on Enter, as its key would, and closes', async () => {
+        await openFirstGroup();
+        await press('ArrowRight');
+        await openPalette();
+
+        await type('keeper');
+        await pressInSearch('Enter');
+
+        const request = http.expectOne('/api/frames/2/override');
+        expect(request.request.body).toEqual({ verdict: 'keeper' });
+        expect(all('[data-testid="command-palette"]')).toEqual([]);
+        request.flush({});
+        await settle();
+        await expectGroupsReloaded();
+      });
+
+      it('moves the highlight with the arrow keys', async () => {
+        await openFirstGroup();
+        await openPalette();
+
+        await type('star');
+        await pressInSearch('ArrowDown');
+        await pressInSearch('ArrowDown');
+        await pressInSearch('ArrowUp');
+        await pressInSearch('Enter');
+
+        expect(http.expectOne('/api/frames/1/override').request.body).toEqual({ stars: 2 });
+      });
+
+      it('runs a command when it is clicked', async () => {
+        await openFirstGroup();
+        await openPalette();
+
+        all('[data-testid="command"]')
+          .find((row) => row.textContent?.includes('Open loupe'))!
+          .click();
+        await settle();
+
+        expect(all('[data-testid="loupe"]').length).toBe(1);
+        expect(all('[data-testid="command-palette"]')).toEqual([]);
+      });
+
+      it('greys out commands that do not apply, which then do nothing', async () => {
+        await respond(summary, groups());
+        await openPalette();
+
+        const keeper = all('[data-testid="command"]').find((row) =>
+          row.textContent?.includes('Mark as Keeper'),
+        )!;
+        expect(keeper.getAttribute('aria-disabled')).toBe('true');
+
+        await type('keeper');
+        await pressInSearch('Enter');
+        keeper.click();
+        await settle();
+
+        http.expectNone((request) => request.url.includes('/override'));
+        expect(palette()).toBeDefined();
+      });
+
+      it('closes only the palette on Escape, leaving the loupe open', async () => {
+        await openFirstGroup();
+        await press('e');
+        await openPalette();
+
+        await pressInSearch('Escape');
+
+        expect(all('[data-testid="command-palette"]')).toEqual([]);
+        expect(all('[data-testid="loupe"]').length).toBe(1);
+      });
+
+      it('keeps keyboard focus in the palette', async () => {
+        await openFirstGroup();
+        await openPalette();
+        expect(document.activeElement).toBe(search());
+
+        const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+        search().dispatchEvent(tab);
+
+        expect(tab.defaultPrevented).toBe(true);
+      });
+
+      it('runs no Review UI shortcut when focus has left the search', async () => {
+        await openFirstGroup();
+        await openPalette();
+        search().blur();
+
+        await press('x');
+
+        http.expectNone((request) => request.url.includes('/override'));
+        expect(palette()).toBeDefined();
+      });
+
+      it('gives focus back to where it was when the palette closes', async () => {
+        await openFirstGroup();
+        const back = all('[data-testid="back-to-groups"]')[0];
+        back.focus();
+        await openPalette();
+
+        await pressInSearch('Escape');
+
+        expect(document.activeElement).toBe(back);
+      });
+
+      it('highlights nothing and runs nothing when no command matches', async () => {
+        await openFirstGroup();
+        await openPalette();
+
+        await type('no such command');
+        await pressInSearch('ArrowDown');
+        await pressInSearch('Enter');
+        http.expectNone((request) => request.url.includes('/override'));
+
+        await type('reject');
+        await pressInSearch('Enter');
+
+        expect(http.expectOne('/api/frames/1/override').request.body).toEqual({
+          verdict: 'reject',
+        });
+      });
+
+      it('runs no shortcut while the photographer types in the search', async () => {
+        await openFirstGroup();
+        await openPalette();
+
+        await pressInSearch('p');
+        await press('x');
+
+        http.expectNone((request) => request.url.includes('/override'));
+      });
     });
 
     describe('Compare loupe', () => {
@@ -1095,6 +1458,16 @@ describe('Review UI', () => {
 
     afterEach(() => localStorage.clear());
 
+    it('names the pinned Winner toggle in its tooltip', async () => {
+      await openGroup(0);
+      vi.useFakeTimers();
+
+      await hover(all('[data-testid="toggle-pinned-winner"]')[0]);
+
+      expect(tooltipText()).toBe('Hide Winner');
+      expect(all('[data-testid="toggle-pinned-winner"]')[0].getAttribute('title')).toBeNull();
+    });
+
     function pinnedWinner(): HTMLElement | undefined {
       return all('[data-testid="pinned-winner"]')[0];
     }
@@ -1217,6 +1590,77 @@ describe('Review UI', () => {
       await expectFix('/api/groups/split', { frame_ids: [4, 5] });
     });
 
+    describe('from the command palette', () => {
+      it('merges the open Group with the previous or next Group', async () => {
+        await openGroup(1);
+
+        await runFromPalette('Merge with previous');
+        await expectFix('/api/groups/merge', { frame_ids: [3, 1] });
+
+        await runFromPalette('Merge with next');
+        await expectFix('/api/groups/merge', { frame_ids: [3, 6] });
+      });
+
+      it('splits the Group at the current Frame', async () => {
+        await openGroup(1);
+        await click(frameDetails(1));
+
+        await runFromPalette('Split here');
+
+        await expectFix('/api/groups/split', { frame_ids: [4, 5] });
+      });
+
+      it('moves the current Frame to the previous or next Group', async () => {
+        await openGroup(1);
+        await click(frameDetails(1));
+
+        await runFromPalette('Move to previous Group');
+        await expectFix('/api/frames/4/move', { to_frame_id: 1 });
+
+        await runFromPalette('Move to next Group');
+        await expectFix('/api/frames/4/move', { to_frame_id: 6 });
+      });
+
+      it('makes the current Frame the Winner', async () => {
+        await openGroup(1);
+        await click(frameDetails(2));
+
+        await runFromPalette('Make Winner');
+
+        const request = http.expectOne('/api/frames/5/override');
+        expect(request.request.body).toEqual({ verdict: 'winner' });
+      });
+
+      it('returns to all Groups', async () => {
+        await openGroup(1);
+
+        await runFromPalette('All Groups');
+        await fixture.whenStable();
+
+        expect(all('[data-testid="group-view"]')).toEqual([]);
+        expect(all('[data-testid="group-tile"]').length).toBe(3);
+      });
+
+      it('lists the Group commands without a key, greyed out where they do not apply', async () => {
+        await openGroup(0);
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+        await settle();
+
+        const disabled = (label: string) => paletteCommand(label)!.getAttribute('aria-disabled');
+        expect(paletteCommand('Merge with next')!.querySelector('.key')).toBeNull();
+        expect(disabled('Merge with next')).toBe('false');
+        expect(disabled('Move to next Group')).toBe('false');
+        expect(disabled('Merge with previous')).toBe('true');
+        expect(disabled('Move to previous Group')).toBe('true');
+        expect(disabled('Split here')).toBe('true');
+        expect(disabled('Make Winner')).toBe('true');
+
+        paletteCommand('Make Winner')!.click();
+        await settle();
+        http.expectNone((request) => request.url.includes('/override'));
+      });
+    });
+
     it('splits off the selected Frames', async () => {
       await openGroup(1);
       const splitSelected = all('[data-testid="split-selected"]')[0] as HTMLButtonElement;
@@ -1264,34 +1708,44 @@ describe('Review UI', () => {
       expect(all('[data-testid="move-next"]')).toEqual([]);
     });
 
-    it('names the icon-only Group buttons', async () => {
+    it('names the icon-only Group buttons without a native tooltip', async () => {
       await openGroup(1);
 
-      expect(accessibleNames('[data-testid="back-to-groups"]')).toEqual([
-        { label: 'All Groups', title: 'All Groups' },
-      ]);
-      expect(accessibleNames('[data-testid="merge-previous"]')).toEqual([
-        { label: 'Merge with previous', title: 'Merge with previous' },
-      ]);
-      expect(accessibleNames('[data-testid="merge-next"]')).toEqual([
-        { label: 'Merge with next', title: 'Merge with next' },
-      ]);
-      const splitHere = { label: 'Split here', title: 'Split here' };
-      expect(accessibleNames('[data-testid="split-here"]')).toEqual([splitHere, splitHere]);
-      const movePrevious = { label: 'Move to previous Group', title: 'Move to previous Group' };
-      expect(accessibleNames('[data-testid="move-previous"]')).toEqual([
-        movePrevious,
-        movePrevious,
-        movePrevious,
-      ]);
-      const moveNext = { label: 'Move to next Group', title: 'Move to next Group' };
-      expect(accessibleNames('[data-testid="move-next"]')).toEqual([moveNext, moveNext, moveNext]);
-      const makeWinner = accessibleNames('[data-testid="make-winner"]');
-      expect(makeWinner.length).toBeGreaterThan(0);
-      expect(makeWinner).toEqual(
-        makeWinner.map(() => ({ label: 'Make Winner', title: 'Make Winner' })),
+      const names = (selector: string) => accessibleNames(selector).map(({ label }) => label);
+      expect(names('[data-testid="back-to-groups"]')).toEqual(['All Groups']);
+      expect(names('[data-testid="merge-previous"]')).toEqual(['Merge with previous']);
+      expect(names('[data-testid="merge-next"]')).toEqual(['Merge with next']);
+      expect(names('[data-testid="split-here"]')).toEqual(['Split here', 'Split here']);
+      expect(names('[data-testid="move-previous"]')).toEqual(
+        Array(3).fill('Move to previous Group'),
       );
+      expect(names('[data-testid="move-next"]')).toEqual(Array(3).fill('Move to next Group'));
+      const makeWinner = names('[data-testid="make-winner"]');
+      expect(makeWinner.length).toBeGreaterThan(0);
+      expect(makeWinner).toEqual(makeWinner.map(() => 'Make Winner'));
+      expect(all('[data-testid="group-view"] button[title]')).toEqual([]);
     });
+
+    const groupButtonTooltips: [string, string][] = [
+      ['back-to-groups', 'All Groups Esc'],
+      ['merge-previous', 'Merge with previous'],
+      ['merge-next', 'Merge with next'],
+      ['split-here', 'Split here'],
+      ['move-previous', 'Move to previous Group'],
+      ['move-next', 'Move to next Group'],
+      ['make-winner', 'Make Winner W'],
+    ];
+
+    for (const [testId, expected] of groupButtonTooltips) {
+      it(`shows a "${expected}" tooltip when hovering ${testId}`, async () => {
+        await openGroup(1);
+        vi.useFakeTimers();
+
+        await hover(all(`[data-testid="${testId}"]`)[0]);
+
+        expect(tooltipText()).toBe(expected);
+      });
+    }
 
     it('moves a Frame to the previous or next Group', async () => {
       await openGroup(1);

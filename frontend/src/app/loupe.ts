@@ -11,13 +11,15 @@ import { FramePicture } from './frame-picture';
 import { Icon } from './icon';
 import { VERDICT_LABELS } from './proposal';
 import { Frame } from './session-api';
+import { commandById } from './shortcuts';
+import { Tooltip } from './tooltip';
 
 export type LoupeZoom = 'fit' | '100%';
 
 @Component({
   selector: 'app-loupe',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FramePicture, Icon],
+  imports: [FramePicture, Icon, Tooltip],
   host: { 'data-testid': 'loupe', role: 'dialog', '[attr.aria-label]': 'label()' },
   template: `
     <div class="sides">
@@ -50,7 +52,13 @@ export type LoupeZoom = 'fit' | '100%';
       }
     </div>
     <div class="bar">
-      <button type="button" class="btn" data-testid="loupe-zoom" (click)="toggleZoom.emit()">
+      <button
+        type="button"
+        class="btn"
+        data-testid="loupe-zoom"
+        [appTooltip]="zoomTooltip"
+        (click)="toggleZoom.emit()"
+      >
         <app-icon name="zoom" [size]="14" />
         {{ zoom() === '100%' ? '100%' : 'Fit' }}
       </button>
@@ -59,7 +67,7 @@ export type LoupeZoom = 'fit' | '100%';
         class="btn btn-icon"
         data-testid="loupe-close"
         aria-label="Close"
-        title="Close"
+        [appTooltip]="closeTooltip"
         (click)="close.emit()"
       >
         <app-icon name="close" />
@@ -182,6 +190,8 @@ export type LoupeZoom = 'fit' | '100%';
   `,
 })
 export class Loupe {
+  protected readonly zoomTooltip = commandById('zoom');
+  protected readonly closeTooltip = commandById('close');
   /** One Frame, or the current Frame and the Group's Winner to compare side by side. */
   readonly frames = input.required<Frame[]>();
   readonly zoom = input.required<LoupeZoom>();

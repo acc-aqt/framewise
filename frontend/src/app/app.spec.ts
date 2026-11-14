@@ -950,6 +950,104 @@ describe('Review UI', () => {
     });
   });
 
+  describe('pinned Winner', () => {
+    const groups = (): Group[] => [
+      group(1, [
+        frame(1, 'jpg-only'),
+        frame(2, 'jpg-only', {
+          verdict: 'winner',
+          reasons: [reason('sharpest', 'Sharpest', 'Sharpest of its Group')],
+        }),
+        frame(3, 'jpg-only', { verdict: 'reject' }),
+      ]),
+      group(4, [frame(4, 'jpg-only', { verdict: 'winner' })]),
+    ];
+
+    async function openGroup(index: number, reviewed: Group[] = groups()): Promise<void> {
+      await respond(summary, reviewed);
+      all('[data-testid="group-tile"]')[index].click();
+      await fixture.whenStable();
+    }
+
+    afterEach(() => localStorage.clear());
+
+    function pinnedWinner(): HTMLElement | undefined {
+      return all('[data-testid="pinned-winner"]')[0];
+    }
+
+    function pinnedThumbnail(): string | null | undefined {
+      return pinnedWinner()?.querySelector('img')?.getAttribute('src');
+    }
+
+    it("pins the Group's Winner beside its Frames, which still include the Winner", async () => {
+      await openGroup(0);
+
+      const pinned = pinnedWinner()!;
+      expect(pinnedThumbnail()).toBe('/api/frames/2/thumbnail');
+      expect(text('[data-testid="verdict-badge"]', pinned)).toBe('Winner');
+      expect(text('[data-testid="reason"]', pinned)).toBe('Sharpest of its Group');
+      expect(text('[data-testid="score-breakdown"]', pinned)).toContain('Total');
+      expect(openFrameThumbnails()).toEqual([
+        '/api/frames/1/thumbnail',
+        '/api/frames/2/thumbnail',
+        '/api/frames/3/thumbnail',
+      ]);
+    });
+
+    it('pins no Winner in a Group of one Frame', async () => {
+      await openGroup(1);
+
+      expect(pinnedWinner()).toBeUndefined();
+    });
+
+    it('pins the new Winner once another Frame is made Winner', async () => {
+      await openGroup(0);
+
+      all('[data-testid="make-winner"]')[0].click();
+      await settle();
+      http.expectOne('/api/frames/1/override').flush({});
+      await settle();
+      const [first, second, third] = groups()[0].frames;
+      http
+        .expectOne((request) => request.url.startsWith('/api/groups'))
+        .flush([
+          group(1, [
+            { ...first, verdict: 'winner', verdict_overridden: true },
+            { ...second, verdict: 'keeper', reasons: [] },
+            third,
+          ]),
+          groups()[1],
+        ]);
+      await settle();
+
+      expect(pinnedThumbnail()).toBe('/api/frames/1/thumbnail');
+    });
+
+    it('collapses the pinned Winner and expands it again, remembering the choice', async () => {
+      await openGroup(0);
+
+      all('[data-testid="toggle-pinned-winner"]')[0].click();
+      await settle();
+
+      expect(pinnedThumbnail()).toBeUndefined();
+      expect(all('[data-testid="toggle-pinned-winner"]')[0].getAttribute('aria-expanded')).toBe(
+        'false',
+      );
+
+      fixture.destroy();
+      fixture = TestBed.createComponent(App);
+      TestBed.tick();
+      await openGroup(0);
+
+      expect(pinnedThumbnail()).toBeUndefined();
+
+      all('[data-testid="toggle-pinned-winner"]')[0].click();
+      await settle();
+
+      expect(pinnedThumbnail()).toBe('/api/frames/2/thumbnail');
+    });
+  });
+
   describe('fixing Groups', () => {
     const groups = (): Group[] => [
       group(1, [frame(1, 'jpg-only', { verdict: 'winner' }), frame(2, 'jpg-only')]),

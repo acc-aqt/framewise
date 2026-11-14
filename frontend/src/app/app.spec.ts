@@ -2,6 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { App, POLL_INTERVAL_MS } from './app';
+import { TOOLTIP_DELAY_MS } from './tooltip';
 import {
   AnalysisProgress,
   Face,
@@ -54,6 +55,22 @@ describe('Review UI', () => {
       label: element.getAttribute('aria-label'),
       title: element.getAttribute('title'),
     }));
+  }
+
+  async function hover(element: HTMLElement): Promise<void> {
+    element.dispatchEvent(new MouseEvent('mouseenter'));
+    await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+    await settle();
+  }
+
+  function visibleTooltip(): HTMLElement | null {
+    return document.querySelector<HTMLElement>('[role="tooltip"]:not([hidden])');
+  }
+
+  function tooltipText(): string {
+    return Array.from(visibleTooltip()?.children ?? [])
+      .map((part) => part.textContent?.trim())
+      .join(' ');
   }
 
   function all(selector: string, root?: HTMLElement): HTMLElement[] {
@@ -911,12 +928,52 @@ describe('Review UI', () => {
       await press('e');
 
       expect(accessibleNames('[data-testid="loupe-close"]')).toEqual([
-        { label: 'Close', title: 'Close' },
+        { label: 'Close', title: null },
       ]);
       all('[data-testid="loupe-close"]')[0].click();
       await settle();
 
       expect(all('[data-testid="loupe-image"]')).toEqual([]);
+    });
+
+    it('shows the key of the loupe buttons in their tooltips', async () => {
+      await openFirstGroup();
+      await press('e');
+      vi.useFakeTimers();
+
+      await hover(all('[data-testid="loupe-zoom"]')[0]);
+      expect(tooltipText()).toBe('Zoom Fit/100% Z');
+      expect(visibleTooltip()?.querySelector('.key')?.textContent).toBe('Z');
+      all('[data-testid="loupe-zoom"]')[0].dispatchEvent(new MouseEvent('mouseleave'));
+
+      await hover(all('[data-testid="loupe-close"]')[0]);
+      expect(tooltipText()).toBe('Close Esc');
+    });
+
+    it('shows a tooltip only after a short delay, and hides it on leaving', async () => {
+      await openFirstGroup();
+      await press('e');
+      vi.useFakeTimers();
+      const zoom = all('[data-testid="loupe-zoom"]')[0];
+
+      zoom.dispatchEvent(new MouseEvent('mouseenter'));
+      await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS - 50);
+      expect(visibleTooltip()).toBeNull();
+      await vi.advanceTimersByTimeAsync(50);
+      expect(tooltipText()).toBe('Zoom Fit/100% Z');
+
+      zoom.dispatchEvent(new MouseEvent('mouseleave'));
+      expect(visibleTooltip()).toBeNull();
+    });
+
+    it('shows a tooltip when a button gets keyboard focus', async () => {
+      await openFirstGroup();
+      vi.useFakeTimers();
+
+      all('[data-testid="back-to-groups"]')[0].focus();
+      await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+
+      expect(tooltipText()).toBe('All Groups Esc');
     });
 
     it('opens the next Group without the loupe after leaving one with the loupe open', async () => {
@@ -1095,6 +1152,16 @@ describe('Review UI', () => {
 
     afterEach(() => localStorage.clear());
 
+    it('names the pinned Winner toggle in its tooltip', async () => {
+      await openGroup(0);
+      vi.useFakeTimers();
+
+      await hover(all('[data-testid="toggle-pinned-winner"]')[0]);
+
+      expect(tooltipText()).toBe('Hide Winner');
+      expect(all('[data-testid="toggle-pinned-winner"]')[0].getAttribute('title')).toBeNull();
+    });
+
     function pinnedWinner(): HTMLElement | undefined {
       return all('[data-testid="pinned-winner"]')[0];
     }
@@ -1264,34 +1331,44 @@ describe('Review UI', () => {
       expect(all('[data-testid="move-next"]')).toEqual([]);
     });
 
-    it('names the icon-only Group buttons', async () => {
+    it('names the icon-only Group buttons without a native tooltip', async () => {
       await openGroup(1);
 
-      expect(accessibleNames('[data-testid="back-to-groups"]')).toEqual([
-        { label: 'All Groups', title: 'All Groups' },
-      ]);
-      expect(accessibleNames('[data-testid="merge-previous"]')).toEqual([
-        { label: 'Merge with previous', title: 'Merge with previous' },
-      ]);
-      expect(accessibleNames('[data-testid="merge-next"]')).toEqual([
-        { label: 'Merge with next', title: 'Merge with next' },
-      ]);
-      const splitHere = { label: 'Split here', title: 'Split here' };
-      expect(accessibleNames('[data-testid="split-here"]')).toEqual([splitHere, splitHere]);
-      const movePrevious = { label: 'Move to previous Group', title: 'Move to previous Group' };
-      expect(accessibleNames('[data-testid="move-previous"]')).toEqual([
-        movePrevious,
-        movePrevious,
-        movePrevious,
-      ]);
-      const moveNext = { label: 'Move to next Group', title: 'Move to next Group' };
-      expect(accessibleNames('[data-testid="move-next"]')).toEqual([moveNext, moveNext, moveNext]);
-      const makeWinner = accessibleNames('[data-testid="make-winner"]');
-      expect(makeWinner.length).toBeGreaterThan(0);
-      expect(makeWinner).toEqual(
-        makeWinner.map(() => ({ label: 'Make Winner', title: 'Make Winner' })),
+      const names = (selector: string) => accessibleNames(selector).map(({ label }) => label);
+      expect(names('[data-testid="back-to-groups"]')).toEqual(['All Groups']);
+      expect(names('[data-testid="merge-previous"]')).toEqual(['Merge with previous']);
+      expect(names('[data-testid="merge-next"]')).toEqual(['Merge with next']);
+      expect(names('[data-testid="split-here"]')).toEqual(['Split here', 'Split here']);
+      expect(names('[data-testid="move-previous"]')).toEqual(
+        Array(3).fill('Move to previous Group'),
       );
+      expect(names('[data-testid="move-next"]')).toEqual(Array(3).fill('Move to next Group'));
+      const makeWinner = names('[data-testid="make-winner"]');
+      expect(makeWinner.length).toBeGreaterThan(0);
+      expect(makeWinner).toEqual(makeWinner.map(() => 'Make Winner'));
+      expect(all('[data-testid="group-view"] button[title]')).toEqual([]);
     });
+
+    const groupButtonTooltips: [string, string][] = [
+      ['back-to-groups', 'All Groups Esc'],
+      ['merge-previous', 'Merge with previous'],
+      ['merge-next', 'Merge with next'],
+      ['split-here', 'Split here'],
+      ['move-previous', 'Move to previous Group'],
+      ['move-next', 'Move to next Group'],
+      ['make-winner', 'Make Winner'],
+    ];
+
+    for (const [testId, expected] of groupButtonTooltips) {
+      it(`shows a "${expected}" tooltip when hovering ${testId}`, async () => {
+        await openGroup(1);
+        vi.useFakeTimers();
+
+        await hover(all(`[data-testid="${testId}"]`)[0]);
+
+        expect(tooltipText()).toBe(expected);
+      });
+    }
 
     it('moves a Frame to the previous or next Group', async () => {
       await openGroup(1);

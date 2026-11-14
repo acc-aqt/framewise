@@ -14,6 +14,8 @@ import { FrameTile } from './frame-tile';
 import { Icon } from './icon';
 import { findWinner, scoreBreakdown } from './proposal';
 import { Frame, Group } from './session-api';
+import { commandById } from './shortcuts';
+import { Tooltip, TooltipContent } from './tooltip';
 
 const SHORTCUT_HINTS = [
   { keys: '1–5', label: 'stars' },
@@ -49,7 +51,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
 @Component({
   selector: 'app-group-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FrameTile, Icon, NgTemplateOutlet],
+  imports: [FrameTile, Icon, NgTemplateOutlet, Tooltip],
   host: { 'data-testid': 'group-view' },
   template: `
     <div class="toolbar">
@@ -58,7 +60,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
         class="btn btn-icon"
         data-testid="back-to-groups"
         aria-label="All Groups"
-        title="All Groups"
+        [appTooltip]="allGroupsTooltip"
         (click)="back.emit()"
       >
         <app-icon name="arrow-left" />
@@ -82,7 +84,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
               class="btn btn-icon btn-ghost"
               data-testid="merge-previous"
               aria-label="Merge with previous"
-              title="Merge with previous"
+              appTooltip="Merge with previous"
               (click)="merge.emit(-1)"
             >
               <app-icon name="merge-previous" [size]="14" />
@@ -95,7 +97,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
               class="btn btn-icon btn-ghost"
               data-testid="merge-next"
               aria-label="Merge with next"
-              title="Merge with next"
+              appTooltip="Merge with next"
               (click)="merge.emit(1)"
             >
               <app-icon name="merge-next" [size]="14" />
@@ -117,7 +119,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
       <span class="keys">
         @for (hint of shortcutHints; track hint.label) {
           <span class="hint"
-            ><kbd>{{ hint.keys }}</kbd> {{ hint.label }}</span
+            ><kbd class="key">{{ hint.keys }}</kbd> {{ hint.label }}</span
           >
         }
       </span>
@@ -150,7 +152,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
             data-testid="toggle-pinned-winner"
             [attr.aria-expanded]="!pinnedWinnerCollapsed()"
             [attr.aria-label]="pinnedWinnerToggleLabel()"
-            [title]="pinnedWinnerToggleLabel()"
+            [appTooltip]="pinnedWinnerToggleLabel()"
             (click)="togglePinnedWinner()"
           >
             <app-icon name="crown" [size]="14" />
@@ -197,7 +199,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
                   class="btn btn-icon btn-ghost"
                   data-testid="split-here"
                   aria-label="Split here"
-                  title="Split here"
+                  appTooltip="Split here"
                   (click)="splitAt($index)"
                 >
                   <app-icon name="scissors" [size]="14" />
@@ -209,7 +211,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
                   class="btn btn-icon btn-ghost"
                   data-testid="move-previous"
                   aria-label="Move to previous Group"
-                  title="Move to previous Group"
+                  appTooltip="Move to previous Group"
                   (click)="move.emit({ frame, by: -1 })"
                 >
                   <app-icon name="arrow-left" [size]="14" />
@@ -221,7 +223,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
                   class="btn btn-icon btn-ghost"
                   data-testid="move-next"
                   aria-label="Move to next Group"
-                  title="Move to next Group"
+                  appTooltip="Move to next Group"
                   (click)="move.emit({ frame, by: 1 })"
                 >
                   <app-icon name="arrow-right" [size]="14" />
@@ -233,7 +235,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
                   class="btn btn-icon make-winner"
                   data-testid="make-winner"
                   aria-label="Make Winner"
-                  title="Make Winner"
+                  appTooltip="Make Winner"
                   (click)="makeWinner.emit(frame)"
                 >
                   <app-icon name="crown" [size]="14" />
@@ -291,19 +293,8 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
     .hint {
       white-space: nowrap;
     }
-    kbd {
-      display: inline-block;
-      min-width: 1.4em;
+    .hint .key {
       margin-right: 2px;
-      padding: 0 var(--space-1);
-      border: 1px solid var(--color-border-strong);
-      border-bottom-width: 2px;
-      border-radius: var(--radius-sm);
-      color: var(--color-text-secondary);
-      font-family: var(--font-sans);
-      font-size: 10px;
-      line-height: 1.6;
-      text-align: center;
     }
     .body {
       flex: 1;
@@ -429,6 +420,10 @@ export class GroupView {
     this.group().frames.length > 1 ? findWinner(this.group()) : undefined,
   );
   protected readonly pinnedWinnerCollapsed = signal(readPinnedWinnerCollapsed());
+  protected readonly allGroupsTooltip: TooltipContent = {
+    label: 'All Groups',
+    key: commandById('close').key,
+  };
   protected readonly pinnedWinnerToggleLabel = computed(() =>
     this.pinnedWinnerCollapsed() ? 'Show Winner' : 'Hide Winner',
   );

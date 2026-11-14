@@ -12,6 +12,7 @@ import { Observable } from 'rxjs';
 import { AnalysisProgressView } from './analysis-progress';
 import { GroupGrid } from './group-grid';
 import { GroupView } from './group-view';
+import { Icon } from './icon';
 import { KeeperBudget } from './keeper-budget';
 import { Loupe, LoupeZoom } from './loupe';
 import { OverrideApi } from './override-api';
@@ -34,6 +35,7 @@ export const POLL_INTERVAL_MS = 1000;
     AnalysisProgressView,
     GroupGrid,
     GroupView,
+    Icon,
     KeeperBudget,
     Loupe,
     ProposalFilters,

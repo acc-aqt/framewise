@@ -36,26 +36,27 @@ import { Group } from './session-api';
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 12px;
-      margin-top: 8px;
-      font-size: 0.85rem;
+      gap: var(--space-3);
+      font-size: var(--text-sm);
     }
     label {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: var(--space-2);
+      color: var(--color-text-secondary);
     }
-    input:focus-visible {
-      outline: 2px solid var(--color-focus);
-      outline-offset: 2px;
+    input {
+      width: 120px;
+      margin: 0;
     }
     output {
-      min-width: 3ch;
-      font-variant-numeric: tabular-nums;
+      min-width: 4ch;
+      color: var(--color-text);
+      font-size: var(--text-md);
+      font-weight: 600;
     }
     .count {
-      color: var(--color-text-secondary);
-      font-variant-numeric: tabular-nums;
+      color: var(--color-text-muted);
     }
   `,
 })

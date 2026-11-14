@@ -1,6 +1,9 @@
 import { ColorLabel, Group } from './session-api';
 
-/** What a key does in an open Group, following Lightroom Classic's shortcuts. */
+/**
+ * What a command does. The keyed ones follow Lightroom Classic's shortcuts; the rest run
+ * only from the command palette.
+ */
 export type Shortcut =
   | { kind: 'stars'; stars: number | null }
   | { kind: 'label'; label: ColorLabel }
@@ -11,11 +14,24 @@ export type Shortcut =
   | { kind: 'loupe' }
   | { kind: 'compare' }
   | { kind: 'zoom' }
-  | { kind: 'close' };
+  | { kind: 'close' }
+  | { kind: 'allGroups' }
+  | { kind: 'merge'; by: -1 | 1 }
+  | { kind: 'splitHere' }
+  | { kind: 'move'; by: -1 | 1 }
+  | { kind: 'makeWinner' }
+  | { kind: 'writeBack' };
 
 /** What the Review UI is showing, which decides the commands that apply. */
 export interface CommandContext {
   frameOpen: boolean;
+  hasPreviousGroup: boolean;
+  hasNextGroup: boolean;
+  /** Whether the current Frame is not its Group's first, so the Group can be split there. */
+  canSplitHere: boolean;
+  /** Whether the current Frame is not already its Group's Winner. */
+  canMakeWinner: boolean;
+  writeBackAvailable: boolean;
 }
 
 /** Something the photographer can do, with the key that does it and when it applies. */
@@ -44,6 +60,15 @@ function frameCommand(
   alt = false,
 ): Command {
   return { id, label, key, eventKey, alt, shortcut, appliesTo: whenFrameOpen };
+}
+
+function paletteCommand(
+  id: string,
+  label: string,
+  shortcut: Shortcut,
+  appliesTo: (context: CommandContext) => boolean,
+): Command {
+  return { id, label, shortcut, appliesTo };
 }
 
 const STAR_COMMANDS: Command[] = [1, 2, 3, 4, 5].map((stars) =>
@@ -104,6 +129,49 @@ export const COMMANDS: readonly Command[] = [
   frameCommand('compare', 'Compare with Winner', 'C', 'c', { kind: 'compare' }),
   frameCommand('zoom', 'Zoom Fit/100%', 'Z', 'z', { kind: 'zoom' }),
   frameCommand('close', 'Close', 'Esc', 'Escape', { kind: 'close' }),
+  paletteCommand('all-groups', 'Show all Groups', { kind: 'allGroups' }, whenFrameOpen),
+  paletteCommand(
+    'merge-previous',
+    'Merge with previous',
+    { kind: 'merge', by: -1 },
+    (context) => context.hasPreviousGroup,
+  ),
+  paletteCommand(
+    'merge-next',
+    'Merge with next',
+    { kind: 'merge', by: 1 },
+    (context) => context.hasNextGroup,
+  ),
+  paletteCommand(
+    'split-here',
+    'Split here',
+    { kind: 'splitHere' },
+    (context) => context.canSplitHere,
+  ),
+  paletteCommand(
+    'move-previous',
+    'Move to previous Group',
+    { kind: 'move', by: -1 },
+    (context) => context.hasPreviousGroup,
+  ),
+  paletteCommand(
+    'move-next',
+    'Move to next Group',
+    { kind: 'move', by: 1 },
+    (context) => context.hasNextGroup,
+  ),
+  paletteCommand(
+    'make-winner',
+    'Make Winner',
+    { kind: 'makeWinner' },
+    (context) => context.canMakeWinner,
+  ),
+  paletteCommand(
+    'write-back',
+    'Write back',
+    { kind: 'writeBack' },
+    (context) => context.writeBackAvailable,
+  ),
 ];
 
 export function commandById(id: string): Command {

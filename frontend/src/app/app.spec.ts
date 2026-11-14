@@ -73,6 +73,19 @@ describe('Review UI', () => {
       .join(' ');
   }
 
+  function paletteCommand(label: string): HTMLElement | undefined {
+    return all('[data-testid="command"]').find(
+      (row) => row.querySelector('.label')?.textContent?.trim() === label,
+    );
+  }
+
+  async function runFromPalette(label: string): Promise<void> {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+    await settle();
+    paletteCommand(label)!.click();
+    await settle();
+  }
+
   function all(selector: string, root?: HTMLElement): HTMLElement[] {
     return Array.from(
       (root ?? (fixture.nativeElement as HTMLElement)).querySelectorAll<HTMLElement>(selector),
@@ -681,6 +694,26 @@ describe('Review UI', () => {
     expect(all('[data-testid="group-tile"]')).toEqual([]);
   });
 
+  it('opens the write-back screen from the command palette once analysis has finished', async () => {
+    vi.useFakeTimers();
+    http.expectOne('/api/session').flush(summary);
+    await respondToPoll({ frames_done: 1, frames_left: 2, seconds_remaining: 4 }, []);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+    await settle();
+    expect(paletteCommand('Write back')!.getAttribute('aria-disabled')).toBe('true');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+    await settle();
+
+    await nextPoll();
+    await respondToPoll({ frames_done: 3, frames_left: 0, seconds_remaining: 0 }, []);
+    await runFromPalette('Write back');
+
+    http.expectOne('/api/write-back');
+    http.expectOne('/api/write-back/progress');
+    expect(all('[data-testid="write-back"]').length).toBe(1);
+    expect(all('[data-testid="command-palette"]')).toEqual([]);
+  });
+
   it('opens no command palette on the write-back screen', async () => {
     await respond(summary, []);
     all('[data-testid="open-write-back"]')[0].click();
@@ -1035,7 +1068,7 @@ describe('Review UI', () => {
         expect(rows()).toContain('Mark as Keeper P');
         expect(rows()).toContain('Next Frame in Group ⌥→');
         expect(rows()).toContain('Close Esc');
-        expect(rows().length).toBe(21);
+        expect(rows().length).toBe(29);
       });
 
       it('opens from the header button', async () => {
@@ -1053,7 +1086,7 @@ describe('Review UI', () => {
 
         await type('WINNER');
 
-        expect(rows()).toEqual(['Compare with Winner C']);
+        expect(rows()).toEqual(['Compare with Winner C', 'Make Winner']);
       });
 
       it('runs the highlighted command on Enter, as its key would, and closes', async () => {
@@ -1432,6 +1465,77 @@ describe('Review UI', () => {
       await click(all('[data-testid="split-here"]', frameDetails(1))[0]);
 
       await expectFix('/api/groups/split', { frame_ids: [4, 5] });
+    });
+
+    describe('from the command palette', () => {
+      it('merges the open Group with the previous or next Group', async () => {
+        await openGroup(1);
+
+        await runFromPalette('Merge with previous');
+        await expectFix('/api/groups/merge', { frame_ids: [3, 1] });
+
+        await runFromPalette('Merge with next');
+        await expectFix('/api/groups/merge', { frame_ids: [3, 6] });
+      });
+
+      it('splits the Group at the current Frame', async () => {
+        await openGroup(1);
+        await click(frameDetails(1));
+
+        await runFromPalette('Split here');
+
+        await expectFix('/api/groups/split', { frame_ids: [4, 5] });
+      });
+
+      it('moves the current Frame to the previous or next Group', async () => {
+        await openGroup(1);
+        await click(frameDetails(1));
+
+        await runFromPalette('Move to previous Group');
+        await expectFix('/api/frames/4/move', { to_frame_id: 1 });
+
+        await runFromPalette('Move to next Group');
+        await expectFix('/api/frames/4/move', { to_frame_id: 6 });
+      });
+
+      it('makes the current Frame the Winner', async () => {
+        await openGroup(1);
+        await click(frameDetails(2));
+
+        await runFromPalette('Make Winner');
+
+        const request = http.expectOne('/api/frames/5/override');
+        expect(request.request.body).toEqual({ verdict: 'winner' });
+      });
+
+      it('returns to all Groups', async () => {
+        await openGroup(1);
+
+        await runFromPalette('Show all Groups');
+        await fixture.whenStable();
+
+        expect(all('[data-testid="group-view"]')).toEqual([]);
+        expect(all('[data-testid="group-tile"]').length).toBe(3);
+      });
+
+      it('lists the Group commands without a key, greyed out where they do not apply', async () => {
+        await openGroup(0);
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+        await settle();
+
+        const disabled = (label: string) => paletteCommand(label)!.getAttribute('aria-disabled');
+        expect(paletteCommand('Merge with next')!.querySelector('.key')).toBeNull();
+        expect(disabled('Merge with next')).toBe('false');
+        expect(disabled('Move to next Group')).toBe('false');
+        expect(disabled('Merge with previous')).toBe('true');
+        expect(disabled('Move to previous Group')).toBe('true');
+        expect(disabled('Split here')).toBe('true');
+        expect(disabled('Make Winner')).toBe('true');
+
+        paletteCommand('Make Winner')!.click();
+        await settle();
+        http.expectNone((request) => request.url.includes('/override'));
+      });
     });
 
     it('splits off the selected Frames', async () => {

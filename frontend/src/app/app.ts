@@ -114,9 +114,19 @@ export class App {
   protected readonly keeperBudgetFailed = signal(false);
   protected readonly paletteOpen = signal(false);
   protected readonly commands = COMMANDS;
-  protected readonly commandContext = computed<CommandContext>(() => ({
-    frameOpen: this.currentFrame() !== null,
-  }));
+  protected readonly commandContext = computed<CommandContext>(() => {
+    const frame = this.currentFrame();
+    const group = this.openGroup();
+    const frameOpen = frame !== null && group !== null;
+    return {
+      frameOpen,
+      hasPreviousGroup: frameOpen && this.neighbourGroup(-1) !== null,
+      hasNextGroup: frameOpen && this.neighbourGroup(1) !== null,
+      canSplitHere: frameOpen && group.frames[0] !== frame,
+      canMakeWinner: frameOpen && frame.verdict !== 'winner',
+      writeBackAvailable: this.summary.hasValue() && !this.analyzing(),
+    };
+  });
   protected readonly paletteKey = PALETTE_KEY;
   protected readonly paletteTooltip: TooltipContent = { label: 'Commands', key: PALETTE_KEY };
 
@@ -163,10 +173,18 @@ export class App {
 
   protected runCommand(command: Command): void {
     this.paletteOpen.set(false);
+    if (command.shortcut.kind === 'writeBack') {
+      return this.openWriteBack();
+    }
     const frame = this.currentFrame();
     if (frame !== null) {
       this.run(command.shortcut, frame);
     }
+  }
+
+  protected openWriteBack(): void {
+    this.closeGroup();
+    this.writingBack.set(true);
   }
 
   protected changeOverride(frame: Frame, change: OverrideChange): void {
@@ -275,6 +293,20 @@ export class App {
         return this.toggleZoom();
       case 'close':
         return this.loupeZoom() === null ? this.closeGroup() : this.closeLoupe();
+      case 'allGroups':
+        return this.closeGroup();
+      case 'merge':
+        return this.mergeGroup(this.openGroup()!, shortcut.by);
+      case 'splitHere': {
+        const frames = this.openGroup()!.frames;
+        return this.splitGroup(frames.slice(frames.indexOf(frame)));
+      }
+      case 'move':
+        return this.moveFrame(frame, shortcut.by);
+      case 'makeWinner':
+        return this.changeOverride(frame, { verdict: 'winner' });
+      case 'writeBack':
+        return this.openWriteBack();
     }
   }
 

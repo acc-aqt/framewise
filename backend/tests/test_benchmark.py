@@ -329,3 +329,17 @@ def test_an_override_without_a_capability_and_id_is_a_usage_error(
         run_benchmark(session_dir, catalog, tmp_path, "--provider", "fingerprint", providers=[])
 
     assert exit_info.value.code == 2
+
+
+def test_a_provider_override_replaces_a_config_choice_that_cannot_be_honoured(
+    session_dir, catalog, tmp_path, isolated_data_dir
+):
+    isolated_data_dir.mkdir()
+    (isolated_data_dir / "config.toml").write_text('[providers]\nfingerprint = "offline"\n')
+    providers = [NamedFingerprint("offline", available=False), NamedFingerprint("chosen")]
+
+    report = run_benchmark(
+        session_dir, catalog, tmp_path, "--provider", "fingerprint=chosen", providers=providers
+    )
+
+    assert report["providers"] == {"fingerprint": "chosen@1"}

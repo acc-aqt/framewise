@@ -28,7 +28,7 @@ A star rating or color label that was already on a Frame's files before framewis
 _Avoid_: Existing rating, prior rating
 
 **Session store**:
-The per-Session SQLite database under `~/Library/Application Support/framewise/` that holds a Session's Frames and their thumbnails. framewise never writes it into the Session folder.
+The per-Session SQLite database in framewise's own data folder (`~/Library/Application Support/framewise/` on macOS, `~/.local/share/framewise/` on Linux by default) that holds a Session's Frames and their thumbnails. framewise never writes it into the Session folder.
 _Avoid_: Cache, catalog, index
 
 ## Analysis

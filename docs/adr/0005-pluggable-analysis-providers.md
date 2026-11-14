@@ -18,7 +18,7 @@ Tier 1 analysis (ADR-0002) was written directly against Apple Vision, so framewi
    - The choice is made in the `[providers]` table of `config.toml` beside the Session stores, or with `--provider` on the benchmark, which wins over the file.
    - A chosen Provider that is not installed or not available on the machine is an error, never a silent fallback to another Provider.
 4. **Fingerprint is the only mandatory Capability.** Without it Frames cannot be grouped, so framewise refuses to start. Without any other Capability, its signals are unknown (no faces, unknown eyes, no face quality or aesthetics score), and judging treats them as unknown rather than as a flaw.
-5. **The image maths stays built in.** Sharpness, motion blur, exposure and per-face sharpness inside the detected boxes are computed by framewise for every Provider, so they are the same whichever Providers run.
+5. **The image maths stays built in.** Sharpness, motion blur, exposure, whether a Frame is deliberately low or high key, and per-face sharpness inside the detected boxes are computed by framewise for every Provider, so they are the same whichever Providers run.
 6. **Providers own their calibration.**
    - A fingerprint Provider declares its own similarity thresholds for bursts and near-duplicates, because fingerprints from different models are not comparable.
    - Face quality and aesthetics are scores from 0 to 1. A Provider maps its model's own scale onto that range and keeps any threshold, such as for closed eyes, to itself.

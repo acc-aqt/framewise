@@ -163,12 +163,18 @@ def resolve_analyzer(
     those given on the command line, win over the config file's."""
     if providers is None:
         providers = discover_providers()
+    overrides = dict(overrides or {})
     configured = read_provider_overrides(config_path) if config_path else {}
+    still_configured = {
+        capability: provider_id
+        for capability, provider_id in configured.items()
+        if capability not in overrides
+    }
     try:
-        select_providers(providers, configured)
+        select_providers(providers, still_configured)
     except ProviderConfigError as error:
         raise ProviderConfigError(f"{config_path}: {error}") from error
-    return compose_analyzer(providers, configured | dict(overrides or {}))
+    return compose_analyzer(providers, still_configured | overrides)
 
 
 def read_provider_overrides(config_path: Path) -> dict[str, str]:

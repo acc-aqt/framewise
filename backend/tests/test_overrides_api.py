@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 from conftest import make_jpg
+from test_verdicts_api import keep_every_clean_frame
 
 START = datetime(2026, 6, 20, 14, 30, 0)
 BEACH = [1.0, 0.0, 0.0]
@@ -39,7 +40,7 @@ def override(client, name: str, **change):
 def test_framewise_verdicts_carry_no_override(session_dir, review, analyzer):
     burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.4}), ("DSCF0002", {}))
 
-    frames = frames_by_name(review())
+    frames = frames_by_name(keep_every_clean_frame(review()))
 
     assert [(f["verdict"], f["verdict_overridden"], f["override"]) for f in frames.values()] == [
         ("winner", False, None),
@@ -64,7 +65,7 @@ def test_stars_and_a_color_label_are_saved_without_changing_the_verdict(
     session_dir, review, analyzer
 ):
     burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.4}), ("DSCF0002", {}))
-    client = review()
+    client = keep_every_clean_frame(review())
 
     override(client, "DSCF0002.JPG", stars=4)
     override(client, "DSCF0002.JPG", label="green")
@@ -90,7 +91,7 @@ def test_a_field_set_to_null_is_cleared_and_others_are_kept(session_dir, review,
 
 def test_clearing_an_override_returns_to_framewise_verdict(session_dir, review, analyzer):
     burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.4}), ("DSCF0002", {}))
-    client = review()
+    client = keep_every_clean_frame(review())
     override(client, "DSCF0002.JPG", verdict="reject", stars=1)
     frame_id = frames_by_name(client)["DSCF0002.JPG"]["id"]
 
@@ -139,7 +140,7 @@ def test_choosing_a_new_winner_re_judges_the_previous_winner(session_dir, review
     client = review()
     assert verdicts(client) == {"DSCF0001.JPG": "winner", "DSCF0002.JPG": "reject"}
 
-    override(client, "DSCF0002.JPG", verdict="winner")
+    override(keep_every_clean_frame(client), "DSCF0002.JPG", verdict="winner")
 
     frames = frames_by_name(client)
     assert (frames["DSCF0002.JPG"]["verdict"], frames["DSCF0002.JPG"]["verdict_overridden"]) == (
@@ -158,7 +159,7 @@ def test_the_rest_of_the_group_is_re_judged_against_the_new_winner(session_dir, 
         ("DSCF0002", {"aesthetics": 0.4, "sharpness": 0.1}),
         ("DSCF0003", {"aesthetics": 0.4, "sharpness": 0.45}),
     )
-    client = review()
+    client = keep_every_clean_frame(review())
 
     override(client, "DSCF0003.JPG", verdict="winner")
 
@@ -194,7 +195,7 @@ def test_rejecting_the_winner_makes_framewise_pick_another(session_dir, review, 
         ("DSCF0002", {"aesthetics": 0.4}),
         ("DSCF0003", {"aesthetics": 0.0}),
     )
-    client = review()
+    client = keep_every_clean_frame(review())
 
     override(client, "DSCF0001.JPG", verdict="reject")
 

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from conftest import make_jpg, make_raw, make_sidecar, wait_until
 from PIL import Image
+from test_verdicts_api import keep_every_clean_frame
 
 EXIFTOOL = shutil.which("exiftool") or "/opt/homebrew/bin/exiftool"
 START = datetime(2026, 6, 20, 14, 30, 0)
@@ -373,7 +374,7 @@ def override(client, name: str, **change) -> None:
 def test_the_final_verdict_with_overrides_is_written(session_dir, review, analyzer, english):
     framewise_winner = jpg(session_dir, analyzer, "DSCF0001.JPG", aesthetics=0.5)
     chosen_winner = jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3)
-    client = review(**english)
+    client = keep_every_clean_frame(review(**english))
 
     override(client, "DSCF0002.JPG", verdict="winner")
     client.post("/api/write-back")

@@ -4,6 +4,8 @@ export interface SessionSummary {
   jpg_only_count: number;
   raw_jpg_count: number;
   skipped: string[];
+  /** The share of the Session's Frames the photographer roughly wants to keep, from 0 to 1. */
+  keeper_budget: number;
 }
 
 export interface CameraRating {
@@ -25,6 +27,8 @@ export interface Scores {
   exposure: number;
   aesthetics: number | null;
   face_quality: number | null;
+  /** What a Camera rating added to the total, or 0 without one. */
+  camera_rating: number;
   total: number;
 }
 

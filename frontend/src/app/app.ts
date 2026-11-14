@@ -5,17 +5,20 @@ import {
   computed,
   effect,
   inject,
+  linkedSignal,
   signal,
 } from '@angular/core';
 import { Observable } from 'rxjs';
 import { AnalysisProgressView } from './analysis-progress';
 import { GroupGrid } from './group-grid';
 import { GroupView } from './group-view';
+import { KeeperBudget } from './keeper-budget';
 import { Loupe, LoupeZoom } from './loupe';
 import { OverrideApi } from './override-api';
 import { NO_FILTER, ProposalFilter } from './proposal';
 import { ProposalFilters } from './proposal-filters';
 import { AnalysisProgress, Frame, Group, OverrideChange, SessionSummary } from './session-api';
+import { SessionChangeApi } from './session-change-api';
 import { SessionSummaryView } from './session-summary';
 import { Shortcut, shortcutFor, stepFrom } from './shortcuts';
 import { WriteBackView } from './write-back';
@@ -30,6 +33,7 @@ export const POLL_INTERVAL_MS = 1000;
     AnalysisProgressView,
     GroupGrid,
     GroupView,
+    KeeperBudget,
     Loupe,
     ProposalFilters,
     SessionSummaryView,
@@ -71,8 +75,13 @@ export class App {
   );
   protected readonly loupeZoom = signal<LoupeZoom | null>(null);
   protected readonly overrideFailed = signal(false);
+  protected readonly keeperBudget = linkedSignal(() =>
+    this.summary.hasValue() ? this.summary.value().keeper_budget : null,
+  );
+  protected readonly keeperBudgetFailed = signal(false);
 
   private readonly overrideApi = inject(OverrideApi);
+  private readonly sessionChangeApi = inject(SessionChangeApi);
 
   constructor() {
     effect((onCleanup) => {
@@ -125,6 +134,17 @@ export class App {
     if (neighbour !== null) {
       this.save(this.overrideApi.move(frame.id, neighbour.frames[0].id));
     }
+  }
+
+  protected changeKeeperBudget(share: number): void {
+    this.keeperBudget.set(share);
+    this.sessionChangeApi.changeKeeperBudget(share).subscribe({
+      next: () => {
+        this.keeperBudgetFailed.set(false);
+        this.groups.reload();
+      },
+      error: () => this.keeperBudgetFailed.set(true),
+    });
   }
 
   protected closeGroup(): void {

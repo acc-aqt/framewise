@@ -1,8 +1,10 @@
 """The Judge: turns Groups of analysed Frames into a Proposal of Verdicts with Reasons.
 
 Each Frame is first assessed on its own: its signals become Scores, and each flaw check may
-find a Flaw that caps its Verdict at Unsure or Reject. Then each Group picks its Winner and
-proposes the rest as Keepers, Unsure or Rejects.
+find a Flaw that caps its Verdict at Unsure or Reject. A Camera rating nudges a Frame's Scores up
+a little, never past a Flaw. Then each Group picks its Winner and proposes its flawed Frames as
+Unsure or Rejects. The Keeper budget decides how many of the remaining Frames, best first across
+the whole Session, become Keepers; the rest are Rejects.
 
 A Frame with faces is judged on its faces: its sharpness is that of its softest face, and every
 face must have open eyes and be sharp for the Frame to pass.
@@ -12,12 +14,14 @@ Group, and a Frame they overrode to another Verdict is not picked, so the rest o
 re-judged against the Winner that remains. Applying the Overrides themselves is up to the caller.
 """
 
+import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import PurePosixPath
 
 from framewise.analyzer import Face, FrameSignals
+from framewise.camera_rating import CameraRating
 from framewise.store import AnalyzedFrame, FrameKind
 
 BLURRY_BELOW = 0.25
@@ -28,8 +32,10 @@ EXPOSURE_TOLERANCE_STOPS = 0.7
 # Beyond these, a Frame is a Reject; between the tolerance and these, it is Unsure. A RAW+JPG
 # Frame is judged more leniently because its RAW holds detail its JPG has clipped.
 EXPOSURE_REJECT_BEYOND_STOPS: dict[FrameKind, float] = {"jpg-only": 1.25, "raw+jpg": 2.0}
-# A Frame scoring within this margin of its Group's Winner is a Keeper.
-KEEPER_MARGIN = 0.1
+# The share of a Session's Frames kept as Winners or Keepers until the photographer moves it.
+DEFAULT_KEEPER_BUDGET = 0.4
+# Added to the total Score of a Frame with in-camera stars.
+CAMERA_RATING_HINT = 0.05
 WEIGHTS = {
     "sharpness": 0.35,
     "steadiness": 0.15,
@@ -45,6 +51,9 @@ class Verdict(StrEnum):
     KEEPER = "keeper"
     REJECT = "reject"
     UNSURE = "unsure"
+
+
+KEPT = {Verdict.WINNER, Verdict.KEEPER}
 
 
 @dataclass(frozen=True)
@@ -64,6 +73,8 @@ class Scores:
     aesthetics: float | None
     face_quality: float | None
     """The quality of the Frame's weakest face, or None without faces."""
+    camera_rating: float
+    """The hint a Camera rating adds to the total, or 0 without one."""
     total: float
 
 
@@ -129,24 +140,69 @@ class _Assessment:
 
 
 def judge(
-    groups: list[list[AnalyzedFrame]], verdict_overrides: Mapping[str, Verdict] | None = None
+    groups: list[list[AnalyzedFrame]],
+    verdict_overrides: Mapping[str, Verdict] | None = None,
+    keeper_budget: float = DEFAULT_KEEPER_BUDGET,
 ) -> Proposal:
-    """Judges each Group. `verdict_overrides` holds the photographer's Verdict Overrides by JPG
-    path."""
+    """Judges each Group, then keeps roughly `keeper_budget` of the Frames as Winners and
+    Keepers. `verdict_overrides` holds the photographer's Verdict Overrides by JPG path; the
+    Frames they kept count towards the budget and those they overrode are never re-judged by it."""
+    overrides = verdict_overrides or {}
     proposal: Proposal = {}
+    candidates: list[tuple[_Assessment, _Assessment]] = []
+    kept = 0
     for group in groups:
         assessments = [_assess(analyzed) for analyzed in group]
-        proposal.update(_judge_group(assessments, verdict_overrides or {}))
+        winner = _pick_winner(assessments, overrides)
+        for assessment in assessments:
+            override = _non_winner_override(assessment, overrides)
+            if assessment is winner:
+                judgement = winner.judgement(Verdict.WINNER, winner.reasons)
+            else:
+                judgement = _judge_flaws_against_winner(assessment, winner)
+                if judgement is None and override is None:
+                    candidates.append((assessment, winner))
+                    continue
+                judgement = judgement or assessment.judgement(Verdict.KEEPER, [])
+            proposal[assessment.analyzed.frame.id] = judgement
+            kept += (override or judgement.verdict) in KEPT
+    frame_count = sum(len(group) for group in groups)
+    keeper_slots = max(0, math.floor(keeper_budget * frame_count + 0.5) - kept)
+    proposal.update(_judge_by_keeper_budget(candidates, keeper_slots))
     return proposal
 
 
-def _judge_group(assessments: list[_Assessment], overrides: Mapping[str, Verdict]) -> Proposal:
-    winner = _pick_winner(assessments, overrides)
-    proposal = {winner.analyzed.frame.id: winner.judgement(Verdict.WINNER, winner.reasons)}
-    for assessment in assessments:
-        if assessment is not winner:
-            proposal[assessment.analyzed.frame.id] = _judge_against_winner(assessment, winner)
+def _non_winner_override(
+    assessment: _Assessment, overrides: Mapping[str, Verdict]
+) -> Verdict | None:
+    """The photographer's Verdict Override of the Frame unless it is Winner, which only steers
+    the Winner and falls back to framewise's Verdict when it lost to another one."""
+    override = overrides.get(assessment.analyzed.frame.jpg_path)
+    return None if override == Verdict.WINNER else override
+
+
+def _judge_by_keeper_budget(
+    candidates: list[tuple[_Assessment, _Assessment]], keeper_slots: int
+) -> Proposal:
+    """Keeps the best of the Frames without Flaws, across the whole Session, while the budget
+    lasts. The rest are weaker duplicates of their Group's Winner."""
+    ranked = sorted(candidates, key=lambda candidate: _keeper_rank(candidate[0]))
+    proposal: Proposal = {}
+    for index, (assessment, winner) in enumerate(ranked):
+        if index < keeper_slots:
+            judgement = assessment.judgement(Verdict.KEEPER, [])
+        else:
+            winner_name = PurePosixPath(winner.analyzed.frame.jpg_path).stem
+            reason = Reason(
+                "weaker-duplicate", "Weaker duplicate", f"Weaker duplicate of {winner_name}"
+            )
+            judgement = assessment.judgement(Verdict.REJECT, [reason])
+        proposal[assessment.analyzed.frame.id] = judgement
     return proposal
+
+
+def _keeper_rank(assessment: _Assessment) -> tuple[float, str]:
+    return -assessment.scores.total, assessment.analyzed.frame.jpg_path
 
 
 def _pick_winner(assessments: list[_Assessment], overrides: Mapping[str, Verdict]) -> _Assessment:
@@ -169,18 +225,15 @@ def _winner_rank(assessment: _Assessment) -> tuple[int, float, str]:
     return flaw_rank, -assessment.scores.total, assessment.analyzed.frame.jpg_path
 
 
-def _judge_against_winner(assessment: _Assessment, winner: _Assessment) -> Judgement:
-    """Closed eyes alone only make a Frame Unsure, as they may be deliberate, unless the Group's
-    Winner shows the same moment with every eye open."""
+def _judge_flaws_against_winner(assessment: _Assessment, winner: _Assessment) -> Judgement | None:
+    """The Verdict a Frame's Flaws give it, or None without Flaws. Closed eyes alone only make a
+    Frame Unsure, as they may be deliberate, unless the Group's Winner shows the same moment with
+    every eye open."""
     if assessment.has_eyes_closed and winner.is_clean_with_open_eyes:
         return assessment.judgement(Verdict.REJECT, assessment.reasons)
     if assessment.worst is not None:
         return assessment.judgement(assessment.worst, assessment.reasons)
-    if assessment.scores.total >= winner.scores.total - KEEPER_MARGIN:
-        return assessment.judgement(Verdict.KEEPER, [])
-    winner_name = PurePosixPath(winner.analyzed.frame.jpg_path).stem
-    reason = Reason("weaker-duplicate", "Weaker duplicate", f"Weaker duplicate of {winner_name}")
-    return assessment.judgement(Verdict.REJECT, [reason])
+    return None
 
 
 def _assess(analyzed: AnalyzedFrame) -> _Assessment:
@@ -199,8 +252,15 @@ def _scores(analyzed: AnalyzedFrame) -> Scores:
     }
     available = {name: value for name, value in components.items() if value is not None}
     total_weight = sum(WEIGHTS[name] for name in available)
-    total = sum(WEIGHTS[name] * value for name, value in available.items()) / total_weight
-    return Scores(**components, total=total)
+    weighted = sum(WEIGHTS[name] * value for name, value in available.items()) / total_weight
+    hint = _camera_rating_hint(analyzed.frame.camera_rating)
+    return Scores(**components, camera_rating=hint, total=weighted + hint)
+
+
+def _camera_rating_hint(rating: CameraRating) -> float:
+    """In-camera stars hint the photographer liked the Frame. A color label carries no
+    agreed meaning, so it is no hint."""
+    return CAMERA_RATING_HINT if (rating.stars or 0) > 0 else 0.0
 
 
 def _exposure_score(signals: FrameSignals, kind: FrameKind) -> float:

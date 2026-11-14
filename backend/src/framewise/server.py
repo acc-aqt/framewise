@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from framewise.exiftool import ExifTool
 from framewise.grouper import group_frames
-from framewise.judge import FaceCheck, Judgement, Proposal, Verdict, judge
+from framewise.judge import DEFAULT_KEEPER_BUDGET, FaceCheck, Judgement, Proposal, Verdict, judge
 from framewise.lightroom import read_label_set
 from framewise.review import SessionAnalysis
 from framewise.store import AnalyzedFrame, Frame, Override, SessionStore
@@ -46,6 +46,11 @@ class FrameMove(BaseModel):
     to_frame_id: int
 
 
+class SessionChange(BaseModel):
+    keeper_budget: float = Field(ge=0, le=1)
+    """The share of the Session's Frames the photographer roughly wants to keep."""
+
+
 def create_app(
     store: SessionStore,
     analysis: SessionAnalysis,
@@ -69,7 +74,7 @@ def create_app(
             for path, override in overrides.items()
             if override.verdict is not None
         }
-        return groups, overrides, judge(groups, verdict_overrides)
+        return groups, overrides, judge(groups, verdict_overrides, _keeper_budget())
 
     def reviewed_frames() -> list[ReviewedFrame]:
         groups, overrides, proposal = reviewed_proposal()
@@ -98,6 +103,7 @@ def create_app(
             "jpg_only_count": summary.jpg_only_count,
             "raw_jpg_count": summary.raw_jpg_count,
             "skipped": summary.skipped,
+            "keeper_budget": _keeper_budget(),
         }
 
     @app.get("/api/progress")
@@ -132,6 +138,15 @@ def create_app(
             }
             for group in groups
         ]
+
+    @app.patch("/api/session")
+    def change_session(change: SessionChange) -> dict:
+        store.save_keeper_budget(change.keeper_budget)
+        return session_summary()
+
+    def _keeper_budget() -> float:
+        share = store.keeper_budget()
+        return DEFAULT_KEEPER_BUDGET if share is None else share
 
     @app.patch("/api/frames/{frame_id}/override")
     def change_override(frame_id: int, change: OverrideChange) -> dict:

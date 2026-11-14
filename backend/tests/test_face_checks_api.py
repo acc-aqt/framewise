@@ -1,4 +1,4 @@
-from test_verdicts_api import burst, frames_by_name, reasons, verdicts
+from test_verdicts_api import burst, frames_by_name, keep_every_clean_frame, reasons, verdicts
 
 from framewise.analyzer import Face
 
@@ -85,7 +85,7 @@ def test_closed_eyes_stay_unsure_when_the_open_eyes_frame_is_itself_flawed(
 def test_eyes_vision_could_not_read_do_not_count_as_closed(session_dir, review, analyzer):
     burst(session_dir, analyzer, ("DSCF0001", {"faces": [face(eyes_open=None)]}), ("DSCF0002", {}))
 
-    frame = frames_by_name(review())["DSCF0001.JPG"]
+    frame = frames_by_name(keep_every_clean_frame(review()))["DSCF0001.JPG"]
 
     assert frame["reasons"] == []
     assert frame["faces"][0]["eyes"] == "unknown"

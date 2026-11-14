@@ -36,6 +36,6 @@ Tier 1 analysis (ADR-0002) was written directly against Apple Vision, so framewi
 ## Consequences
 
 - Changing any Provider, even one that has nothing to do with grouping such as eye state, empties the Proposal and the Groups, fixed ones included, until the affected Frames are analysed again. This is the same as bumping the analysis version.
-- framewise runs on Linux, but only analyses Frames there once a fingerprint Provider is available on Linux.
+- framewise runs on Linux with the portable Providers of the `portable` extra: DINOv2-small serves the fingerprint, with similarity thresholds calibrated so its Groups match Apple Vision's on a benchmark Session, and MediaPipe serves face detection and eye state. Linux has no face quality or aesthetics Provider yet.
 - Providers in one package may share work between themselves. framewise's Apple Vision Providers share one Vision image per thread, so face detection's observations are reused by eye state and face quality. That sharing is a Provider's own business and not part of the Provider protocol.
 - A plug-in author's guide lives in `docs/providers.md`.

@@ -16,6 +16,7 @@ dependencies = [
 [project.optional-dependencies]
 portable = [
     "mediapipe>=1.2.3",
+    "onnxruntime>=1.32.0",
 ]
 
 [project.scripts]
@@ -30,6 +31,7 @@ apple-vision-face-quality = "framewise.apple_vision:AppleFaceQuality"
 apple-vision-aesthetics = "framewise.apple_vision:AppleAesthetics"
 mediapipe-face-detection = "framewise.mediapipe_faces:MediaPipeFaceDetection"
 mediapipe-eye-state = "framewise.mediapipe_faces:MediaPipeEyeState"
+dinov2-small-fingerprint = "framewise.dinov2_fingerprint:DinoV2Fingerprint"
 
 [build-system]
 requires = ["uv_build>=0.13.8,<0.14.0"]

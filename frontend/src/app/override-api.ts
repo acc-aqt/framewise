@@ -25,6 +25,11 @@ export class OverrideApi {
     return this.http.post('/api/groups/merge', { frame_ids: frameIds });
   }
 
+  /** Hands the fixed Groups holding these Frames back to framewise's grouping. */
+  resetGrouping(frameIds: number[]): Observable<unknown> {
+    return this.http.post('/api/groups/reset', { frame_ids: frameIds });
+  }
+
   /** Moves a Frame into the Group of another Frame. */
   move(frameId: number, toFrameId: number): Observable<unknown> {
     return this.http.post(`/api/frames/${frameId}/move`, { to_frame_id: toFrameId });

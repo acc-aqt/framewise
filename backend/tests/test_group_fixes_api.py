@@ -282,3 +282,91 @@ def test_rating_write_back_follows_the_fixed_groups(session_dir, review, analyze
         "DSCF0003.JPG": "winner",
         "DSCF0004.JPG": "keeper",
     }
+
+
+def reset(client, *names: str):
+    return client.post("/api/groups/reset", json={"frame_ids": ids(client, *names)})
+
+
+def fixed_flags(client) -> list[bool]:
+    return [group["fixed"] for group in client.get("/api/groups").json()]
+
+
+def test_groups_say_whether_the_photographer_fixed_them(session_dir, review, analyzer):
+    beach_burst(session_dir, analyzer)
+    mountain(session_dir, analyzer)
+    client = review()
+    assert fixed_flags(client) == [False, False]
+
+    split(client, "DSCF0003.JPG", "DSCF0004.JPG")
+
+    assert fixed_flags(client) == [True, True, False]
+
+
+def test_resetting_a_fixed_group_regroups_it_with_unpinned_frames(session_dir, review, analyzer):
+    beach_burst(session_dir, analyzer)
+    split(review(), "DSCF0003.JPG", "DSCF0004.JPG")
+    shoot(session_dir, analyzer, BEACH, ("DSCF0005", 1.2, {}))
+    client = review()
+    assert group_paths(client) == [
+        ["DSCF0001.JPG", "DSCF0002.JPG"],
+        ["DSCF0003.JPG", "DSCF0004.JPG"],
+        ["DSCF0005.JPG"],
+    ]
+
+    response = reset(client, "DSCF0003.JPG")
+
+    assert response.status_code == 204
+    assert group_paths(client) == [
+        ["DSCF0001.JPG", "DSCF0002.JPG"],
+        ["DSCF0003.JPG", "DSCF0004.JPG", "DSCF0005.JPG"],
+    ]
+    assert winner_counts(client) == [1, 1]
+    assert fixed_flags(client) == [True, False]
+
+
+def test_resetting_every_fixed_group_restores_framewises_grouping(session_dir, review, analyzer):
+    beach_burst(session_dir, analyzer)
+    mountain(session_dir, analyzer)
+    client = review()
+    framewises = groups(client)
+    move(client, "DSCF0001.JPG", to="DSCF0009.JPG")
+
+    reset(client, "DSCF0001.JPG")
+    reset(client, "DSCF0002.JPG")
+
+    assert groups(client) == framewises
+    assert group_paths(client) == [
+        ["DSCF0001.JPG", "DSCF0002.JPG", "DSCF0003.JPG", "DSCF0004.JPG"],
+        ["DSCF0009.JPG"],
+    ]
+    assert fixed_flags(client) == [False, False]
+
+
+def test_resetting_a_group_keeps_verdict_overrides(session_dir, review, analyzer):
+    beach_burst(session_dir, analyzer)
+    client = review()
+    [fourth_id] = ids(client, "DSCF0004.JPG")
+    client.patch(f"/api/frames/{fourth_id}/override", json={"verdict": "winner", "stars": 3})
+    split(client, "DSCF0003.JPG", "DSCF0004.JPG")
+
+    reset(client, "DSCF0001.JPG")
+    reset(client, "DSCF0003.JPG")
+
+    frames = {
+        frame["jpg_path"]: frame
+        for group in client.get("/api/groups").json()
+        for frame in group["frames"]
+    }
+    assert len(group_paths(client)) == 1
+    assert frames["DSCF0004.JPG"]["verdict"] == "winner"
+    assert frames["DSCF0004.JPG"]["override"] == {"verdict": "winner", "stars": 3, "label": None}
+
+
+def test_resetting_a_group_nobody_fixed_changes_nothing(session_dir, review, analyzer):
+    beach_burst(session_dir, analyzer)
+    client = review()
+
+    assert reset(client, "DSCF0001.JPG").status_code == 204
+    assert client.post("/api/groups/reset", json={"frame_ids": [999]}).status_code == 404
+    assert group_paths(client) == [["DSCF0001.JPG", "DSCF0002.JPG", "DSCF0003.JPG", "DSCF0004.JPG"]]

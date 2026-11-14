@@ -42,6 +42,7 @@
       (split)="splitGroup($event)"
       (merge)="mergeGroup(group, $event)"
       (move)="moveFrame($event.frame, $event.by)"
+      (resetGrouping)="resetGrouping(group)"
     />
     @if (loupeZoom(); as zoom) {
       @if (currentFrame(); as frame) {

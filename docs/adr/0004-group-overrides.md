@@ -20,5 +20,5 @@ The photographer fixes wrong grouping in the Review UI by splitting a Group, mer
 
 ## Consequences
 
-- There is no "reset to framewise's grouping" yet. Clearing the `group_overrides` rows of a Group would restore it.
+- "Reset grouping" on a fixed Group clears the `group_overrides` rows of its Group key, so its Frames are grouped by similarity again with the other unpinned Frames. Verdict Overrides are untouched.
 - Fixing a Group early during analysis freezes it; later Frames of the same burst need a manual move or merge.

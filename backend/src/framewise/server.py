@@ -116,9 +116,11 @@ def create_app(
     @app.get("/api/groups")
     def group_list() -> list[dict]:
         groups, overrides, proposal = reviewed_proposal()
+        group_overrides = store.group_overrides()
         return [
             {
                 "id": group[0].frame.id,
+                "fixed": any(analyzed.frame.jpg_path in group_overrides for analyzed in group),
                 "frames": [
                     _judged_frame_json(
                         analyzed,
@@ -200,6 +202,13 @@ def create_app(
             raise HTTPException(status_code=422, detail="The Frame is in that Group already")
         rest = [path for path in source if path != frame.jpg_path]
         store.save_group_overrides([group for group in (rest, [*target, frame.jpg_path]) if group])
+
+    @app.post("/api/groups/reset", status_code=204)
+    def reset_groups(selection: FrameSelection) -> None:
+        """Hands the fixed Groups of the selected Frames back to framewise's grouping."""
+        store.clear_group_overrides(
+            [frame.jpg_path for frame in _known_frames(selection.frame_ids)]
+        )
 
     def _known_frames(frame_ids: list[int]) -> list[Frame]:
         return [_known_frame(frame_id) for frame_id in frame_ids]

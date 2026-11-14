@@ -882,6 +882,24 @@ describe('Review UI', () => {
 
       expect(text('[data-testid="override-error"]')).toBe('Could not save the Override.');
     });
+
+    it('offers to reset a fixed Group only', async () => {
+      await respond(summary, [
+        group(1, [frame(1, 'jpg-only', { verdict: 'winner' })]),
+        group(2, [frame(2, 'jpg-only', { verdict: 'winner' })], true),
+      ]);
+      all('[data-testid="group-tile"]')[0].click();
+      await fixture.whenStable();
+      expect(all('[data-testid="reset-grouping"]')).toEqual([]);
+
+      all('[data-testid="back-to-groups"]')[0].click();
+      await fixture.whenStable();
+      all('[data-testid="group-tile"]')[1].click();
+      await fixture.whenStable();
+      await click(all('[data-testid="reset-grouping"]')[0]);
+
+      await expectFix('/api/groups/reset', { frame_ids: [2] });
+    });
   });
 });
 
@@ -894,8 +912,8 @@ const SCORES: Frame['scores'] = {
   total: 0.8,
 };
 
-function group(id: number, frames: Frame[]): Group {
-  return { id, frames };
+function group(id: number, frames: Frame[], fixed = false): Group {
+  return { id, frames, fixed };
 }
 
 function frame(id: number, kind: Frame['kind'], overrides: Partial<Frame> = {}): Frame {

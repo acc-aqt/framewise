@@ -40,6 +40,11 @@ import { Frame, Group } from './session-api';
       >
         Split off {{ selected().length }} selected
       </button>
+      @if (group().fixed) {
+        <button type="button" data-testid="reset-grouping" (click)="resetGrouping.emit()">
+          Reset grouping
+        </button>
+      }
       <span class="keys">
         1–5 stars · 6–9 labels · P keep · X reject · U clear · ←/→ Frames · ⌥←/⌥→ in Group · E loupe
         · Z 100%
@@ -223,6 +228,8 @@ export class GroupView {
   readonly merge = output<-1 | 1>();
   /** Moves a Frame to the previous (-1) or next (1) Group. */
   readonly move = output<{ frame: Frame; by: -1 | 1 }>();
+  /** Hands the fixed Group back to framewise's grouping. */
+  readonly resetGrouping = output();
 
   protected readonly breakdown = scoreBreakdown;
   protected readonly selectedIds = signal<ReadonlySet<number>>(new Set());

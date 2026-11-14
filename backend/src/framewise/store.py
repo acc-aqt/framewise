@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import uuid
 from array import array
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -35,6 +36,10 @@ CREATE TABLE IF NOT EXISTS analyses (
 );
 CREATE TABLE IF NOT EXISTS skipped_files (
     path TEXT PRIMARY KEY
+);
+CREATE TABLE IF NOT EXISTS group_overrides (
+    jpg_path TEXT PRIMARY KEY,
+    group_key TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS overrides (
     jpg_path TEXT PRIMARY KEY,
@@ -207,6 +212,22 @@ class SessionStore:
         return {
             row["jpg_path"]: Override(row["verdict"], row["stars"], row["label"]) for row in rows
         }
+
+    def save_group_overrides(self, groups: list[list[str]]) -> None:
+        """Fixes each list of JPG paths as one Group, taking its Frames out of any Group they
+        were fixed in before."""
+        with self._db:
+            for group in groups:
+                key = uuid.uuid4().hex
+                self._db.executemany(
+                    "INSERT OR REPLACE INTO group_overrides (jpg_path, group_key) VALUES (?, ?)",
+                    [(jpg_path, key) for jpg_path in group],
+                )
+
+    def group_overrides(self) -> dict[str, str]:
+        """The Group key of each Frame in a Group the photographer fixed, by JPG path."""
+        rows = self._db.execute("SELECT jpg_path, group_key FROM group_overrides")
+        return {row["jpg_path"]: row["group_key"] for row in rows}
 
     def frame(self, frame_id: int) -> Frame | None:
         row = self._db.execute("SELECT * FROM frames WHERE id = ?", (frame_id,)).fetchone()

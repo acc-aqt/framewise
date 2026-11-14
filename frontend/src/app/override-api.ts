@@ -14,4 +14,19 @@ export class OverrideApi {
   clear(frameId: number): Observable<unknown> {
     return this.http.delete(`/api/frames/${frameId}/override`);
   }
+
+  /** Splits these Frames off their Group into a Group of their own. */
+  split(frameIds: number[]): Observable<unknown> {
+    return this.http.post('/api/groups/split', { frame_ids: frameIds });
+  }
+
+  /** Merges the Groups holding these Frames into one. */
+  merge(frameIds: number[]): Observable<unknown> {
+    return this.http.post('/api/groups/merge', { frame_ids: frameIds });
+  }
+
+  /** Moves a Frame into the Group of another Frame. */
+  move(frameId: number, toFrameId: number): Observable<unknown> {
+    return this.http.post(`/api/frames/${frameId}/move`, { to_frame_id: toFrameId });
+  }
 }

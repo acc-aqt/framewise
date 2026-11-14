@@ -38,6 +38,14 @@ class OverrideChange(BaseModel):
     label: ColorLabel | None = None
 
 
+class FrameSelection(BaseModel):
+    frame_ids: list[int] = Field(min_length=1)
+
+
+class FrameMove(BaseModel):
+    to_frame_id: int
+
+
 def create_app(
     store: SessionStore,
     analysis: SessionAnalysis,
@@ -47,8 +55,14 @@ def create_app(
     app = FastAPI(title="framewise")
     write_back = RatingWriteBack(store, ExifTool())
 
+    def _groups() -> list[list[AnalyzedFrame]]:
+        return group_frames(store.analyzed_frames(), store.group_overrides())
+
+    def _group_paths() -> list[list[str]]:
+        return [[analyzed.frame.jpg_path for analyzed in group] for group in _groups()]
+
     def reviewed_proposal() -> tuple[list[list[AnalyzedFrame]], dict[str, Override], Proposal]:
-        groups = group_frames(store.analyzed_frames())
+        groups = _groups()
         overrides = store.overrides()
         verdict_overrides = {
             path: Verdict(override.verdict)
@@ -148,14 +162,47 @@ def create_app(
         """Keeps one Winner per Group: the Frames the photographer made the Winner before in the
         new Winner's Group are judged by framewise again."""
         overrides = store.overrides()
-        for group in group_frames(store.analyzed_frames()):
-            paths = [analyzed.frame.jpg_path for analyzed in group]
-            if winner.jpg_path not in paths:
-                continue
-            for path in paths:
-                override = overrides.get(path)
-                if path != winner.jpg_path and override and override.verdict == Verdict.WINNER:
-                    store.save_override(path, replace(override, verdict=None))
+        for path in _group_of(winner.jpg_path, _group_paths()) or []:
+            override = overrides.get(path)
+            if path != winner.jpg_path and override and override.verdict == Verdict.WINNER:
+                store.save_override(path, replace(override, verdict=None))
+
+    @app.post("/api/groups/split", status_code=204)
+    def split_group(selection: FrameSelection) -> None:
+        """Splits the selected Frames off their Group into a Group of their own."""
+        selected = {frame.jpg_path for frame in _known_frames(selection.frame_ids)}
+        holding = _groups_holding(selected, _group_paths())
+        if len(holding) != 1:
+            raise HTTPException(status_code=422, detail="The Frames must lie in one Group")
+        [group] = holding
+        rest = [path for path in group if path not in selected]
+        if not rest:
+            raise HTTPException(status_code=422, detail="Cannot split off a whole Group")
+        store.save_group_overrides([rest, [path for path in group if path in selected]])
+
+    @app.post("/api/groups/merge", status_code=204)
+    def merge_groups(selection: FrameSelection) -> None:
+        """Merges the Groups holding the selected Frames into one."""
+        selected = {frame.jpg_path for frame in _known_frames(selection.frame_ids)}
+        merged = _groups_holding(selected, _group_paths())
+        if len(merged) < 2:
+            raise HTTPException(status_code=422, detail="The Frames must lie in two Groups or more")
+        store.save_group_overrides([[path for group in merged for path in group]])
+
+    @app.post("/api/frames/{frame_id}/move", status_code=204)
+    def move_frame(frame_id: int, move: FrameMove) -> None:
+        """Moves a Frame into the Group of another Frame."""
+        groups = _group_paths()
+        frame = _known_frame(frame_id)
+        source = _grouped(frame, groups)
+        target = _grouped(_known_frame(move.to_frame_id), groups)
+        if source == target:
+            raise HTTPException(status_code=422, detail="The Frame is in that Group already")
+        rest = [path for path in source if path != frame.jpg_path]
+        store.save_group_overrides([group for group in (rest, [*target, frame.jpg_path]) if group])
+
+    def _known_frames(frame_ids: list[int]) -> list[Frame]:
+        return [_known_frame(frame_id) for frame_id in frame_ids]
 
     @app.get("/api/write-back")
     def write_back_dry_run() -> dict:
@@ -192,6 +239,26 @@ def create_app(
         app.mount("/", StaticFiles(directory=ui_dir, html=True), name="review-ui")
 
     return app
+
+
+def _group_of(jpg_path: str, groups: list[list[str]]) -> list[str] | None:
+    return next((group for group in groups if jpg_path in group), None)
+
+
+def _grouped(frame: Frame, groups: list[list[str]]) -> list[str]:
+    """The Group of a Frame, which must be analysed already to be in one."""
+    group = _group_of(frame.jpg_path, groups)
+    if group is None:
+        raise HTTPException(status_code=422, detail="The Frame is not in a Group yet")
+    return group
+
+
+def _groups_holding(paths: set[str], groups: list[list[str]]) -> list[list[str]]:
+    """The distinct Groups holding the Frames at `paths`, all of which must be in a Group."""
+    holding = [group for group in groups if paths.intersection(group)]
+    if any(_group_of(path, holding) is None for path in paths):
+        raise HTTPException(status_code=422, detail="A Frame is not in a Group yet")
+    return holding
 
 
 def _frame_json(frame: Frame) -> dict:

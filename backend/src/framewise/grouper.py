@@ -1,5 +1,5 @@
 import math
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from datetime import datetime, timedelta
 
 from framewise.store import AnalyzedFrame
@@ -10,7 +10,26 @@ NEAR_DUPLICATE_WINDOW = timedelta(minutes=5)
 NEAR_DUPLICATE_SIMILARITY = 0.9
 
 
-def group_frames(frames: list[AnalyzedFrame]) -> list[list[AnalyzedFrame]]:
+def group_frames(
+    frames: list[AnalyzedFrame], group_overrides: Mapping[str, str] | None = None
+) -> list[list[AnalyzedFrame]]:
+    """Groups Frames in capture order. `group_overrides` holds the Groups the photographer fixed,
+    as a Group key by JPG path: Frames sharing a key form one Group, and only the other Frames
+    are grouped by similarity."""
+    group_overrides = group_overrides or {}
+    fixed: dict[str, list[AnalyzedFrame]] = {}
+    free: list[AnalyzedFrame] = []
+    for frame in frames:
+        key = group_overrides.get(frame.frame.jpg_path)
+        if key is None:
+            free.append(frame)
+        else:
+            fixed.setdefault(key, []).append(frame)
+    groups = _similar_groups(free) + [sorted(group, key=_capture_order) for group in fixed.values()]
+    return sorted(groups, key=lambda group: _capture_order(group[0]))
+
+
+def _similar_groups(frames: list[AnalyzedFrame]) -> list[list[AnalyzedFrame]]:
     ordered = sorted(frames, key=_capture_order)
     unit_fingerprints = [_unit(frame.signals.fingerprint) for frame in ordered]
     parents = list(range(len(ordered)))

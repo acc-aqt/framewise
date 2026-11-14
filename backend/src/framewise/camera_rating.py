@@ -1,5 +1,6 @@
 import mmap
 import xml.etree.ElementTree as ElementTree
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,16 +24,23 @@ class CameraRating:
         )
 
 
-def read_camera_rating(jpg_path: Path, raw_path: Path | None) -> CameraRating:
-    rating = _read_xmp(jpg_path).or_else(_read_exif(jpg_path))
+def read_camera_rating(
+    jpg_path: Path, raw_path: Path | None, originals: Mapping[Path, CameraRating]
+) -> CameraRating:
+    """Reads the rating and label the camera wrote. `originals` holds the XMP values files had
+    before Rating write-back changed them; they are read instead of those files' XMP."""
+    rating = _read_xmp(jpg_path, originals).or_else(_read_exif(jpg_path))
     if raw_path is not None:
-        rating = rating.or_else(_read_xmp(raw_path)).or_else(_read_sidecar(raw_path))
+        rating = rating.or_else(_read_xmp(raw_path, originals))
+        rating = rating.or_else(_read_sidecar(raw_path, originals))
     return rating
 
 
-def _read_sidecar(raw_path: Path) -> CameraRating:
+def _read_sidecar(raw_path: Path, originals: Mapping[Path, CameraRating]) -> CameraRating:
     sidecar = raw_path.with_suffix(".xmp")
-    return _read_xmp(sidecar) if sidecar.is_file() else CameraRating()
+    if sidecar in originals or sidecar.is_file():
+        return _read_xmp(sidecar, originals)
+    return CameraRating()
 
 
 def _read_exif(jpg_path: Path) -> CameraRating:
@@ -44,7 +52,9 @@ def _read_exif(jpg_path: Path) -> CameraRating:
     return CameraRating(stars=_parse_stars(stars))
 
 
-def _read_xmp(path: Path) -> CameraRating:
+def _read_xmp(path: Path, originals: Mapping[Path, CameraRating]) -> CameraRating:
+    if path in originals:
+        return originals[path]
     packet = _find_xmp_packet(path)
     if packet is None:
         return CameraRating()

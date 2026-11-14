@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from conftest import make_jpg, make_raw, make_sidecar, wait_until
 from PIL import Image
+from test_review_api import camera_ratings
 from test_verdicts_api import keep_every_clean_frame
 
 EXIFTOOL = shutil.which("exiftool") or "/opt/homebrew/bin/exiftool"
@@ -363,6 +364,32 @@ def test_frames_are_not_analysed_again_after_write_back(session_dir, review, ana
     review(**english)
 
     assert analyzer.analyzed == []
+
+
+def test_the_camera_rating_is_kept_after_write_back_and_a_re_run(
+    session_dir, review, analyzer, english
+):
+    jpg(session_dir, analyzer, "DSCF0001.JPG", stars=1, aesthetics=0.5)
+    make_raw(session_dir / "DSCF0002.RAF")
+    jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3, **BLURRY)
+    review(**english).post("/api/write-back")
+
+    assert camera_ratings(review(**english)) == {
+        "DSCF0001.JPG": {"stars": 1, "label": None},
+        "DSCF0002.JPG": {"stars": None, "label": None},
+    }
+
+
+def test_after_undo_and_a_re_run_the_camera_rating_is_read_from_the_files_again(
+    session_dir, review, analyzer, english
+):
+    winner = jpg(session_dir, analyzer, "DSCF0001.JPG", stars=1, aesthetics=0.5)
+    client = review(**english)
+    client.post("/api/write-back")
+    client.post("/api/write-back/undo")
+    exiftool("-overwrite_original", "-XMP-xmp:Rating=2", winner)
+
+    assert camera_ratings(review(**english)) == {"DSCF0001.JPG": {"stars": 2, "label": None}}
 
 
 def override(client, name: str, **change) -> None:

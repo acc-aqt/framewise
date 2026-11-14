@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from framewise.analyzer import FrameAnalyzer, FrameSignals
-from framewise.camera_rating import read_camera_rating
+from framewise.camera_rating import CameraRating, read_camera_rating
 from framewise.capture_time import read_capture_time
 from framewise.scan import scan_session
 from framewise.store import SessionStore
@@ -34,8 +34,12 @@ def open_session(folder: Path, data_dir: Path) -> SessionStore:
     store = SessionStore(session_database_path(root, data_dir), root)
     scan = scan_session(root)
     store.remove_frames_except(scan.frames)
+    originals = {
+        root / original.path: CameraRating(original.stars, original.label)
+        for original in store.write_back_originals()
+    }
     for frame in scan.frames:
-        store.save_frame(frame, read_camera_rating(frame.jpg_path, frame.raw_path))
+        store.save_frame(frame, read_camera_rating(frame.jpg_path, frame.raw_path, originals))
     store.save_skipped_files(scan.skipped)
     return store
 

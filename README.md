@@ -30,6 +30,12 @@ This scans the folder, starts the server on `http://127.0.0.1:8765/` and opens t
 
 In an open Group, review with Lightroom Classic's shortcuts: `1`–`5` set stars (`0` clears them), `6`–`9` set color labels, `P` / `X` / `U` keep, reject and clear, `←` / `→` move between Frames and `⌥←` / `⌥→` step through the current Group. `E` opens the loupe, `Z` zooms to 100% and `Esc` closes it. Overrides are saved in the Session store as you go (ADR-0003).
 
+## Rating write-back
+
+Nothing is written to the photos until you ask. Once analysis has finished, **Rating write-back…** in the Review UI shows a dry run: every file with its current and new rating and color label. Only after you confirm does framewise write the Verdicts (ADR-0001): Winner 3★, Keeper 2★, Reject 0★ with the red label, Unsure 0★ with the yellow label. JPGs and DNGs get embedded XMP; other RAWs get an `.xmp` sidecar, merged into any existing one. Label names come from Lightroom Classic's active color label set (for example `Rot` and `Gelb`). The previous values are kept in the Session store, so **Undo write-back** restores them and removes sidecars framewise created. Write back before importing into Lightroom.
+
+Write-back needs [ExifTool](https://exiftool.org) (`brew install exiftool`).
+
 ## Tests
 
 ```sh

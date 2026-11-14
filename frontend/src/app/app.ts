@@ -18,14 +18,23 @@ import { ProposalFilters } from './proposal-filters';
 import { AnalysisProgress, Frame, Group, OverrideChange, SessionSummary } from './session-api';
 import { SessionSummaryView } from './session-summary';
 import { Shortcut, shortcutFor, stepFrom } from './shortcuts';
+import { WriteBackView } from './write-back';
 
 export const POLL_INTERVAL_MS = 1000;
 
 @Component({
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AnalysisProgressView, GroupGrid, GroupView, Loupe, ProposalFilters, SessionSummaryView],
   host: { '(document:keydown)': 'onKeydown($event)' },
+  imports: [
+    AnalysisProgressView,
+    GroupGrid,
+    GroupView,
+    Loupe,
+    ProposalFilters,
+    SessionSummaryView,
+    WriteBackView,
+  ],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -50,6 +59,7 @@ export class App {
   // Group gains an earlier Frame during analysis.
   protected readonly openedFrameId = signal<number | null>(null);
   protected readonly filter = signal<ProposalFilter>(NO_FILTER);
+  protected readonly writingBack = signal(false);
   protected readonly openGroup = computed(
     () =>
       this.groups

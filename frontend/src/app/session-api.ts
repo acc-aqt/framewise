@@ -91,3 +91,29 @@ export interface AnalysisProgress {
   frames_left: number;
   seconds_remaining: number | null;
 }
+
+export interface WriteBackRating {
+  stars: number | null;
+  label: string | null;
+}
+
+export interface WriteBackFile {
+  frame_id: number;
+  path: string;
+  written_to: string;
+  verdict: Verdict;
+  old: WriteBackRating;
+  new: WriteBackRating;
+}
+
+export interface WriteBackDryRun {
+  label_set: { red: string; yellow: string; from_lightroom: boolean };
+  notice: string | null;
+  files: WriteBackFile[];
+  can_undo: boolean;
+}
+
+export interface WriteBackResult {
+  written: string[];
+  failed: { path: string; error: string }[];
+}

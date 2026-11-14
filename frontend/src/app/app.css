@@ -29,7 +29,8 @@ main {
 }
 
 main app-group-grid,
-main app-group-view {
+main app-group-view,
+main app-write-back {
   flex: 1;
   min-height: 0;
   height: auto;
@@ -37,4 +38,26 @@ main app-group-view {
 
 .error {
   color: var(--color-error);
+}
+
+.write-back {
+  margin-top: 8px;
+  padding: 4px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.write-back:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.write-back:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
 }

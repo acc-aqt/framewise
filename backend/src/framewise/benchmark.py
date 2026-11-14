@@ -22,11 +22,11 @@ from pathlib import Path
 from framewise.analyzer import FrameAnalyzer
 from framewise.grouper import group_frames
 from framewise.judge import KEPT, Proposal, Verdict, judge
+from framewise.lightroom import LIGHTROOM_PREFERENCES
 from framewise.providers import MissingCapabilityError, resolve_analyzer
 from framewise.review import SessionAnalysis, open_session
 from framewise.store import Frame
 
-LIGHTROOM_PREFS = Path.home() / "Library" / "Preferences" / "com.adobe.LightroomClassicCC7.plist"
 ACTIVE_CATALOG_KEY = "libraryToLoad20"
 # ADR-0002: 15 minutes for a 200-Frame Session on the first pass.
 BUDGET_SECONDS_PER_FRAME = 15 * 60 / 200
@@ -64,9 +64,16 @@ class Timing:
     within_budget: bool
 
 
-def active_catalog(prefs: Path = LIGHTROOM_PREFS) -> Path:
-    with prefs.open("rb") as file:
-        return Path(plistlib.load(file)[ACTIVE_CATALOG_KEY])
+def active_catalog(prefs: Path | None = LIGHTROOM_PREFERENCES) -> Path | None:
+    """The catalog Lightroom Classic loads, or None without its preferences."""
+    if prefs is None:
+        return None
+    try:
+        with prefs.open("rb") as file:
+            catalog = plistlib.load(file).get(ACTIVE_CATALOG_KEY)
+    except (OSError, plistlib.InvalidFileException):
+        return None
+    return None if catalog is None else Path(catalog)
 
 
 def copy_catalog(catalog: Path, into: Path) -> Path:
@@ -163,6 +170,8 @@ def main(
     if args.report.resolve().is_relative_to(session_root):
         parser.error("the report must not be written into the Session folder")
     catalog = args.catalog or active_catalog()
+    if catalog is None:
+        parser.error("no active Lightroom Classic catalog found, pass --catalog")
     if not catalog.is_file():
         parser.error(f"no catalog at {catalog}")
 

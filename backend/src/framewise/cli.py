@@ -1,5 +1,6 @@
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -51,28 +52,68 @@ def serve_with_uvicorn(app: ASGIApp, host: str, port: int, on_ready: Callable[[]
 
 
 @contextmanager
-def keep_mac_awake() -> Iterator[None]:
+def keep_machine_awake() -> Iterator[None]:
     """Stops idle sleep until the block ends, or until framewise exits if it ends first."""
+    command = _wake_lock_command()
+    if command is None:
+        print("framewise: warning: cannot keep the machine awake here", file=sys.stderr)
+        yield
+        return
     try:
-        caffeinate = subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())])
+        wake_lock = subprocess.Popen(command)
     except OSError as error:
-        print(f"framewise: warning: cannot keep the Mac awake: {error}", file=sys.stderr)
+        print(f"framewise: warning: cannot keep the machine awake: {error}", file=sys.stderr)
         yield
         return
     try:
         yield
     finally:
-        caffeinate.terminate()
-        caffeinate.wait()
+        wake_lock.terminate()
+        wake_lock.wait()
 
 
-def choose_folder_in_finder() -> Path | None:
-    """Asks for a Session folder with the Finder folder dialog, or None if cancelled."""
-    script = 'activate\nPOSIX path of (choose folder with prompt "Choose a Session folder")'
-    result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+def _wake_lock_command() -> list[str] | None:
+    pid = str(os.getpid())
+    if sys.platform == "darwin":
+        return ["caffeinate", "-i", "-w", pid]
+    if shutil.which("systemd-inhibit"):
+        return [
+            "systemd-inhibit",
+            "--what=idle",
+            "--who=framewise",
+            "--why=Analysing a Session",
+            "tail",
+            f"--pid={pid}",
+            "-f",
+            "/dev/null",
+        ]
+    return None
+
+
+def choose_folder_in_dialog() -> Path | None:
+    """Asks for a Session folder with the system's folder dialog, or None if cancelled or
+    there is none."""
+    command = _folder_dialog_command()
+    if command is None:
+        print(
+            "framewise: warning: no folder dialog here, pass the Session folder to "
+            "`framewise review` instead",
+            file=sys.stderr,
+        )
+        return None
+    result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:
         return None
     return Path(result.stdout.strip())
+
+
+def _folder_dialog_command() -> list[str] | None:
+    if sys.platform == "darwin":
+        script = 'activate\nPOSIX path of (choose folder with prompt "Choose a Session folder")'
+        return ["osascript", "-e", script]
+    if shutil.which("zenity"):
+        return ["zenity", "--file-selection", "--directory", "--title=Choose a Session folder"]
+    return None
 
 
 def analyze_in_background(analysis: SessionAnalysis, keep_awake: KeepAwake) -> None:
@@ -112,8 +153,8 @@ def main(
     serve: Serve = serve_with_uvicorn,
     open_browser: Callable[[str], object] = webbrowser.open,
     analyzer: FrameAnalyzer | None = None,
-    keep_awake: KeepAwake = keep_mac_awake,
-    choose_folder: ChooseFolder = choose_folder_in_finder,
+    keep_awake: KeepAwake = keep_machine_awake,
+    choose_folder: ChooseFolder = choose_folder_in_dialog,
 ) -> None:
     parser = argparse.ArgumentParser(prog="framewise")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -133,7 +174,7 @@ def main(
     review.add_argument(
         "--allow-sleep",
         action="store_true",
-        help="Let the Mac go to sleep while analysis runs",
+        help="Let the machine go to sleep while analysis runs",
     )
     reset = commands.add_parser(
         "reset",

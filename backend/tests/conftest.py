@@ -19,6 +19,7 @@ EXIF_RATING_TAG = 0x4746
 EXIF_IFD_TAG = 0x8769
 DATE_TIME_ORIGINAL_TAG = 0x9003
 SUBSEC_TIME_ORIGINAL_TAG = 0x9291
+BACKGROUND_PRIORITY_PLATFORMS = ("darwin", "linux")
 
 
 def xmp_packet(stars: int | None = None, label: str | None = None) -> bytes:
@@ -109,7 +110,7 @@ class FakeAnalyzer:
     """Returns scripted fingerprints and signals. An unscripted Frame gets a fingerprint unlike any
     other and the signals of a sharp, well-exposed Frame of average aesthetics without faces.
     A held Frame's analysis blocks until released, to observe a run in progress. Records whether
-    each analysing thread runs at Darwin background priority on macOS."""
+    each analysing thread runs at background priority on macOS and Linux."""
 
     def __init__(self):
         self.fingerprints: dict[Path, list[float]] = {}
@@ -147,8 +148,8 @@ class FakeAnalyzer:
         with self._lock:
             self.in_flight += 1
             self.peak_in_flight = max(self.peak_in_flight, self.in_flight)
-            if sys.platform == "darwin":
-                self.at_background_priority.append(os.getpriority(os.PRIO_DARWIN_THREAD, 0) != 0)
+            if sys.platform in BACKGROUND_PRIORITY_PLATFORMS:
+                self.at_background_priority.append(_at_background_priority())
         gate = self._held.get(jpg_path.resolve())
         released = gate is None or gate.wait(timeout=5)
         with self._lock:
@@ -161,6 +162,12 @@ class FakeAnalyzer:
         fingerprint = self.fingerprints.get(jpg_path.resolve()) or _unrelated_fingerprint(jpg_path)
         scripted = self.signals.get(jpg_path.resolve(), {})
         return FrameSignals(fingerprint=fingerprint, **(CLEAN_SIGNALS | scripted))
+
+
+def _at_background_priority() -> bool:
+    if sys.platform == "darwin":
+        return os.getpriority(os.PRIO_DARWIN_THREAD, 0) != 0
+    return os.getpriority(os.PRIO_PROCESS, threading.get_native_id()) > 0
 
 
 def _unrelated_fingerprint(jpg_path: Path) -> list[float]:

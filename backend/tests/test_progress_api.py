@@ -3,7 +3,7 @@ import sys
 import threading
 
 import pytest
-from conftest import clean_signals, make_jpg, wait_until
+from conftest import BACKGROUND_PRIORITY_PLATFORMS, clean_signals, make_jpg, wait_until
 from fastapi.testclient import TestClient
 
 from framewise.review import SessionAnalysis, open_session
@@ -118,7 +118,10 @@ def test_a_re_run_counts_frames_analysed_before_as_done(session_dir, review, ana
     assert progress(review()) == {"frames_done": 3, "frames_left": 0, "seconds_remaining": 0}
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="Darwin background priority is macOS-only")
+@pytest.mark.skipif(
+    sys.platform not in BACKGROUND_PRIORITY_PLATFORMS,
+    reason="Background priority needs macOS or Linux",
+)
 def test_background_mode_analyses_frames_at_background_priority(session_dir, live_review, analyzer):
     make_jpg(session_dir / "DSCF0001.JPG")
 
@@ -128,7 +131,10 @@ def test_background_mode_analyses_frames_at_background_priority(session_dir, liv
     assert analyzer.at_background_priority == [True]
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="Darwin background priority is macOS-only")
+@pytest.mark.skipif(
+    sys.platform not in BACKGROUND_PRIORITY_PLATFORMS,
+    reason="Background priority needs macOS or Linux",
+)
 def test_analysis_runs_at_normal_priority_by_default(session_dir, live_review, analyzer):
     make_jpg(session_dir / "DSCF0001.JPG")
 

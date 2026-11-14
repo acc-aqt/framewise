@@ -3,7 +3,7 @@ import os
 import sys
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
@@ -18,12 +18,21 @@ from framewise.store import SessionStore
 from framewise.thumbnails import make_thumbnail
 from framewise.write_back import RatingWriteBack, WriteBackResult
 
-DEFAULT_DATA_DIR = Path.home() / "Library" / "Application Support" / "framewise"
 BACKGROUND_CORE_DIVISOR = 4
+LOWEST_PRIORITY_NICENESS = 19
+
+
+def default_data_dir(platform: str, environ: Mapping[str, str], home: Path) -> Path:
+    """Application Support on macOS, the XDG data directory elsewhere."""
+    if platform == "darwin":
+        return home / "Library" / "Application Support" / "framewise"
+    return Path(environ.get("XDG_DATA_HOME") or home / ".local" / "share") / "framewise"
 
 
 def resolve_data_dir() -> Path:
-    return Path(os.environ.get("FRAMEWISE_DATA_DIR", DEFAULT_DATA_DIR))
+    if "FRAMEWISE_DATA_DIR" in os.environ:
+        return Path(os.environ["FRAMEWISE_DATA_DIR"])
+    return default_data_dir(sys.platform, os.environ, Path.home())
 
 
 def session_database_path(root: Path, data_dir: Path) -> Path:
@@ -188,5 +197,10 @@ class SessionAnalysis:
         return max(1, cores // BACKGROUND_CORE_DIVISOR) if self._background else cores
 
     def _prepare_worker(self) -> None:
-        if self._background and sys.platform == "darwin":
+        if not self._background:
+            return
+        if sys.platform == "darwin":
             os.setpriority(os.PRIO_DARWIN_THREAD, 0, os.PRIO_DARWIN_BG)
+        elif sys.platform == "linux":
+            # Linux keeps a niceness per thread, addressed by its thread id.
+            os.setpriority(os.PRIO_PROCESS, threading.get_native_id(), LOWEST_PRIORITY_NICENESS)

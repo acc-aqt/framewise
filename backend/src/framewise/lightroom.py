@@ -1,10 +1,17 @@
 import plistlib
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-LIGHTROOM_PREFERENCES = (
-    Path.home() / "Library" / "Preferences" / "com.adobe.LightroomClassicCC7.plist"
-)
+
+def lightroom_preferences(platform: str, home: Path) -> Path | None:
+    """Where Lightroom Classic keeps its preferences, or None where it does not run."""
+    if platform != "darwin":
+        return None
+    return home / "Library" / "Preferences" / "com.adobe.LightroomClassicCC7.plist"
+
+
+LIGHTROOM_PREFERENCES = lightroom_preferences(sys.platform, Path.home())
 # Lightroom Classic keeps the names of the active color label set's labels in its preferences,
 # as label1 to label5 in the order red, yellow, green, blue, purple.
 COLORS = ("red", "yellow", "green", "blue", "purple")

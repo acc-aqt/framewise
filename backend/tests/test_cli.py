@@ -2,7 +2,7 @@ import sys
 from contextlib import contextmanager
 
 import pytest
-from conftest import FakeAnalyzer, make_jpg, wait_until
+from conftest import BACKGROUND_PRIORITY_PLATFORMS, FakeAnalyzer, make_jpg, wait_until
 from fastapi.testclient import TestClient
 from test_write_back_api import rating
 
@@ -136,7 +136,7 @@ def test_review_keeps_the_mac_awake_while_analysis_runs(session_dir, isolated_da
     assert wake_lock.times_held == 1
 
 
-def test_review_lets_the_mac_sleep_when_asked(session_dir, isolated_data_dir):
+def test_review_lets_the_machine_sleep_when_asked(session_dir, isolated_data_dir):
     make_jpg(session_dir / "DSCF0001.JPG")
     server = FakeServer()
     wake_lock = FakeWakeLock()
@@ -153,7 +153,10 @@ def test_review_lets_the_mac_sleep_when_asked(session_dir, isolated_data_dir):
     assert wake_lock.times_held == 0
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="Darwin background priority is macOS-only")
+@pytest.mark.skipif(
+    sys.platform not in BACKGROUND_PRIORITY_PLATFORMS,
+    reason="Background priority needs macOS or Linux",
+)
 def test_review_in_background_mode_analyses_at_background_priority(session_dir, isolated_data_dir):
     analyzer = FakeAnalyzer()
     make_jpg(session_dir / "DSCF0001.JPG")

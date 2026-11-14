@@ -13,6 +13,7 @@ import uvicorn
 from fastapi import FastAPI
 
 from framewise.analyzer import FrameAnalyzer
+from framewise.lightroom import LIGHTROOM_PREFERENCES
 from framewise.review import SessionAnalysis, open_session, resolve_data_dir
 from framewise.server import create_app
 
@@ -106,4 +107,5 @@ def main(
             "run `npx ng build` in frontend/ first",
             file=sys.stderr,
         )
-    serve(create_app(store, analysis, UI_DIR), HOST, args.port, lambda: open_browser(url))
+    app = create_app(store, analysis, UI_DIR, lightroom_preferences=LIGHTROOM_PREFERENCES)
+    serve(app, HOST, args.port, lambda: open_browser(url))

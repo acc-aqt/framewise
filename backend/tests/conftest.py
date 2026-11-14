@@ -202,11 +202,11 @@ def analyzer():
 def review(session_dir: Path, data_dir: Path, analyzer: FakeAnalyzer):
     """Opens the Review UI after analysis has finished."""
 
-    def start() -> TestClient:
+    def start(**app_options) -> TestClient:
         store = open_session(session_dir, data_dir)
         analysis = SessionAnalysis(store, analyzer)
         analysis.run()
-        return TestClient(create_app(store, analysis))
+        return TestClient(create_app(store, analysis, **app_options))
 
     return start
 
@@ -215,10 +215,10 @@ def review(session_dir: Path, data_dir: Path, analyzer: FakeAnalyzer):
 def live_review(session_dir: Path, data_dir: Path, analyzer: FakeAnalyzer, clock: FakeClock):
     """Opens the Review UI while analysis runs in the background."""
 
-    def start(background: bool = False) -> TestClient:
+    def start(background: bool = False, **app_options) -> TestClient:
         store = open_session(session_dir, data_dir)
         analysis = SessionAnalysis(store, analyzer, background=background, clock=clock)
         threading.Thread(target=analysis.run, daemon=True).start()
-        return TestClient(create_app(store, analysis))
+        return TestClient(create_app(store, analysis, **app_options))
 
     return start

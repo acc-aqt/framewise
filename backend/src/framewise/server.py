@@ -7,10 +7,24 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from framewise.exiftool import ExifTool
 from framewise.grouper import group_frames
-from framewise.judge import FaceCheck, Judgement, Verdict, judge
+from framewise.judge import FaceCheck, Judgement, Proposal, Verdict, judge
+from framewise.lightroom import read_label_set
 from framewise.review import SessionAnalysis
 from framewise.store import AnalyzedFrame, Frame, Override, SessionStore
+from framewise.write_back import (
+    FileChange,
+    Rating,
+    RatingWriteBack,
+    ReviewedFrames,
+    WriteBackResult,
+)
+
+ENGLISH_DEFAULTS_NOTICE = (
+    "No Lightroom Classic color label set was found, so Lightroom's English defaults "
+    "Red and Yellow are used."
+)
 
 ColorLabel = Literal["red", "yellow", "green", "blue", "purple"]
 
@@ -25,9 +39,41 @@ class OverrideChange(BaseModel):
 
 
 def create_app(
-    store: SessionStore, analysis: SessionAnalysis, ui_dir: Path | None = None
+    store: SessionStore,
+    analysis: SessionAnalysis,
+    ui_dir: Path | None = None,
+    lightroom_preferences: Path | None = None,
 ) -> FastAPI:
     app = FastAPI(title="framewise")
+    write_back = RatingWriteBack(store, ExifTool())
+
+    def reviewed_proposal() -> tuple[list[list[AnalyzedFrame]], dict[str, Override], Proposal]:
+        groups = group_frames(store.analyzed_frames())
+        overrides = store.overrides()
+        verdict_overrides = {
+            path: Verdict(override.verdict)
+            for path, override in overrides.items()
+            if override.verdict is not None
+        }
+        return groups, overrides, judge(groups, verdict_overrides)
+
+    def reviewed_frames() -> ReviewedFrames:
+        groups, overrides, proposal = reviewed_proposal()
+        reviewed = []
+        for analyzed in sorted(
+            (analyzed for group in groups for analyzed in group),
+            key=lambda analyzed: analyzed.frame.jpg_path,
+        ):
+            override = overrides.get(analyzed.frame.jpg_path) or Override()
+            verdict, _ = _reviewed_verdict(proposal[analyzed.frame.id], override)
+            reviewed.append((analyzed.frame, verdict))
+        return reviewed
+
+    def require_finished_analysis() -> None:
+        if analysis.progress().frames_left > 0:
+            raise HTTPException(
+                status_code=409, detail="Rating write-back waits until analysis has finished"
+            )
 
     @app.get("/api/session")
     def session_summary() -> dict:
@@ -55,14 +101,7 @@ def create_app(
 
     @app.get("/api/groups")
     def group_list() -> list[dict]:
-        groups = group_frames(store.analyzed_frames())
-        overrides = store.overrides()
-        verdict_overrides = {
-            path: Verdict(override.verdict)
-            for path, override in overrides.items()
-            if override.verdict is not None
-        }
-        proposal = judge(groups, verdict_overrides)
+        groups, overrides, proposal = reviewed_proposal()
         return [
             {
                 "id": group[0].frame.id,
@@ -118,6 +157,30 @@ def create_app(
                 if path != winner.jpg_path and override and override.verdict == Verdict.WINNER:
                     store.save_override(path, replace(override, verdict=None))
 
+    @app.get("/api/write-back")
+    def write_back_dry_run() -> dict:
+        label_set = read_label_set(lightroom_preferences)
+        return {
+            "label_set": asdict(label_set),
+            "notice": None if label_set.from_lightroom else ENGLISH_DEFAULTS_NOTICE,
+            "files": [
+                _file_change_json(change)
+                for change in write_back.dry_run(reviewed_frames(), label_set)
+            ],
+            "can_undo": write_back.can_undo(),
+        }
+
+    @app.post("/api/write-back")
+    def write_back_apply() -> dict:
+        require_finished_analysis()
+        label_set = read_label_set(lightroom_preferences)
+        return _write_back_result_json(write_back.apply(reviewed_frames(), label_set))
+
+    @app.post("/api/write-back/undo")
+    def write_back_undo() -> dict:
+        require_finished_analysis()
+        return _write_back_result_json(write_back.undo())
+
     @app.get("/api/frames/{frame_id}/thumbnail")
     def frame_thumbnail(frame_id: int) -> Response:
         thumbnail = store.thumbnail(frame_id)
@@ -141,6 +204,25 @@ def _frame_json(frame: Frame) -> dict:
         "thumbnail_url": f"/api/frames/{frame.id}/thumbnail",
         "image_url": f"/api/frames/{frame.id}/image",
     }
+
+
+def _file_change_json(change: FileChange) -> dict:
+    return {
+        "frame_id": change.frame_id,
+        "path": change.path,
+        "written_to": change.written_to,
+        "verdict": change.verdict.value,
+        "old": _rating_json(change.old),
+        "new": _rating_json(change.new),
+    }
+
+
+def _rating_json(rating: Rating) -> dict:
+    return {"stars": rating.stars, "label": rating.label}
+
+
+def _write_back_result_json(result: WriteBackResult) -> dict:
+    return {"written": result.written, "failed": [asdict(failure) for failure in result.failed]}
 
 
 def _override_json(override: Override) -> dict:

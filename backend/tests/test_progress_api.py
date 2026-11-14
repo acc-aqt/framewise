@@ -1,3 +1,4 @@
+import os
 import sys
 
 import pytest
@@ -45,6 +46,22 @@ def test_frames_are_analysed_in_parallel(session_dir, live_review, analyzer):
     live_review()
 
     wait_until(lambda: analyzer.in_flight == 2)
+
+
+@pytest.mark.parametrize(("background", "expected_peak"), [(True, 2), (False, 8)])
+def test_background_mode_analyses_fewer_frames_at_once(
+    session_dir, live_review, analyzer, monkeypatch, background, expected_peak
+):
+    monkeypatch.setattr(os, "cpu_count", lambda: 8)
+    for number in range(1, 13):
+        analyzer.hold(make_jpg(session_dir / f"DSCF{number:04d}.JPG"))
+
+    client = live_review(background=background)
+    wait_until(lambda: analyzer.in_flight >= expected_peak)
+    analyzer.release_all()
+    wait_until(lambda: progress(client)["frames_left"] == 0)
+
+    assert analyzer.peak_in_flight == expected_peak
 
 
 def test_a_re_run_counts_frames_analysed_before_as_done(session_dir, review, analyzer):

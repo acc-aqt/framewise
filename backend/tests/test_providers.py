@@ -37,6 +37,8 @@ class FakeProvider:
 class FakeFingerprint(FakeProvider):
     capability: str = "fingerprint"
     id: str = "fake-fingerprint"
+    burst_similarity: float = 0.8
+    near_duplicate_similarity: float = 0.9
 
     def fingerprint(self, jpg_path: Path) -> list[float]:
         return [float(len(self.id))]

@@ -11,11 +11,11 @@ def five_of_falling_quality(session_dir, analyzer) -> None:
     burst(
         session_dir,
         analyzer,
-        ("DSCF0001", {"aesthetics": 0.8}),
-        ("DSCF0002", {"aesthetics": 0.6}),
-        ("DSCF0003", {"aesthetics": 0.4}),
-        ("DSCF0004", {"aesthetics": 0.2}),
-        ("DSCF0005", {"aesthetics": 0.0}),
+        ("DSCF0001", {"aesthetics": 0.9}),
+        ("DSCF0002", {"aesthetics": 0.8}),
+        ("DSCF0003", {"aesthetics": 0.7}),
+        ("DSCF0004", {"aesthetics": 0.6}),
+        ("DSCF0005", {"aesthetics": 0.5}),
     )
 
 
@@ -141,7 +141,7 @@ def test_the_photographers_keepers_count_towards_the_keeper_budget(session_dir, 
 
 
 def test_a_camera_rating_tips_the_balance_between_near_equal_frames(session_dir, review, analyzer):
-    burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.3}), ("DSCF0002", {}))
+    burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.65}), ("DSCF0002", {}))
     make_jpg(session_dir / "DSCF0002.JPG", stars=1, captured_at=seconds(0.3))
 
     frames = frames_by_name(review())
@@ -154,7 +154,7 @@ def test_a_camera_rating_tips_the_balance_between_near_equal_frames(session_dir,
 def test_a_camera_rating_does_not_lift_a_frame_past_a_clearly_better_one(
     session_dir, review, analyzer
 ):
-    burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.9}), ("DSCF0002", {}))
+    burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.95}), ("DSCF0002", {}))
     make_jpg(session_dir / "DSCF0002.JPG", stars=1, captured_at=seconds(0.3))
 
     assert verdicts(review())["DSCF0001.JPG"] == "winner"
@@ -164,9 +164,9 @@ def test_a_camera_rating_does_not_override_a_technical_defect(session_dir, revie
     burst(
         session_dir,
         analyzer,
-        ("DSCF0001", {"aesthetics": -0.5}),
-        ("DSCF0002", {"sharpness": 0.1, "aesthetics": 0.9}),
-        ("DSCF0003", {"motion_blur": 0.4, "aesthetics": 0.9}),
+        ("DSCF0001", {"aesthetics": 0.25}),
+        ("DSCF0002", {"sharpness": 0.1, "aesthetics": 0.95}),
+        ("DSCF0003", {"motion_blur": 0.4, "aesthetics": 0.95}),
     )
     make_jpg(session_dir / "DSCF0002.JPG", stars=5, captured_at=seconds(0.3))
     make_jpg(session_dir / "DSCF0003.JPG", stars=5, captured_at=seconds(0.6))
@@ -185,10 +185,10 @@ def test_a_camera_rating_lifts_a_frame_within_the_keeper_budget(session_dir, rev
     burst(
         session_dir,
         analyzer,
-        ("DSCF0001", {"aesthetics": 0.8}),
-        ("DSCF0002", {"aesthetics": 0.3}),
-        ("DSCF0003", {"aesthetics": 0.2}),
-        ("DSCF0004", {"aesthetics": 0.0}),
+        ("DSCF0001", {"aesthetics": 0.9}),
+        ("DSCF0002", {"aesthetics": 0.65}),
+        ("DSCF0003", {"aesthetics": 0.6}),
+        ("DSCF0004", {"aesthetics": 0.5}),
     )
     make_jpg(session_dir / "DSCF0003.JPG", stars=1, captured_at=seconds(0.6))
     client = review()

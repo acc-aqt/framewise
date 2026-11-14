@@ -141,7 +141,11 @@ class SessionAnalysis:
 
     def groups(self, group_overrides: Mapping[str, str] | None = None) -> list[list[AnalyzedFrame]]:
         """The Groups of the Frames analysed so far by the current Providers."""
-        return group_frames(self._store.analyzed_frames(self._analyzer.signature), group_overrides)
+        return group_frames(
+            self._store.analyzed_frames(self._analyzer.signature),
+            self._analyzer.similarity,
+            group_overrides,
+        )
 
     def progress(self) -> AnalysisProgress:
         with self._lock:

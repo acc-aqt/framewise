@@ -50,9 +50,9 @@ def test_every_group_has_exactly_one_winner(session_dir, review, analyzer):
     burst(
         session_dir,
         analyzer,
-        ("DSCF0001", {"aesthetics": 0.1}),
-        ("DSCF0002", {"aesthetics": 0.4}),
-        ("DSCF0003", {"aesthetics": 0.3}),
+        ("DSCF0001", {"aesthetics": 0.55}),
+        ("DSCF0002", {"aesthetics": 0.7}),
+        ("DSCF0003", {"aesthetics": 0.65}),
     )
     analyzer.script(make_jpg(session_dir / "DSCF0009.JPG", captured_at=seconds(60)), MOUNTAIN)
 
@@ -66,7 +66,7 @@ def test_every_group_has_exactly_one_winner(session_dir, review, analyzer):
 
 
 def test_a_clean_winner_and_keepers_have_no_reasons(session_dir, review, analyzer):
-    burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.4}), ("DSCF0002", {}))
+    burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.7}), ("DSCF0002", {}))
 
     frames = frames_by_name(keep_every_clean_frame(review()))
 
@@ -119,8 +119,8 @@ def test_the_sharp_frame_of_a_burst_wins_over_a_blurry_one_with_better_aesthetic
     burst(
         session_dir,
         analyzer,
-        ("DSCF0001", {"sharpness": 0.1, "aesthetics": 0.9}),
-        ("DSCF0002", {"aesthetics": -0.2}),
+        ("DSCF0001", {"sharpness": 0.1, "aesthetics": 0.95}),
+        ("DSCF0002", {"aesthetics": 0.4}),
     )
 
     assert verdicts(review()) == {"DSCF0001.JPG": "reject", "DSCF0002.JPG": "winner"}
@@ -128,7 +128,7 @@ def test_the_sharp_frame_of_a_burst_wins_over_a_blurry_one_with_better_aesthetic
 
 def test_a_much_weaker_duplicate_becomes_a_reject_naming_the_winner(session_dir, review, analyzer):
     burst(
-        session_dir, analyzer, ("DSCF0412", {"aesthetics": 0.8}), ("DSCF0413", {"aesthetics": -0.6})
+        session_dir, analyzer, ("DSCF0412", {"aesthetics": 0.9}), ("DSCF0413", {"aesthetics": 0.2})
     )
 
     weaker = frames_by_name(review())["DSCF0413.JPG"]
@@ -207,7 +207,7 @@ def test_each_frame_carries_its_score_breakdown_and_signals(session_dir, review,
         sharpness=0.9,
         motion_blur=0.1,
         exposure_stops=-0.3,
-        aesthetics=0.5,
+        aesthetics=0.75,
     )
 
     [frame] = frames_by_name(review()).values()
@@ -230,7 +230,7 @@ def test_each_frame_carries_its_score_breakdown_and_signals(session_dir, review,
         "exposure_stops": -0.3,
         "low_key": False,
         "high_key": False,
-        "aesthetics": 0.5,
+        "aesthetics": 0.75,
         "faces": [],
     }
 
@@ -263,7 +263,7 @@ def test_reasons_carry_a_code_to_filter_by(session_dir, review, analyzer):
 
 
 def test_verdicts_are_recomputed_as_more_frames_are_analysed(session_dir, live_review, analyzer):
-    burst(session_dir, analyzer, ("DSCF0001", {}), ("DSCF0002", {"aesthetics": 0.6}))
+    burst(session_dir, analyzer, ("DSCF0001", {}), ("DSCF0002", {"aesthetics": 0.8}))
     analyzer.hold(session_dir / "DSCF0002.JPG")
 
     client = keep_every_clean_frame(live_review())

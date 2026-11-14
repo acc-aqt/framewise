@@ -36,6 +36,8 @@ class _AppleVisionProvider:
 class AppleFingerprint(_AppleVisionProvider):
     capability = FINGERPRINT
     id = "apple-vision-fingerprint"
+    burst_similarity = 0.8
+    near_duplicate_similarity = 0.9
 
     def fingerprint(self, jpg_path: Path) -> list[float]:
         request = Vision.VNGenerateImageFeaturePrintRequest.alloc().init()
@@ -94,15 +96,17 @@ class AppleFaceQuality(_AppleVisionProvider):
 class AppleAesthetics(_AppleVisionProvider):
     capability = AESTHETICS
     id = "apple-vision-aesthetics"
+    version = 2
 
     def is_available(self) -> bool:
         """Apple Vision's aesthetics request exists from macOS 15 on."""
         return Vision is not None and hasattr(Vision, "VNCalculateImageAestheticsScoresRequest")
 
     def aesthetics(self, jpg_path: Path) -> float | None:
+        """Apple Vision scores from -1 to 1."""
         request = Vision.VNCalculateImageAestheticsScoresRequest.alloc().init()
         _perform(_vision_image(jpg_path), [request])
-        return float(request.results()[0].overallScore())
+        return _clamp((float(request.results()[0].overallScore()) + 1) / 2)
 
 
 @dataclass

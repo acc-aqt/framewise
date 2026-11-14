@@ -7,7 +7,7 @@ from importlib.metadata import EntryPoint, entry_points
 from pathlib import Path
 from typing import Protocol
 
-from framewise.analyzer import Face, FrameSignals, ProviderSignature
+from framewise.analyzer import Face, FrameSignals, ProviderSignature, SimilarityThresholds
 from framewise.image_measures import Region, measure_image
 
 FINGERPRINT = "fingerprint"
@@ -38,6 +38,13 @@ class Provider(Protocol):
 
 
 class FingerprintProvider(Provider, Protocol):
+    burst_similarity: float
+    """The similarity of its fingerprints from which Frames captured moments apart are one
+    Group."""
+    near_duplicate_similarity: float
+    """The similarity from which Frames captured minutes apart, or without a capture time, are
+    one Group."""
+
     def fingerprint(self, jpg_path: Path) -> list[float]: ...
 
 
@@ -55,11 +62,15 @@ class EyeStateProvider(Provider, Protocol):
 
 
 class FaceQualityProvider(Provider, Protocol):
-    def face_quality(self, jpg_path: Path, faces: list[Region]) -> list[float | None]: ...
+    def face_quality(self, jpg_path: Path, faces: list[Region]) -> list[float | None]:
+        """For each face, a score from 0 to 1, or None where it cannot tell."""
+        ...
 
 
 class AestheticsProvider(Provider, Protocol):
-    def aesthetics(self, jpg_path: Path) -> float | None: ...
+    def aesthetics(self, jpg_path: Path) -> float | None:
+        """A score from 0 to 1, or None where it cannot tell."""
+        ...
 
 
 class ProviderAnalyzer:
@@ -80,6 +91,13 @@ class ProviderAnalyzer:
         self.eye_state = eye_state
         self.face_quality = face_quality
         self.aesthetics = aesthetics
+
+    @property
+    def similarity(self) -> SimilarityThresholds:
+        return SimilarityThresholds(
+            burst=self.fingerprint.burst_similarity,
+            near_duplicate=self.fingerprint.near_duplicate_similarity,
+        )
 
     @property
     def signature(self) -> ProviderSignature:

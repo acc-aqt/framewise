@@ -13,6 +13,17 @@ ProviderSignature = Mapping[str, str]
 
 
 @dataclass(frozen=True)
+class SimilarityThresholds:
+    """The fingerprint similarity from which two Frames belong in one Group. Each fingerprint
+    Provider declares its own, because similarities from different Providers aren't comparable."""
+
+    burst: float
+    """For Frames captured within moments of each other."""
+    near_duplicate: float
+    """For Frames captured minutes apart, or without a capture time."""
+
+
+@dataclass(frozen=True)
 class Face:
     """One face the face detection Provider found in a Frame. Its box is a fraction of the
     Frame's width and height, measured from the top left."""
@@ -46,12 +57,13 @@ class FrameSignals:
     overexposed. With faces, only the faces' highlights count, so a person against a blown-out
     white wall is high key."""
     aesthetics: float | None
-    """The aesthetics Provider's score from -1 to 1, or None where it is unavailable."""
+    """The aesthetics Provider's score from 0 to 1, or None where it is unavailable."""
     faces: list[Face]
 
 
 class FrameAnalyzer(Protocol):
     signature: ProviderSignature
     """Saved with each analysis, so a re-run re-analyses the Frames whose Providers changed."""
+    similarity: SimilarityThresholds
 
     def analyze(self, jpg_path: Path) -> FrameSignals: ...

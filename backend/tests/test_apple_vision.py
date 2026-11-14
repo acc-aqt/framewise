@@ -173,11 +173,11 @@ def test_a_bright_frame_with_intact_highlights_is_high_key_and_a_clipped_one_is_
     sys.platform == "darwin" and int(platform.mac_ver()[0].split(".")[0]) < 15,
     reason="Apple Vision's aesthetics request needs macOS 15",
 )
-def test_the_aesthetics_score_ranges_from_minus_one_to_one(tmp_path):
+def test_the_aesthetics_score_ranges_from_zero_to_one(tmp_path):
     aesthetics = apple_vision().analyze(draw_still_life(tmp_path / "still-life.jpg")).aesthetics
 
     assert aesthetics is not None
-    assert -1 <= aesthetics <= 1
+    assert 0 <= aesthetics <= 1
 
 
 FACES = Path(__file__).parent / "fixtures" / "faces"

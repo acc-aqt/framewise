@@ -1,6 +1,14 @@
+from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 
+import pytest
 from conftest import make_jpg, make_raw
+from fastapi.testclient import TestClient
+
+from framewise.providers import compose_analyzer
+from framewise.review import SessionAnalysis, open_session
+from framewise.server import create_app
 
 START = datetime(2026, 6, 20, 14, 30, 0)
 BEACH = [1.0, 0.0, 0.0]
@@ -132,3 +140,46 @@ def test_each_group_carries_its_frames_with_kind_camera_rating_and_thumbnail(
     assert frame["kind"] == "raw+jpg"
     assert frame["camera_rating"] == {"stars": 2, "label": None}
     assert client.get(frame["thumbnail_url"]).status_code == 200
+
+
+@dataclass
+class ScriptedFingerprint:
+    """A fingerprint Provider with its own similarity thresholds."""
+
+    burst_similarity: float
+    near_duplicate_similarity: float
+    fingerprints: dict[str, list[float]]
+    capability: str = "fingerprint"
+    id: str = "scripted-fingerprint"
+    version: int = 1
+    priority: int = 0
+
+    def is_available(self) -> bool:
+        return True
+
+    def fingerprint(self, jpg_path: Path) -> list[float]:
+        return self.fingerprints[jpg_path.name]
+
+
+@pytest.mark.parametrize(
+    ("burst_similarity", "expected"),
+    [
+        (0.8, [["DSCF0001.JPG", "DSCF0002.JPG"]]),
+        (0.9, [["DSCF0001.JPG"], ["DSCF0002.JPG"]]),
+    ],
+)
+def test_frames_are_grouped_by_the_fingerprint_providers_own_thresholds(
+    session_dir, data_dir, burst_similarity, expected
+):
+    make_jpg(session_dir / "DSCF0001.JPG", captured_at=seconds(0))
+    make_jpg(session_dir / "DSCF0002.JPG", captured_at=seconds(1))
+    fingerprint = ScriptedFingerprint(
+        burst_similarity=burst_similarity,
+        near_duplicate_similarity=0.95,
+        fingerprints={"DSCF0001.JPG": BEACH, "DSCF0002.JPG": BEACH_A_MOMENT_LATER},
+    )
+    store = open_session(session_dir, data_dir)
+    analysis = SessionAnalysis(store, compose_analyzer([fingerprint]))
+    analysis.run()
+
+    assert group_paths(TestClient(create_app(store, analysis))) == expected

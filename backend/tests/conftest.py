@@ -11,7 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from framewise.analyzer import FrameSignals
+from framewise.analyzer import FrameSignals, SimilarityThresholds
 from framewise.review import SessionAnalysis, open_session
 from framewise.server import create_app
 
@@ -96,7 +96,7 @@ CLEAN_SIGNALS = {
     "exposure_stops": 0.0,
     "low_key": False,
     "high_key": False,
-    "aesthetics": 0.0,
+    "aesthetics": 0.5,
     "faces": [],
 }
 
@@ -117,6 +117,7 @@ class FakeAnalyzer:
         self.signals: dict[Path, dict] = {}
         self.analyzed: list[Path] = []
         self.signature = {"fingerprint": "fake-fingerprint@1"}
+        self.similarity = SimilarityThresholds(burst=0.8, near_duplicate=0.9)
         self.in_flight = 0
         self.peak_in_flight = 0
         self.at_background_priority: list[bool] = []

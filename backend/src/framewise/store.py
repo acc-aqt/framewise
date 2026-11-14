@@ -229,6 +229,17 @@ class SessionStore:
         rows = self._db.execute("SELECT jpg_path, group_key FROM group_overrides")
         return {row["jpg_path"]: row["group_key"] for row in rows}
 
+    def clear_group_overrides(self, jpg_paths: list[str]) -> None:
+        """Hands the fixed Groups of these Frames back to automatic grouping, including Frames
+        of those Groups that are missing from the Session folder."""
+        with self._db:
+            self._db.execute(
+                "DELETE FROM group_overrides WHERE group_key IN "
+                "(SELECT group_key FROM group_overrides "
+                "WHERE jpg_path IN (SELECT value FROM json_each(?)))",
+                (json.dumps(jpg_paths),),
+            )
+
     def frame(self, frame_id: int) -> Frame | None:
         row = self._db.execute("SELECT * FROM frames WHERE id = ?", (frame_id,)).fetchone()
         return None if row is None else _frame(row)

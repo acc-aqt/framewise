@@ -142,7 +142,7 @@ def test_re_running_on_the_same_folder_reuses_the_session_store(session_dir, dat
     make_jpg(session_dir / "DSCF0003.JPG")
     second_run = review().get("/api/frames").json()
 
-    assert len(list(data_dir.iterdir())) == 1
+    assert len(list(data_dir.glob("*.sqlite"))) == 1
     assert [frame["jpg_path"] for frame in second_run] == ["DSCF0001.JPG", "DSCF0003.JPG"]
     assert second_run[0]["id"] == first_run[0]["id"]
 

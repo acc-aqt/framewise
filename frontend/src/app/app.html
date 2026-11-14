@@ -18,6 +18,11 @@
   } @else if (openGroup(); as group) {
     <app-group-view [group]="group" (back)="openedFrameId.set(null)" />
   } @else {
-    <app-group-grid [groups]="groups.value()" (open)="openedFrameId.set($event.frames[0].id)" />
+    <app-proposal-filters [groups]="groups.value()" [(filter)]="filter" />
+    <app-group-grid
+      [groups]="groups.value()"
+      [filter]="filter()"
+      (open)="openedFrameId.set($event.id)"
+    />
   }
 </main>

@@ -116,6 +116,10 @@ export class App {
     }
   }
 
+  protected resetGrouping(group: Group): void {
+    this.save(this.overrideApi.resetGrouping([group.frames[0].id]));
+  }
+
   protected moveFrame(frame: Frame, by: -1 | 1): void {
     const neighbour = this.neighbourGroup(by);
     if (neighbour !== null) {

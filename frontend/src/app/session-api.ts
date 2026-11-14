@@ -84,6 +84,8 @@ export interface Frame {
 export interface Group {
   id: number;
   frames: Frame[];
+  /** Whether the photographer fixed the Group, so framewise no longer groups its Frames. */
+  fixed: boolean;
 }
 
 export interface AnalysisProgress {

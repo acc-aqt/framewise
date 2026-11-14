@@ -475,6 +475,27 @@ describe('Review UI', () => {
     expect(all('[data-testid="analysis-progress"]')).toEqual([]);
   });
 
+  it('opens the write-back screen only once analysis has finished', async () => {
+    vi.useFakeTimers();
+    http.expectOne('/api/session').flush(summary);
+    await respondToPoll({ frames_done: 1, frames_left: 2, seconds_remaining: 4 }, []);
+    const button = () =>
+      (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+        '[data-testid="open-write-back"]',
+      )!;
+
+    expect(button().disabled).toBe(true);
+
+    await nextPoll();
+    await respondToPoll({ frames_done: 3, frames_left: 0, seconds_remaining: 0 }, []);
+    button().click();
+    await settle();
+
+    http.expectOne('/api/write-back');
+    expect(all('[data-testid="write-back"]').length).toBe(1);
+    expect(all('[data-testid="group-tile"]')).toEqual([]);
+  });
+
   it('virtualizes the grid so a large Session does not render every tile', async () => {
     const groups = Array.from({ length: 400 }, (_, index) =>
       group(index + 1, [frame(index + 1, 'jpg-only')]),

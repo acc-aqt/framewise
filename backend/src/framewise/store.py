@@ -42,6 +42,12 @@ CREATE TABLE IF NOT EXISTS overrides (
     stars INTEGER,
     label TEXT
 );
+CREATE TABLE IF NOT EXISTS write_back_originals (
+    path TEXT PRIMARY KEY,
+    stars INTEGER,
+    label TEXT,
+    created INTEGER NOT NULL
+);
 """
 
 # Columns added to tables after the first release. Adding them to an existing Session store keeps
@@ -83,6 +89,17 @@ class AnalyzedFrame:
     frame: Frame
     signals: FrameSignals
     captured_at: datetime | None
+
+
+@dataclass(frozen=True)
+class WrittenFileOriginal:
+    """A file's rating and label before Rating write-back first changed it. `created` means
+    write-back created the file, a sidecar, so undo removes it."""
+
+    path: str
+    stars: int | None
+    label: str | None
+    created: bool
 
 
 @dataclass(frozen=True)
@@ -194,6 +211,46 @@ class SessionStore:
     def frame(self, frame_id: int) -> Frame | None:
         row = self._db.execute("SELECT * FROM frames WHERE id = ?", (frame_id,)).fetchone()
         return None if row is None else _frame(row)
+
+    def keep_current_after_metadata_write(self, jpg_path: Path, size: int, mtime_ns: int) -> None:
+        """Moves a JPG's thumbnail and analysis, if they were current at the given size and
+        modification time, to its new size and modification time, because writing metadata
+        leaves the image data that they were made from unchanged."""
+        relative, new_size, new_mtime_ns = self._file_key(jpg_path)
+        with self._db:
+            for table in ("thumbnails", "analyses"):
+                self._db.execute(
+                    f"UPDATE {table} SET jpg_size = ?, jpg_mtime_ns = ? "
+                    "WHERE jpg_path = ? AND jpg_size = ? AND jpg_mtime_ns = ?",
+                    (new_size, new_mtime_ns, relative, size, mtime_ns),
+                )
+
+    def record_write_back_original(self, original: WrittenFileOriginal) -> bool:
+        """Records a file's original rating and label, unless an earlier write-back already
+        recorded them. Returns whether it recorded them."""
+        with self._db:
+            cursor = self._db.execute(
+                "INSERT OR IGNORE INTO write_back_originals (path, stars, label, created) "
+                "VALUES (?, ?, ?, ?)",
+                (original.path, original.stars, original.label, original.created),
+            )
+        return cursor.rowcount == 1
+
+    def write_back_originals(self) -> list[WrittenFileOriginal]:
+        rows = self._db.execute("SELECT * FROM write_back_originals ORDER BY path")
+        return [
+            WrittenFileOriginal(
+                path=row["path"],
+                stars=row["stars"],
+                label=row["label"],
+                created=bool(row["created"]),
+            )
+            for row in rows
+        ]
+
+    def forget_write_back_original(self, path: str) -> None:
+        with self._db:
+            self._db.execute("DELETE FROM write_back_originals WHERE path = ?", (path,))
 
     def frames(self) -> list[Frame]:
         rows = self._db.execute("SELECT * FROM frames ORDER BY jpg_path")

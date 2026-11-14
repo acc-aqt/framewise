@@ -6,6 +6,15 @@
   } @else if (summary.error()) {
     <p class="error">Could not load the Session.</p>
   }
+  <button
+    type="button"
+    class="write-back"
+    data-testid="open-write-back"
+    [disabled]="analyzing()"
+    (click)="closeGroup(); writingBack.set(true)"
+  >
+    Rating write-back…
+  </button>
   @if (analyzing()) {
     <app-analysis-progress [progress]="progress.value()!" />
   } @else if (progress.error()) {
@@ -15,6 +24,8 @@
 <main>
   @if (groups.error()) {
     <p class="error">Could not load the Groups.</p>
+  } @else if (writingBack()) {
+    <app-write-back (back)="writingBack.set(false)" />
   } @else if (openGroup(); as group) {
     @if (overrideFailed()) {
       <p class="error" data-testid="override-error">Could not save the Override.</p>

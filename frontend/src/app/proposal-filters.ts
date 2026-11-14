@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, model } from '@angular/core';
+import { Icon } from './icon';
 import { NO_FILTER, ProposalFilter, VERDICT_LABELS, VERDICTS } from './proposal';
 import { Group, Verdict } from './session-api';
 
@@ -11,8 +12,9 @@ interface ReasonOption {
 @Component({
   selector: 'app-proposal-filters',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [Icon],
   template: `
-    <label>
+    <label class="filter" [class.active]="filter().verdict !== null">
       <span class="visually-hidden">Verdict</span>
       <select data-testid="verdict-filter" (change)="setVerdict($event)">
         <option value="" [selected]="filter().verdict === null">All Verdicts</option>
@@ -22,8 +24,9 @@ interface ReasonOption {
           </option>
         }
       </select>
+      <app-icon class="chevron" name="chevron-down" [size]="14" />
     </label>
-    <label>
+    <label class="filter" [class.active]="filter().reason !== null">
       <span class="visually-hidden">Reason</span>
       <select data-testid="reason-filter" (change)="setReason($event)">
         <option value="" [selected]="filter().reason === null">All Reasons</option>
@@ -33,26 +36,59 @@ interface ReasonOption {
           </option>
         }
       </select>
+      <app-icon class="chevron" name="chevron-down" [size]="14" />
     </label>
   `,
   styles: `
     :host {
       display: flex;
-      gap: 8px;
-      padding-bottom: 8px;
+      align-items: center;
+      gap: var(--space-2);
+      padding: var(--space-3) 0;
+    }
+    .filter {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
     }
     select {
-      padding: 4px 8px;
+      height: var(--control-height);
+      padding: 0 calc(var(--space-2) + 14px + var(--space-2)) 0 var(--space-3);
       border: 1px solid var(--color-border);
-      border-radius: 4px;
-      background: var(--color-surface);
-      color: var(--color-text);
+      border-radius: var(--radius-md);
+      background: var(--color-surface-1);
+      color: var(--color-text-secondary);
       font: inherit;
-      font-size: 0.85rem;
+      font-size: var(--text-sm);
+      appearance: none;
+      cursor: pointer;
+      transition:
+        background-color var(--duration-fast) var(--ease-out),
+        border-color var(--duration-fast) var(--ease-out),
+        color var(--duration-fast) var(--ease-out);
+    }
+    select:hover {
+      border-color: var(--color-border-strong);
     }
     select:focus-visible {
       outline: 2px solid var(--color-focus);
       outline-offset: 2px;
+    }
+    .active select {
+      border-color: var(--color-border-strong);
+      background: var(--color-surface-3);
+      color: var(--color-text);
+      font-weight: 600;
+    }
+    .chevron {
+      position: absolute;
+      right: var(--space-2);
+      display: flex;
+      color: var(--color-text-muted);
+      pointer-events: none;
+    }
+    .active .chevron {
+      color: var(--color-text);
     }
     .visually-hidden {
       position: absolute;

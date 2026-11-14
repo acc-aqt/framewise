@@ -22,9 +22,9 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install ExifTool and OpenCV's libGL (Linux)
+      - name: Install ExifTool and the OpenGL libraries MediaPipe loads (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl libgl1
+        run: sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl libgl1 libegl1 libgles2
 
       - name: Install ExifTool (macOS)
         if: runner.os == 'macOS'

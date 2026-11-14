@@ -4,7 +4,7 @@ from typing import Protocol
 
 # Bump whenever FrameSignals gains or changes a signal, so a re-run re-analyses Frames whose
 # saved analysis predates it.
-ANALYSIS_VERSION = 5
+ANALYSIS_VERSION = 6
 
 
 @dataclass(frozen=True)
@@ -22,6 +22,9 @@ class Face:
     """Like the Frame's sharpness, measured on the face alone."""
     quality: float | None
     """Apple Vision's face capture quality from 0 to 1, or None where it is unavailable."""
+    contrast: float
+    """How much the tones in the centre of the face vary for their brightness: the standard
+    deviation of its grey levels over their mean. A face reflected in glass is faint and low."""
 
 
 @dataclass(frozen=True)

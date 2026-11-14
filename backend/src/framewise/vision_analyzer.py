@@ -6,7 +6,7 @@ import Foundation
 import Vision
 
 from framewise.analyzer import Face, FrameSignals
-from framewise.image_measures import Region, measure_image
+from framewise.image_measures import ImageMeasures, Region, measure_image
 
 FLOAT_ELEMENT_TYPE = 1
 FEATURE_PRINT_REVISION = 2
@@ -40,16 +40,24 @@ class VisionAnalyzer:
             low_key=measures.low_key,
             high_key=measures.high_key,
             aesthetics=aesthetics,
-            faces=_faces(vision_faces, measures.face_sharpness),
+            faces=_faces(vision_faces, measures),
         )
 
 
-def _faces(vision_faces: list[_VisionFace], sharpness: list[float | None]) -> list[Face]:
+def _faces(vision_faces: list[_VisionFace], measures: ImageMeasures) -> list[Face]:
     """Leaves out faces too small to measure, such as distant passers-by."""
     return [
-        Face(*face.region, eyes_open=face.eyes_open, sharpness=face_sharpness, quality=face.quality)
-        for face, face_sharpness in zip(vision_faces, sharpness, strict=True)
-        if face_sharpness is not None
+        Face(
+            *face.region,
+            eyes_open=face.eyes_open,
+            sharpness=sharpness,
+            quality=face.quality,
+            contrast=contrast,
+        )
+        for face, sharpness, contrast in zip(
+            vision_faces, measures.face_sharpness, measures.face_contrast, strict=True
+        )
+        if sharpness is not None and contrast is not None
     ]
 
 

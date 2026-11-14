@@ -5,7 +5,7 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageOps
+from PIL import Image, ImageChops, ImageOps, ImageStat
 
 MEASURE_BOX = (1024, 1024)
 EDGE_MARGIN = 8
@@ -44,6 +44,8 @@ class ImageMeasures:
     high_key: bool
     face_sharpness: list[float | None]
     """The sharpness of each face asked for, or None where it is too small to measure."""
+    face_contrast: list[float | None]
+    """The contrast of each face asked for, or None where it is too small to measure."""
 
 
 def measure_image(jpg_path: Path, faces: list[Region] | None = None) -> ImageMeasures:
@@ -65,6 +67,7 @@ def measure_image(jpg_path: Path, faces: list[Region] | None = None) -> ImageMea
         and _share_from(histogram, LOW_KEY_HIGHLIGHT_TONE) >= LOW_KEY_MIN_HIGHLIGHT_SHARE,
         high_key=stops >= KEY_FROM_STOPS and _keeps_highlights(grey, histogram, face_boxes),
         face_sharpness=[None if box is None else _box_sharpness(grey, box) for box in face_boxes],
+        face_contrast=[None if box is None else _box_contrast(grey, box) for box in face_boxes],
     )
 
 
@@ -120,6 +123,12 @@ def _box_sharpness(grey: Image.Image, box: Box) -> float:
         )
     )
     return _sharpness(_edge_ratios(crop))
+
+
+def _box_contrast(grey: Image.Image, box: Box) -> float:
+    """The standard deviation of the grey levels in the centre of the box over their mean."""
+    stats = ImageStat.Stat(grey.crop(_centre(box)))
+    return stats.stddev[0] / max(stats.mean[0], 1)
 
 
 def _edge_ratios(grey: Image.Image) -> list[float]:

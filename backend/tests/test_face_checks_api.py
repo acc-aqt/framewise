@@ -8,6 +8,7 @@ def face(
     sharpness: float = 0.9,
     quality: float | None = 0.7,
     x: float = 0.4,
+    contrast: float = 0.2,
 ) -> Face:
     return Face(
         x=x,
@@ -17,6 +18,7 @@ def face(
         eyes_open=eyes_open,
         sharpness=sharpness,
         quality=quality,
+        contrast=contrast,
     )
 
 
@@ -224,3 +226,43 @@ def test_each_face_carries_its_box_and_badges(session_dir, review, analyzer):
             "focus": "soft",
         },
     ]
+
+
+def test_a_faint_reflection_beside_a_sharp_face_is_left_out_of_the_face_checks(
+    session_dir, review, analyzer
+):
+    """A face reflected in glass is faint and measures soft; the person in front of it is not."""
+    reflection = face(x=0.75, sharpness=0.45, quality=0.3, eyes_open=False, contrast=0.03)
+    burst(session_dir, analyzer, ("DSCF0001", {"faces": [face(contrast=0.2), reflection]}))
+
+    frame = frames_by_name(keep_every_clean_frame(review()))["DSCF0001.JPG"]
+
+    assert frame["verdict"] == "winner"
+    assert reasons(frame) == []
+    assert frame["scores"]["sharpness"] == 1
+    assert frame["scores"]["face_quality"] == 0.7
+    assert [face["box"]["x"] for face in frame["faces"]] == [0.4]
+
+
+def test_a_soft_face_beside_a_sharp_one_is_still_soft_when_it_is_not_faint(
+    session_dir, review, analyzer
+):
+    """A person a little out of focus, or turned into the shade, keeps much of the contrast of
+    the face beside them."""
+    in_the_shade = face(x=0.75, sharpness=0.45, contrast=0.1)
+    burst(session_dir, analyzer, ("DSCF0001", {"faces": [face(contrast=0.2), in_the_shade]}))
+
+    frame = frames_by_name(review())["DSCF0001.JPG"]
+
+    assert reasons(frame) == ["Soft face"]
+    assert len(frame["faces"]) == 2
+
+
+def test_a_faint_face_on_its_own_is_still_checked(session_dir, review, analyzer):
+    burst(
+        session_dir,
+        analyzer,
+        ("DSCF0001", {"faces": [face(sharpness=0.45, contrast=0.03)]}),
+    )
+
+    assert reasons(frames_by_name(review())["DSCF0001.JPG"]) == ["Soft face"]

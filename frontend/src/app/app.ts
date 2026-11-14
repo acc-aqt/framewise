@@ -1,19 +1,31 @@
 import { httpResource } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, effect, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
+import { Observable } from 'rxjs';
 import { AnalysisProgressView } from './analysis-progress';
 import { GroupGrid } from './group-grid';
 import { GroupView } from './group-view';
+import { Loupe, LoupeZoom } from './loupe';
+import { OverrideApi } from './override-api';
 import { NO_FILTER, ProposalFilter } from './proposal';
 import { ProposalFilters } from './proposal-filters';
-import { AnalysisProgress, Group, SessionSummary } from './session-api';
+import { AnalysisProgress, Frame, Group, OverrideChange, SessionSummary } from './session-api';
 import { SessionSummaryView } from './session-summary';
+import { Shortcut, shortcutFor, stepFrom } from './shortcuts';
 
 export const POLL_INTERVAL_MS = 1000;
 
 @Component({
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AnalysisProgressView, GroupGrid, GroupView, ProposalFilters, SessionSummaryView],
+  imports: [AnalysisProgressView, GroupGrid, GroupView, Loupe, ProposalFilters, SessionSummaryView],
+  host: { '(document:keydown)': 'onKeydown($event)' },
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -44,6 +56,13 @@ export class App {
         .value()
         .find((group) => group.frames.some((frame) => frame.id === this.openedFrameId())) ?? null,
   );
+  protected readonly currentFrame = computed(
+    () => this.openGroup()?.frames.find((frame) => frame.id === this.openedFrameId()) ?? null,
+  );
+  protected readonly loupeZoom = signal<LoupeZoom | null>(null);
+  protected readonly overrideFailed = signal(false);
+
+  private readonly overrideApi = inject(OverrideApi);
 
   constructor() {
     effect((onCleanup) => {
@@ -52,6 +71,68 @@ export class App {
       }
       const timer = setTimeout(() => this.progress.reload(), POLL_INTERVAL_MS);
       onCleanup(() => clearTimeout(timer));
+    });
+  }
+
+  protected onKeydown(event: KeyboardEvent): void {
+    const frame = this.currentFrame();
+    const shortcut = frame === null ? null : shortcutFor(event);
+    if (frame === null || shortcut === null) {
+      return;
+    }
+    event.preventDefault();
+    this.run(shortcut, frame);
+  }
+
+  protected changeOverride(frame: Frame, change: OverrideChange): void {
+    this.save(this.overrideApi.change(frame.id, change));
+  }
+
+  protected closeGroup(): void {
+    this.loupeZoom.set(null);
+    this.openedFrameId.set(null);
+  }
+
+  protected toggleZoom(): void {
+    this.loupeZoom.update((zoom) => (zoom === '100%' ? 'fit' : '100%'));
+  }
+
+  private run(shortcut: Shortcut, frame: Frame): void {
+    switch (shortcut.kind) {
+      case 'stars':
+        return this.changeOverride(frame, { stars: shortcut.stars });
+      case 'label': {
+        const label = frame.override?.label === shortcut.label ? null : shortcut.label;
+        return this.changeOverride(frame, { label });
+      }
+      case 'keep':
+        return this.changeOverride(frame, {
+          verdict: frame.verdict === 'winner' ? 'winner' : 'keeper',
+        });
+      case 'reject':
+        return this.changeOverride(frame, { verdict: 'reject' });
+      case 'clear':
+        return this.save(this.overrideApi.clear(frame.id));
+      case 'step':
+        return this.openedFrameId.set(
+          stepFrom(this.groups.value(), frame.id, shortcut.by, shortcut.withinGroup),
+        );
+      case 'loupe':
+        return this.loupeZoom.set('fit');
+      case 'zoom':
+        return this.toggleZoom();
+      case 'close':
+        return this.loupeZoom() === null ? this.closeGroup() : this.loupeZoom.set(null);
+    }
+  }
+
+  private save(request: Observable<unknown>): void {
+    request.subscribe({
+      next: () => {
+        this.overrideFailed.set(false);
+        this.groups.reload();
+      },
+      error: () => this.overrideFailed.set(true),
     });
   }
 }

@@ -16,7 +16,27 @@
   @if (groups.error()) {
     <p class="error">Could not load the Groups.</p>
   } @else if (openGroup(); as group) {
-    <app-group-view [group]="group" (back)="openedFrameId.set(null)" />
+    @if (overrideFailed()) {
+      <p class="error" data-testid="override-error">Could not save the Override.</p>
+    }
+    <app-group-view
+      [group]="group"
+      [currentFrameId]="openedFrameId()"
+      (back)="closeGroup()"
+      (select)="openedFrameId.set($event.id)"
+      (openLoupe)="openedFrameId.set($event.id); loupeZoom.set('fit')"
+      (makeWinner)="changeOverride($event, { verdict: 'winner' })"
+    />
+    @if (loupeZoom(); as zoom) {
+      @if (currentFrame(); as frame) {
+        <app-loupe
+          [frame]="frame"
+          [zoom]="zoom"
+          (toggleZoom)="toggleZoom()"
+          (close)="loupeZoom.set(null)"
+        />
+      }
+    }
   } @else {
     <app-proposal-filters [groups]="groups.value()" [(filter)]="filter" />
     <app-group-grid

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { scoreBreakdown, VERDICT_LABELS } from './proposal';
-import { CameraRating, Frame } from './session-api';
+import { CameraRating, ColorLabel, Frame } from './session-api';
 
 const KIND_BADGES: Record<Frame['kind'], string> = {
   'jpg-only': 'JPG-only',
@@ -17,8 +17,20 @@ const KIND_BADGES: Record<Frame['kind'], string> = {
     @if (ratingText(frame().camera_rating); as rating) {
       <span class="rating" data-testid="camera-rating">{{ rating }}</span>
     }
-    <span [class]="'verdict ' + frame().verdict" data-testid="verdict-badge">
-      {{ verdictLabels[frame().verdict] }}
+    <span class="marks">
+      <span
+        [class]="'verdict ' + frame().verdict"
+        data-testid="verdict-badge"
+        [attr.title]="verdictSource()"
+      >
+        {{ verdictLabels[frame().verdict] }}
+      </span>
+      @if (frame().verdict_overridden) {
+        <span class="override" data-testid="override-mark">Override</span>
+      }
+      @if (overrideRating(); as rating) {
+        <span class="override-rating" data-testid="override-rating">{{ rating }}</span>
+      }
     </span>
     <span class="caption">{{ frame().jpg_path }}</span>
   `,
@@ -40,12 +52,22 @@ const KIND_BADGES: Record<Frame['kind'], string> = {
     }
     .badge,
     .rating,
-    .verdict {
-      position: absolute;
+    .marks > span {
       padding: 1px 6px;
       border-radius: 3px;
       font-size: 0.7rem;
       background: var(--color-overlay);
+    }
+    .badge,
+    .rating,
+    .marks {
+      position: absolute;
+    }
+    .marks {
+      left: 6px;
+      bottom: 28px;
+      display: flex;
+      gap: 4px;
     }
     .badge {
       top: 6px;
@@ -57,9 +79,13 @@ const KIND_BADGES: Record<Frame['kind'], string> = {
       color: var(--color-rating);
     }
     .verdict {
-      left: 6px;
-      bottom: 28px;
       font-weight: 600;
+    }
+    .override {
+      color: var(--color-override);
+    }
+    .override-rating {
+      color: var(--color-rating);
     }
     .winner {
       color: var(--color-winner);
@@ -90,8 +116,23 @@ export class FrameTile {
   protected readonly verdictLabels = VERDICT_LABELS;
   protected readonly breakdown = computed(() => scoreBreakdown(this.frame()).join('\n'));
 
+  protected readonly verdictSource = computed(() =>
+    this.frame().verdict_overridden ? 'Your Override' : "framewise's Verdict",
+  );
+  protected readonly overrideRating = computed(() => {
+    const override = this.frame().override;
+    if (override === null) {
+      return '';
+    }
+    return this.ratingText({ stars: override.stars, label: labelName(override.label) });
+  });
+
   protected ratingText(rating: CameraRating): string {
     const stars = '★'.repeat(Math.max(0, rating.stars ?? 0));
     return [stars, rating.label].filter(Boolean).join(' ');
   }
+}
+
+function labelName(label: ColorLabel | null): string | null {
+  return label === null ? null : label[0].toUpperCase() + label.slice(1);
 }

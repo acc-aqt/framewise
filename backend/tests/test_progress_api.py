@@ -163,24 +163,25 @@ def test_progress_counts_frames_analysed_before_as_done_before_the_run_starts(
     assert progress(client)["frames_left"] == 0
 
 
-def test_the_review_ui_can_load_thumbnails_and_groups_while_frames_are_saved(
-    session_dir, live_review
-):
+def test_the_review_ui_gets_each_frames_own_image_while_frames_are_saved(session_dir, live_review):
     for number in range(1, 61):
-        make_jpg(session_dir / f"DSCF{number:04d}.JPG")
+        make_jpg(session_dir / f"DSCF{number:04d}.JPG", size=(40 + number, 30))
     client = live_review()
-    app = client.app
-    errors: list[BaseException] = []
+    frames = client.get("/api/frames").json()
+    problems: list[str] = []
 
     def browse() -> None:
-        browser = TestClient(app)
+        browser = TestClient(client.app)
         try:
             while progress(browser)["frames_left"] > 0:
-                for frame_id in range(1, 61):
-                    browser.get(f"/api/frames/{frame_id}/thumbnail")
+                for frame in frames:
+                    image = browser.get(f"/api/frames/{frame['id']}/image").content
+                    if image != (session_dir / frame["jpg_path"]).read_bytes():
+                        problems.append(f"wrong image for {frame['jpg_path']}")
+                    browser.get(f"/api/frames/{frame['id']}/thumbnail")
                 browser.get("/api/groups")
-        except BaseException as error:
-            errors.append(error)
+        except Exception as error:
+            problems.append(repr(error))
 
     browsers = [threading.Thread(target=browse) for _ in range(6)]
     for browser in browsers:
@@ -188,4 +189,4 @@ def test_the_review_ui_can_load_thumbnails_and_groups_while_frames_are_saved(
     for browser in browsers:
         browser.join(timeout=30)
 
-    assert errors == []
+    assert problems == []

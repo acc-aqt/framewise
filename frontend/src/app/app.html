@@ -7,37 +7,55 @@
   </main>
 } @else {
   <header>
-    <h1><img src="logo.svg" alt="" width="20" height="20" />framewise</h1>
+    <div class="identity">
+      <h1><img src="logo.svg" alt="" width="20" height="20" />framewise</h1>
+      @if (summary.hasValue()) {
+        <span class="divider" aria-hidden="true"></span>
+        <p class="root" [title]="summary.value().root">
+          <app-icon name="folder" [size]="14" /><span>{{ summary.value().root }}</span>
+        </p>
+      }
+    </div>
     @if (summary.hasValue()) {
-      <p class="root">{{ summary.value().root }}</p>
-      <app-session-summary [summary]="summary.value()" />
-      @if (keeperBudget() !== null) {
-        <app-keeper-budget
-          [share]="keeperBudget()!"
-          [groups]="groups.value()"
-          (changeShare)="changeKeeperBudget($event)"
-        />
-      }
-      @if (keeperBudgetFailed()) {
-        <p class="error" data-testid="keeper-budget-error">Could not save the Keeper budget.</p>
-      }
+      <div class="overview">
+        <app-session-summary [summary]="summary.value()" />
+        @if (keeperBudget() !== null) {
+          <span class="divider" aria-hidden="true"></span>
+          <app-keeper-budget
+            [share]="keeperBudget()!"
+            [groups]="groups.value()"
+            (changeShare)="changeKeeperBudget($event)"
+          />
+        }
+        @if (keeperBudgetFailed()) {
+          <p class="error error-message" data-testid="keeper-budget-error">
+            <app-icon name="alert" [size]="14" />Could not save the Keeper budget.
+          </p>
+        }
+      </div>
     } @else if (summary.error()) {
-      <p class="error">Could not load the Session.</p>
+      <p class="error error-message">
+        <app-icon name="alert" [size]="14" />Could not load the Session.
+      </p>
     }
-    <button
-      type="button"
-      class="write-back"
-      data-testid="open-write-back"
-      [disabled]="analyzing()"
-      (click)="closeGroup(); writingBack.set(true)"
-    >
-      Rating write-back…
-    </button>
-    @if (analyzing()) {
-      <app-analysis-progress [progress]="progress.value()!" />
-    } @else if (progress.error()) {
-      <p class="error">Could not load the analysis progress.</p>
-    }
+    <div class="status">
+      @if (analyzing()) {
+        <app-analysis-progress [progress]="progress.value()!" />
+      } @else if (progress.error()) {
+        <p class="error error-message">
+          <app-icon name="alert" [size]="14" />Could not load the analysis progress.
+        </p>
+      }
+      <button
+        type="button"
+        class="btn btn-primary"
+        data-testid="open-write-back"
+        [disabled]="analyzing()"
+        (click)="closeGroup(); writingBack.set(true)"
+      >
+        Rating write-back…
+      </button>
+    </div>
   </header>
   <main>
     @if (groups.error()) {

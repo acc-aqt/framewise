@@ -16,17 +16,35 @@ import { AnalysisProgress } from './session-api';
   styles: `
     :host {
       display: block;
-      margin-top: 0.75rem;
-      font-size: 0.85rem;
       color: var(--color-text-secondary);
+      font-size: var(--text-sm);
     }
+    /* Spans the whole header, which is the nearest positioned ancestor. */
     progress {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      display: block;
       width: 100%;
-      max-width: 24rem;
+      height: 2px;
+      border: 0;
+      background: var(--color-border);
+      appearance: none;
+    }
+    progress::-webkit-progress-bar {
+      background: var(--color-border);
+    }
+    progress::-webkit-progress-value {
+      background: var(--color-text-secondary);
+      transition: width var(--duration-base) var(--ease-out);
+    }
+    progress::-moz-progress-bar {
+      background: var(--color-text-secondary);
     }
     p {
-      margin: 0.25rem 0 0;
-      font-variant-numeric: tabular-nums;
+      margin: 0;
+      white-space: nowrap;
     }
   `,
 })

@@ -6,6 +6,7 @@ from array import array
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from framewise.analyzer import SimilarityThresholds
 from framewise.image_measures import Region
 from framewise.providers import AESTHETICS, EYE_STATE, FACE_DETECTION, FACE_QUALITY, FINGERPRINT
 
@@ -36,8 +37,7 @@ class _AppleVisionProvider:
 class AppleFingerprint(_AppleVisionProvider):
     capability = FINGERPRINT
     id = "apple-vision-fingerprint"
-    burst_similarity = 0.8
-    near_duplicate_similarity = 0.9
+    similarity = SimilarityThresholds(burst=0.8, near_duplicate=0.9)
 
     def fingerprint(self, jpg_path: Path) -> list[float]:
         request = Vision.VNGenerateImageFeaturePrintRequest.alloc().init()

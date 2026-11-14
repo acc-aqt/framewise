@@ -47,12 +47,7 @@ class Provider(Protocol):
 
 
 class FingerprintProvider(Provider, Protocol):
-    burst_similarity: float
-    """The similarity of its fingerprints from which Frames captured moments apart are one
-    Group."""
-    near_duplicate_similarity: float
-    """The similarity from which Frames captured minutes apart, or without a capture time, are
-    one Group."""
+    similarity: SimilarityThresholds
 
     def fingerprint(self, jpg_path: Path) -> list[float]: ...
 
@@ -103,10 +98,7 @@ class ProviderAnalyzer:
 
     @property
     def similarity(self) -> SimilarityThresholds:
-        return SimilarityThresholds(
-            burst=self.fingerprint.burst_similarity,
-            near_duplicate=self.fingerprint.near_duplicate_similarity,
-        )
+        return self.fingerprint.similarity
 
     @property
     def signature(self) -> ProviderSignature:

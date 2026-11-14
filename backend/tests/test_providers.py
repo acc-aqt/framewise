@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from PIL import Image, ImageDraw, ImageFilter
 
+from framewise.analyzer import SimilarityThresholds
 from framewise.providers import (
     MissingCapabilityError,
     ProviderConfigError,
@@ -44,8 +45,7 @@ class FakeProvider:
 class FakeFingerprint(FakeProvider):
     capability: str = "fingerprint"
     id: str = "fake-fingerprint"
-    burst_similarity: float = 0.8
-    near_duplicate_similarity: float = 0.9
+    similarity: SimilarityThresholds = SimilarityThresholds(burst=0.8, near_duplicate=0.9)
 
     def fingerprint(self, jpg_path: Path) -> list[float]:
         return [float(len(self.id))]
@@ -289,7 +289,8 @@ def test_without_a_config_file_the_automatic_defaults_are_chosen(tmp_path):
 
     overrides = read_provider_overrides(tmp_path / "config.toml")
 
-    assert select_providers(providers, overrides) == select_providers(providers)
+    assert overrides == {}
+    assert select_providers(providers, overrides)["eye-state"].id == "fake-eye-state"
 
 
 def test_a_config_file_that_is_not_toml_is_an_error(tmp_path):

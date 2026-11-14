@@ -1,4 +1,4 @@
-# framewise
+# <picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/mark-dark.svg" /><img src="docs/brand/mark-light.svg" alt="" width="32" height="32" /></picture> framewise
 
 ## Running it
 

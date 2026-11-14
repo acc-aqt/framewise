@@ -3,9 +3,13 @@
 Each Frame is first assessed on its own: its signals become Scores, and each flaw check may
 find a Flaw that caps its Verdict at Unsure or Reject. Then each Group picks its Winner and
 proposes the rest as Keepers, Unsure or Rejects.
+
+The photographer's Verdict Overrides steer the Winner: a Frame they made the Winner wins its
+Group, and a Frame they overrode to another Verdict is not picked, so the rest of the Group is
+re-judged against the Winner that remains. Applying the Overrides themselves is up to the caller.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import PurePosixPath
@@ -88,20 +92,40 @@ class _Assessment:
         return [flaw.reason for flaw in self.flaws]
 
 
-def judge(groups: list[list[AnalyzedFrame]]) -> Proposal:
+def judge(
+    groups: list[list[AnalyzedFrame]], verdict_overrides: Mapping[str, Verdict] | None = None
+) -> Proposal:
+    """Judges each Group. `verdict_overrides` holds the photographer's Verdict Overrides by JPG
+    path."""
     proposal: Proposal = {}
     for group in groups:
-        proposal.update(_judge_group([_assess(analyzed) for analyzed in group]))
+        assessments = [_assess(analyzed) for analyzed in group]
+        proposal.update(_judge_group(assessments, verdict_overrides or {}))
     return proposal
 
 
-def _judge_group(assessments: list[_Assessment]) -> Proposal:
-    winner = min(assessments, key=_winner_rank)
+def _judge_group(assessments: list[_Assessment], overrides: Mapping[str, Verdict]) -> Proposal:
+    winner = _pick_winner(assessments, overrides)
     proposal = {winner.analyzed.frame.id: Judgement(Verdict.WINNER, winner.reasons, winner.scores)}
     for assessment in assessments:
         if assessment is not winner:
             proposal[assessment.analyzed.frame.id] = _judge_against_winner(assessment, winner)
     return proposal
+
+
+def _pick_winner(assessments: list[_Assessment], overrides: Mapping[str, Verdict]) -> _Assessment:
+    """The first Frame the photographer made the Winner, or else framewise's best Frame among
+    those without a Verdict Override. If every Frame has one, framewise's best Frame is the
+    Winner only for the others to be judged against."""
+    for assessment in assessments:
+        if overrides.get(assessment.analyzed.frame.jpg_path) == Verdict.WINNER:
+            return assessment
+    candidates = [
+        assessment
+        for assessment in assessments
+        if assessment.analyzed.frame.jpg_path not in overrides
+    ]
+    return min(candidates or assessments, key=_winner_rank)
 
 
 def _winner_rank(assessment: _Assessment) -> tuple[int, float, str]:

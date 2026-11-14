@@ -36,6 +36,18 @@ export interface Signals {
   aesthetics: number | null;
 }
 
+export type ColorLabel = 'red' | 'yellow' | 'green' | 'blue' | 'purple';
+
+/** The photographer's Override of a Frame. A field left null keeps framewise's judgement. */
+export interface Override {
+  verdict: Verdict | null;
+  stars: number | null;
+  label: ColorLabel | null;
+}
+
+/** The Override fields to change. A field sent as null is cleared; one left out is kept. */
+export type OverrideChange = Partial<Override>;
+
 export interface Frame {
   id: number;
   jpg_path: string;
@@ -43,7 +55,11 @@ export interface Frame {
   kind: 'jpg-only' | 'raw+jpg';
   camera_rating: CameraRating;
   thumbnail_url: string;
+  image_url: string;
+  /** The photographer's Verdict if they overrode it, otherwise framewise's. */
   verdict: Verdict;
+  verdict_overridden: boolean;
+  override: Override | null;
   reasons: Reason[];
   scores: Scores;
   signals: Signals;

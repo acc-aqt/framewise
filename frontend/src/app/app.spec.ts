@@ -2,7 +2,14 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { App, POLL_INTERVAL_MS } from './app';
-import { AnalysisProgress, Frame, Group, Reason, SessionSummary } from './session-api';
+import {
+  AnalysisProgress,
+  Frame,
+  Group,
+  OverrideChange,
+  Reason,
+  SessionSummary,
+} from './session-api';
 
 const summary: SessionSummary = {
   root: '/Volumes/card/DCIM',
@@ -403,6 +410,247 @@ describe('Review UI', () => {
     expect(tiles.length).toBeGreaterThan(0);
     expect(tiles.length).toBeLessThan(400);
   });
+  describe('keyboard review', () => {
+    const groups = (): Group[] => [
+      group(1, [
+        frame(1, 'jpg-only', { verdict: 'winner' }),
+        frame(2, 'jpg-only'),
+        frame(3, 'jpg-only', { verdict: 'reject' }),
+      ]),
+      group(4, [frame(4, 'jpg-only', { verdict: 'winner' })]),
+    ];
+
+    async function openFirstGroup(reviewed: Group[] = groups()): Promise<void> {
+      await respond(summary, reviewed);
+      all('[data-testid="group-tile"]')[0].click();
+      await fixture.whenStable();
+    }
+
+    async function press(key: string, options: KeyboardEventInit = {}): Promise<void> {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...options }));
+      await settle();
+    }
+
+    function currentFrameThumbnail(): string | null | undefined {
+      return all('[data-testid="frame-details"].current')[0]
+        ?.querySelector('img')
+        ?.getAttribute('src');
+    }
+
+    async function expectGroupsReloaded(reviewed: Group[] = groups()): Promise<void> {
+      http.expectOne((request) => request.url.startsWith('/api/groups')).flush(reviewed);
+      await settle();
+    }
+
+    it('starts on the Frame shown on the opened tile', async () => {
+      await openFirstGroup();
+
+      expect(currentFrameThumbnail()).toBe('/api/frames/1/thumbnail');
+    });
+
+    const overrideShortcuts: [string, OverrideChange][] = [
+      ['1', { stars: 1 }],
+      ['2', { stars: 2 }],
+      ['3', { stars: 3 }],
+      ['4', { stars: 4 }],
+      ['5', { stars: 5 }],
+      ['0', { stars: null }],
+      ['6', { label: 'red' }],
+      ['7', { label: 'yellow' }],
+      ['8', { label: 'green' }],
+      ['9', { label: 'blue' }],
+      ['p', { verdict: 'keeper' }],
+      ['P', { verdict: 'keeper' }],
+      ['x', { verdict: 'reject' }],
+    ];
+
+    for (const [key, change] of overrideShortcuts) {
+      it(`saves ${JSON.stringify(change)} as an Override when pressing ${key}`, async () => {
+        await openFirstGroup();
+        await press('ArrowRight');
+
+        await press(key);
+
+        const request = http.expectOne('/api/frames/2/override');
+        expect(request.request.method).toBe('PATCH');
+        expect(request.request.body).toEqual(change);
+        request.flush({});
+        await settle();
+        await expectGroupsReloaded();
+      });
+    }
+
+    it('keeps the Winner as the Winner when pressing P on it', async () => {
+      await openFirstGroup();
+
+      await press('p');
+
+      expect(http.expectOne('/api/frames/1/override').request.body).toEqual({ verdict: 'winner' });
+    });
+
+    it('removes a color label when pressing its key again', async () => {
+      await openFirstGroup([
+        group(1, [
+          frame(1, 'jpg-only', {
+            verdict: 'winner',
+            override: { verdict: null, stars: null, label: 'red' },
+          }),
+        ]),
+      ]);
+
+      await press('6');
+
+      expect(http.expectOne('/api/frames/1/override').request.body).toEqual({ label: null });
+    });
+
+    it('clears the Override when pressing U', async () => {
+      await openFirstGroup();
+
+      await press('u');
+
+      const request = http.expectOne('/api/frames/1/override');
+      expect(request.request.method).toBe('DELETE');
+      request.flush(null);
+      await settle();
+      await expectGroupsReloaded();
+    });
+
+    it('makes a different Frame the Winner', async () => {
+      await openFirstGroup();
+
+      all('[data-testid="make-winner"]')[0].click();
+      await settle();
+
+      const request = http.expectOne('/api/frames/2/override');
+      expect(request.request.method).toBe('PATCH');
+      expect(request.request.body).toEqual({ verdict: 'winner' });
+    });
+
+    it('says so when an Override could not be saved', async () => {
+      await openFirstGroup();
+
+      await press('x');
+      http
+        .expectOne('/api/frames/1/override')
+        .flush('boom', { status: 500, statusText: 'Internal Server Error' });
+      await settle();
+
+      expect(text('[data-testid="override-error"]')).toBe('Could not save the Override.');
+    });
+
+    it('ignores shortcuts while no Group is open', async () => {
+      await respond(summary, groups());
+
+      await press('x');
+
+      http.expectNone('/api/frames/1/override');
+    });
+
+    it('moves between Frames with the arrow keys, across Groups', async () => {
+      await openFirstGroup();
+
+      await press('ArrowRight');
+      expect(currentFrameThumbnail()).toBe('/api/frames/2/thumbnail');
+      await press('ArrowRight');
+      await press('ArrowRight');
+      expect(openFrameThumbnails()).toEqual(['/api/frames/4/thumbnail']);
+      expect(currentFrameThumbnail()).toBe('/api/frames/4/thumbnail');
+      await press('ArrowRight');
+      expect(currentFrameThumbnail()).toBe('/api/frames/4/thumbnail');
+
+      await press('ArrowLeft');
+      expect(currentFrameThumbnail()).toBe('/api/frames/3/thumbnail');
+    });
+
+    it('steps through the Frames of the current Group with Option and the arrow keys', async () => {
+      await openFirstGroup();
+
+      await press('ArrowRight', { altKey: true });
+      await press('ArrowRight', { altKey: true });
+      expect(currentFrameThumbnail()).toBe('/api/frames/3/thumbnail');
+      await press('ArrowRight', { altKey: true });
+      expect(currentFrameThumbnail()).toBe('/api/frames/3/thumbnail');
+      expect(openFrameThumbnails().length).toBe(3);
+
+      await press('ArrowLeft', { altKey: true });
+      expect(currentFrameThumbnail()).toBe('/api/frames/2/thumbnail');
+    });
+
+    it('selects a Frame by clicking it', async () => {
+      await openFirstGroup();
+
+      all('[data-testid="frame-details"]')[2].click();
+      await settle();
+
+      expect(currentFrameThumbnail()).toBe('/api/frames/3/thumbnail');
+    });
+
+    it('opens the current Frame in a loupe that zooms to 100%', async () => {
+      await openFirstGroup();
+      await press('ArrowRight');
+
+      await press('e');
+      const image = all('[data-testid="loupe-image"]')[0] as HTMLImageElement;
+      expect(image.getAttribute('src')).toBe('/api/frames/2/image');
+      expect(text('[data-testid="loupe-zoom"]')).toBe('Fit');
+
+      await press('z');
+      expect(text('[data-testid="loupe-zoom"]')).toBe('100%');
+      await press('z');
+      expect(text('[data-testid="loupe-zoom"]')).toBe('Fit');
+    });
+
+    it('moves the loupe between Frames with the arrow keys', async () => {
+      await openFirstGroup();
+      await press('e');
+
+      await press('ArrowRight');
+
+      expect(all('[data-testid="loupe-image"]')[0].getAttribute('src')).toBe('/api/frames/2/image');
+    });
+
+    it('closes the loupe with Escape, then the Group', async () => {
+      await openFirstGroup();
+      await press('e');
+
+      await press('Escape');
+      expect(all('[data-testid="loupe-image"]')).toEqual([]);
+      expect(all('[data-testid="group-view"]').length).toBe(1);
+
+      await press('Escape');
+      expect(all('[data-testid="group-view"]')).toEqual([]);
+    });
+
+    it('opens the next Group without the loupe after leaving one with the loupe open', async () => {
+      await openFirstGroup();
+      await press('e');
+      all('[data-testid="back-to-groups"]')[0].click();
+      await fixture.whenStable();
+
+      all('[data-testid="group-tile"]')[1].click();
+      await fixture.whenStable();
+
+      expect(all('[data-testid="loupe-image"]')).toEqual([]);
+    });
+
+    it("tells the photographer's Overrides apart from framewise's Verdicts", async () => {
+      await openFirstGroup([
+        group(1, [
+          frame(1, 'jpg-only', { verdict: 'winner' }),
+          frame(2, 'jpg-only', {
+            verdict: 'reject',
+            verdict_overridden: true,
+            override: { verdict: 'reject', stars: 4, label: 'green' },
+          }),
+        ]),
+      ]);
+
+      const frames = all('[data-testid="frame-details"]');
+      expect(all('[data-testid="override-mark"]', frames[0])).toEqual([]);
+      expect(text('[data-testid="override-mark"]', frames[1])).toBe('Override');
+      expect(text('[data-testid="override-rating"]', frames[1])).toBe('★★★★ Green');
+    });
+  });
 });
 
 function group(id: number, frames: Frame[]): Group {
@@ -417,7 +665,10 @@ function frame(id: number, kind: Frame['kind'], overrides: Partial<Frame> = {}):
     kind,
     camera_rating: { stars: null, label: null },
     thumbnail_url: `/api/frames/${id}/thumbnail`,
+    image_url: `/api/frames/${id}/image`,
     verdict: 'keeper',
+    verdict_overridden: false,
+    override: null,
     reasons: [],
     scores: { sharpness: 0.9, steadiness: 0.95, exposure: 1, aesthetics: 0.5, total: 0.8 },
     signals: {

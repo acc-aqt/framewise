@@ -10,44 +10,96 @@ import {
   signal,
 } from '@angular/core';
 import { FrameTile } from './frame-tile';
+import { Icon } from './icon';
 import { scoreBreakdown } from './proposal';
 import { Frame, Group } from './session-api';
+
+const SHORTCUT_HINTS = [
+  { keys: '1–5', label: 'stars' },
+  { keys: '6–9', label: 'labels' },
+  { keys: 'P', label: 'keep' },
+  { keys: 'X', label: 'reject' },
+  { keys: 'U', label: 'clear' },
+  { keys: '←→', label: 'Frames' },
+  { keys: '⌥←→', label: 'in Group' },
+  { keys: 'E', label: 'loupe' },
+  { keys: 'Z', label: '100%' },
+];
 
 @Component({
   selector: 'app-group-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FrameTile],
+  imports: [FrameTile, Icon],
   host: { 'data-testid': 'group-view' },
   template: `
     <div class="toolbar">
-      <button type="button" data-testid="back-to-groups" (click)="back.emit()">← All Groups</button>
-      <span>Group of {{ group().frames.length }}</span>
-      @if (hasPrevious()) {
-        <button type="button" data-testid="merge-previous" (click)="merge.emit(-1)">
-          Merge with previous
-        </button>
-      }
-      @if (hasNext()) {
-        <button type="button" data-testid="merge-next" (click)="merge.emit(1)">
-          Merge with next
-        </button>
-      }
       <button
         type="button"
+        class="btn btn-icon"
+        data-testid="back-to-groups"
+        aria-label="All Groups"
+        title="All Groups"
+        (click)="back.emit()"
+      >
+        <app-icon name="arrow-left" />
+      </button>
+      <h2 class="heading">Group of {{ group().frames.length }}</h2>
+      <button
+        type="button"
+        class="btn"
         data-testid="split-selected"
         [disabled]="!canSplitSelected()"
         (click)="splitSelected()"
       >
+        <app-icon name="scissors" [size]="14" />
         Split off {{ selected().length }} selected
       </button>
+      @if (hasPrevious() || hasNext()) {
+        <div class="merge" role="group" aria-label="Merge">
+          @if (hasPrevious()) {
+            <button
+              type="button"
+              class="btn btn-icon btn-ghost"
+              data-testid="merge-previous"
+              aria-label="Merge with previous"
+              title="Merge with previous"
+              (click)="merge.emit(-1)"
+            >
+              <app-icon name="merge-previous" [size]="14" />
+            </button>
+          }
+          <span class="merge-caption" aria-hidden="true">Merge</span>
+          @if (hasNext()) {
+            <button
+              type="button"
+              class="btn btn-icon btn-ghost"
+              data-testid="merge-next"
+              aria-label="Merge with next"
+              title="Merge with next"
+              (click)="merge.emit(1)"
+            >
+              <app-icon name="merge-next" [size]="14" />
+            </button>
+          }
+        </div>
+      }
       @if (group().fixed) {
-        <button type="button" data-testid="reset-grouping" (click)="resetGrouping.emit()">
+        <button
+          type="button"
+          class="btn btn-ghost"
+          data-testid="reset-grouping"
+          (click)="resetGrouping.emit()"
+        >
+          <app-icon name="reset" [size]="14" />
           Reset grouping
         </button>
       }
       <span class="keys">
-        1–5 stars · 6–9 labels · P keep · X reject · U clear · ←/→ Frames · ⌥←/⌥→ in Group · E loupe
-        · Z 100%
+        @for (hint of shortcutHints; track hint.label) {
+          <span class="hint"
+            ><kbd>{{ hint.keys }}</kbd> {{ hint.label }}</span
+          >
+        }
       </span>
     </div>
     <div class="frames">
@@ -65,46 +117,6 @@ import { Frame, Group } from './session-api';
             [frame]="frame"
             [showFaces]="true"
           />
-          <div class="actions">
-            <label>
-              <input
-                type="checkbox"
-                data-testid="select-frame"
-                [checked]="selectedIds().has(frame.id)"
-                (change)="toggleSelected(frame)"
-              />
-              Select
-            </label>
-            @if (!$first) {
-              <button type="button" data-testid="split-here" (click)="splitAt($index)">
-                Split here
-              </button>
-            }
-            @if (hasPrevious()) {
-              <button
-                type="button"
-                data-testid="move-previous"
-                (click)="move.emit({ frame, by: -1 })"
-              >
-                ← Move
-              </button>
-            }
-            @if (hasNext()) {
-              <button type="button" data-testid="move-next" (click)="move.emit({ frame, by: 1 })">
-                Move →
-              </button>
-            }
-          </div>
-          @if (frame.verdict !== 'winner') {
-            <button
-              type="button"
-              class="make-winner"
-              data-testid="make-winner"
-              (click)="makeWinner.emit(frame)"
-            >
-              Make Winner
-            </button>
-          }
           @if (frame.reasons.length > 0) {
             <ul class="reasons">
               @for (reason of frame.reasons; track reason.code) {
@@ -117,6 +129,64 @@ import { Frame, Group } from './session-api';
               <li>{{ line }}</li>
             }
           </ul>
+          <div class="actions">
+            <label class="select">
+              <input
+                type="checkbox"
+                data-testid="select-frame"
+                [checked]="selectedIds().has(frame.id)"
+                (change)="toggleSelected(frame)"
+              />
+              Select
+            </label>
+            @if (!$first) {
+              <button
+                type="button"
+                class="btn btn-icon btn-ghost"
+                data-testid="split-here"
+                aria-label="Split here"
+                title="Split here"
+                (click)="splitAt($index)"
+              >
+                <app-icon name="scissors" [size]="14" />
+              </button>
+            }
+            @if (hasPrevious()) {
+              <button
+                type="button"
+                class="btn btn-icon btn-ghost"
+                data-testid="move-previous"
+                aria-label="Move to previous Group"
+                title="Move to previous Group"
+                (click)="move.emit({ frame, by: -1 })"
+              >
+                <app-icon name="arrow-left" [size]="14" />
+              </button>
+            }
+            @if (hasNext()) {
+              <button
+                type="button"
+                class="btn btn-icon btn-ghost"
+                data-testid="move-next"
+                aria-label="Move to next Group"
+                title="Move to next Group"
+                (click)="move.emit({ frame, by: 1 })"
+              >
+                <app-icon name="arrow-right" [size]="14" />
+              </button>
+            }
+            @if (frame.verdict !== 'winner') {
+              <button
+                type="button"
+                class="btn make-winner"
+                data-testid="make-winner"
+                (click)="makeWinner.emit(frame)"
+              >
+                <app-icon name="crown" [size]="14" />
+                Make Winner
+              </button>
+            }
+          </div>
         </section>
       }
     </div>
@@ -131,65 +201,77 @@ import { Frame, Group } from './session-api';
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 12px;
-      padding-bottom: 8px;
-      font-size: 0.85rem;
+      gap: var(--space-2);
+      padding: var(--space-3) 0;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .heading {
+      margin: 0 var(--space-2) 0 var(--space-1);
+      font-size: var(--text-lg);
+      font-weight: 600;
+    }
+    .merge {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-1);
+      padding: 0 var(--space-1);
+      border: 1px solid var(--color-border-strong);
+      border-radius: var(--radius-md);
+    }
+    .merge .btn {
+      height: calc(var(--control-height) - 6px);
+      width: calc(var(--control-height) - 6px);
+    }
+    .merge-caption {
+      color: var(--color-text-muted);
+      font-size: var(--text-xs);
+    }
+    .keys {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-1) var(--space-3);
+      margin-left: auto;
+      color: var(--color-text-muted);
+      font-size: var(--text-xs);
+    }
+    .hint {
+      white-space: nowrap;
+    }
+    kbd {
+      display: inline-block;
+      min-width: 1.4em;
+      margin-right: 2px;
+      padding: 0 var(--space-1);
+      border: 1px solid var(--color-border-strong);
+      border-bottom-width: 2px;
+      border-radius: var(--radius-sm);
       color: var(--color-text-secondary);
-    }
-    button {
-      padding: 4px 10px;
-      border: 1px solid var(--color-border);
-      border-radius: 4px;
-      background: var(--color-surface);
-      color: var(--color-text);
-      font: inherit;
-      cursor: pointer;
-    }
-    button:focus-visible {
-      outline: 2px solid var(--color-focus);
-      outline-offset: 2px;
+      font-family: var(--font-sans);
+      font-size: 10px;
+      line-height: 1.6;
+      text-align: center;
     }
     .frames {
       flex: 1;
       min-height: 0;
       display: flex;
-      gap: 8px;
-      padding-bottom: 8px;
+      gap: var(--space-3);
+      padding: var(--space-3) 2px var(--space-2);
       overflow-x: auto;
     }
-    .keys {
-      margin-left: auto;
-      color: var(--color-text-muted);
-    }
     .frame {
-      flex: 1 0 280px;
+      flex: 1 0 250px;
       display: flex;
       flex-direction: column;
-      gap: 6px;
-      padding: 4px;
-      border-radius: 6px;
+      gap: var(--space-2);
+      padding: var(--space-2);
+      border-radius: var(--radius-lg);
+      background: var(--color-surface-1);
       outline: 2px solid transparent;
+      transition: outline-color var(--duration-fast) var(--ease-out);
     }
     .frame.current {
       outline-color: var(--color-focus);
-    }
-    .make-winner {
-      align-self: flex-start;
-      font-size: 0.75rem;
-    }
-    .actions {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 6px;
-      font-size: 0.75rem;
-    }
-    .actions button {
-      font-size: 0.75rem;
-    }
-    button:disabled {
-      cursor: default;
-      opacity: 0.5;
     }
     .tile {
       flex: 1;
@@ -199,17 +281,36 @@ import { Frame, Group } from './session-api';
       margin: 0;
       padding: 0;
       list-style: none;
-      font-size: 0.75rem;
     }
-    .reasons li {
-      color: var(--color-text);
+    .reasons {
+      font-size: var(--text-sm);
+      color: var(--color-text-secondary);
     }
     .breakdown {
       display: flex;
       flex-wrap: wrap;
-      gap: 2px 10px;
+      gap: 2px var(--space-3);
+      font-size: var(--text-xs);
       color: var(--color-text-muted);
       font-variant-numeric: tabular-nums;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-1);
+      margin-top: auto;
+      padding-top: var(--space-2);
+      border-top: 1px solid var(--color-border);
+    }
+    .select {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-1);
+      margin-right: auto;
+      color: var(--color-text-secondary);
+      font-size: var(--text-sm);
+      cursor: pointer;
     }
   `,
 })
@@ -232,6 +333,7 @@ export class GroupView {
   readonly resetGrouping = output();
 
   protected readonly breakdown = scoreBreakdown;
+  protected readonly shortcutHints = SHORTCUT_HINTS;
   protected readonly selectedIds = signal<ReadonlySet<number>>(new Set());
   protected readonly selected = computed(() =>
     this.group().frames.filter((frame) => this.selectedIds().has(frame.id)),

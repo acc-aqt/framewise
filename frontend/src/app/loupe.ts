@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { FramePicture } from './frame-picture';
+import { Icon } from './icon';
 import { VERDICT_LABELS } from './proposal';
 import { Frame } from './session-api';
 
@@ -8,7 +9,7 @@ export type LoupeZoom = 'fit' | '100%';
 @Component({
   selector: 'app-loupe',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FramePicture],
+  imports: [FramePicture, Icon],
   host: { 'data-testid': 'loupe', role: 'dialog', '[attr.aria-label]': 'frame().jpg_path' },
   template: `
     <div class="stage" [class.actual-size]="zoom() === '100%'" (click)="toggleZoom.emit()">
@@ -22,12 +23,25 @@ export type LoupeZoom = 'fit' | '100%';
       />
     </div>
     <div class="bar">
-      <span>{{ frame().jpg_path }}</span>
-      <span [class]="'verdict ' + frame().verdict">{{ verdictLabels[frame().verdict] }}</span>
-      <button type="button" data-testid="loupe-zoom" (click)="toggleZoom.emit()">
+      <span class="file">{{ frame().jpg_path }}</span>
+      <span [class]="'verdict ' + frame().verdict">
+        <span class="dot"></span>
+        {{ verdictLabels[frame().verdict] }}
+      </span>
+      <button type="button" class="btn" data-testid="loupe-zoom" (click)="toggleZoom.emit()">
+        <app-icon name="zoom" [size]="14" />
         {{ zoom() === '100%' ? '100%' : 'Fit' }}
       </button>
-      <button type="button" (click)="close.emit()">Close</button>
+      <button
+        type="button"
+        class="btn btn-icon"
+        data-testid="loupe-close"
+        aria-label="Close"
+        title="Close"
+        (click)="close.emit()"
+      >
+        <app-icon name="close" />
+      </button>
     </div>
   `,
   styles: `
@@ -37,7 +51,7 @@ export type LoupeZoom = 'fit' | '100%';
       z-index: 10;
       display: flex;
       flex-direction: column;
-      background: var(--color-background);
+      background: var(--color-loupe);
     }
     .stage {
       flex: 1;
@@ -60,36 +74,61 @@ export type LoupeZoom = 'fit' | '100%';
       margin: auto;
     }
     .bar {
+      position: absolute;
+      bottom: var(--space-5);
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: calc(100% - 2 * var(--space-4));
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 8px 16px;
-      font-size: 0.85rem;
-      color: var(--color-text-secondary);
+      gap: var(--space-3);
+      padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      background: color-mix(in srgb, var(--color-surface-1) 90%, transparent);
+      box-shadow: var(--shadow-2);
+      backdrop-filter: blur(8px);
+    }
+    .file {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--color-text-muted);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
     }
     .verdict {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px var(--space-2);
+      border-radius: var(--radius-pill);
+      font-size: var(--text-sm);
       font-weight: 600;
+      white-space: nowrap;
+    }
+    .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: var(--radius-pill);
+      background: currentColor;
     }
     .winner {
       color: var(--color-winner);
+      background: var(--color-winner-tint);
     }
     .keeper {
       color: var(--color-keeper);
+      background: var(--color-keeper-tint);
     }
     .reject {
       color: var(--color-reject);
+      background: var(--color-reject-tint);
     }
     .unsure {
       color: var(--color-unsure);
-    }
-    button {
-      padding: 4px 10px;
-      border: 1px solid var(--color-border);
-      border-radius: 4px;
-      background: var(--color-surface);
-      color: var(--color-text);
-      font: inherit;
-      cursor: pointer;
+      background: var(--color-unsure-tint);
     }
   `,
 })

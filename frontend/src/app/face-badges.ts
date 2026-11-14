@@ -40,22 +40,25 @@ const FOCUS_LABELS: Record<Face['focus'], string> = {
     .face {
       position: absolute;
       border: 1px solid var(--color-keeper);
-      border-radius: 3px;
+      border-radius: var(--radius-sm);
+      box-shadow: 0 0 0 1px var(--color-overlay);
     }
     .face.flagged {
-      border-color: var(--color-unsure);
+      border: 1.5px solid var(--color-unsure);
     }
     .label {
       position: absolute;
       top: 100%;
       left: 50%;
       transform: translateX(-50%);
-      margin-top: 2px;
-      padding: 1px 4px;
-      border-radius: 3px;
+      margin-top: var(--space-1);
+      padding: 1px 5px;
+      border-radius: var(--radius-sm);
       background: var(--color-overlay);
       color: var(--color-keeper);
-      font-size: 0.65rem;
+      font-size: 10px;
+      font-weight: 500;
+      line-height: 1.4;
       white-space: nowrap;
     }
     .flagged .label {

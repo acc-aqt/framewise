@@ -22,6 +22,8 @@ cd backend
 uv run framewise review /path/to/session-folder
 ```
 
+Or leave out the folder (`uv run framewise review`) and choose it in the Review UI: **Choose Session folder…** opens the Finder folder dialog. To review another Session, restart framewise.
+
 This scans the folder, starts the server on `http://127.0.0.1:8765/` and opens the browser straight away. It then analyses each Frame's JPG with Apple Vision (so it runs on macOS only), using every core. The Review UI shows progress and fills in with Groups of near-duplicate and burst Frames as analysis runs. Each Frame gets a proposed Verdict (Winner, Keeper, Reject or Unsure) with Reasons, judged from its sharpness, motion blur, exposure and, on macOS 15 or later, Apple Vision's aesthetics score. In Frames with faces, every face is checked for closed eyes, sharpness and Apple Vision's face capture quality, and sharpness is judged on the faces rather than the whole image. A Camera rating, such as in-camera stars, nudges a Frame up a little but never past a technical flaw. The Keeper budget slider sets roughly what share of the Session's Frames to keep (40% to start, stored per Session): each Group's Winner always stays, then the best Frames without flaws become Keepers until the budget is spent, and the slider shows how many Keepers result. The Review UI filters by Verdict and by Reason, and an open Group and the loupe show a badge on each face. Results are kept in the Session store under `~/Library/Application Support/framewise/`, so a re-run only analyses new or changed Frames.
 
 - `--port` picks another port.

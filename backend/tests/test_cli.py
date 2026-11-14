@@ -168,3 +168,60 @@ def test_review_in_background_mode_analyses_at_background_priority(session_dir, 
     wait_until(lambda: server.progress()["frames_left"] == 0)
 
     assert analyzer.at_background_priority == [True]
+
+
+def test_review_without_a_folder_opens_the_review_ui_with_no_session(isolated_data_dir):
+    server = FakeServer()
+    opened = []
+
+    main(
+        ["review"],
+        serve=server,
+        open_browser=opened.append,
+        analyzer=FakeAnalyzer(),
+        keep_awake=FakeWakeLock(),
+        choose_folder=lambda: None,
+    )
+
+    assert opened == ["http://127.0.0.1:8765/"]
+    assert TestClient(server.app).get("/api/session").status_code == 404
+    assert list(isolated_data_dir.glob("*.sqlite")) == []
+
+
+def test_review_without_a_folder_opens_the_session_chosen_in_the_review_ui(
+    session_dir, isolated_data_dir
+):
+    make_jpg(session_dir / "DSCF0001.JPG")
+    server = FakeServer()
+    main(
+        ["review"],
+        serve=server,
+        open_browser=print,
+        analyzer=FakeAnalyzer(),
+        keep_awake=FakeWakeLock(),
+        choose_folder=lambda: session_dir,
+    )
+    client = TestClient(server.app)
+
+    assert client.post("/api/session/choose").json() == {"opened": True}
+    assert client.get("/api/session").json()["total_frames"] == 1
+    wait_until(lambda: server.progress()["frames_left"] == 0)
+    assert len(client.get("/api/groups").json()) == 1
+
+
+def test_review_without_a_folder_stays_without_a_session_when_the_dialog_is_cancelled(
+    isolated_data_dir,
+):
+    server = FakeServer()
+    main(
+        ["review"],
+        serve=server,
+        open_browser=print,
+        analyzer=FakeAnalyzer(),
+        keep_awake=FakeWakeLock(),
+        choose_folder=lambda: None,
+    )
+    client = TestClient(server.app)
+
+    assert client.post("/api/session/choose").json() == {"opened": False}
+    assert client.get("/api/session").status_code == 404

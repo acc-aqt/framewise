@@ -63,6 +63,7 @@
         class="btn btn-primary"
         data-testid="open-write-back"
         [disabled]="analyzing()"
+        [appTooltip]="writeBackTooltip"
         (click)="openWriteBack()"
       >
         Rating write-back…

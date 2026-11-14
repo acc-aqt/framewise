@@ -86,6 +86,13 @@ describe('Review UI', () => {
     await settle();
   }
 
+  function description(element: HTMLElement): string | undefined {
+    return (
+      document.getElementById(element.getAttribute('aria-describedby') ?? '')?.textContent ??
+      undefined
+    );
+  }
+
   function all(selector: string, root?: HTMLElement): HTMLElement[] {
     return Array.from(
       (root ?? (fixture.nativeElement as HTMLElement)).querySelectorAll<HTMLElement>(selector),
@@ -274,6 +281,18 @@ describe('Review UI', () => {
 
       expect(text('[data-testid="keeper-budget-percent"]')).toBe('20%');
       expect(text('[data-testid="keeper-count"]')).toBe('0 Keepers · 2 of 5 Frames kept');
+    });
+
+    it('explains the Keeper budget in its tooltip', async () => {
+      await respond(summary, judged);
+      vi.useFakeTimers();
+
+      await hover(slider());
+
+      const explanation =
+        "Roughly the share of the Session's Frames to keep. Each Group's Winner is kept regardless.";
+      expect(tooltipText()).toBe(`Keeper budget ${explanation}`);
+      expect(description(slider())).toBe(explanation);
     });
 
     it('says so when the Keeper budget could not be saved', async () => {
@@ -725,6 +744,31 @@ describe('Review UI', () => {
     await settle();
 
     expect(all('[data-testid="command-palette"]')).toEqual([]);
+  });
+
+  it('explains Rating write-back in the tooltip of its button', async () => {
+    await respond(summary, []);
+    vi.useFakeTimers();
+    const button = all('[data-testid="open-write-back"]')[0];
+
+    await hover(button);
+
+    const explanation =
+      "Previews the star ratings and color labels for your reviewed Verdicts, and writes them into the Frames' files only once you confirm.";
+    expect(tooltipText()).toBe(`Rating write-back ${explanation}`);
+    expect(description(button)).toBe(explanation);
+  });
+
+  it('names the Verdict and Reason filters in their tooltips', async () => {
+    await respond(summary, [group(1, [frame(1, 'jpg-only', { verdict: 'winner' })])]);
+    vi.useFakeTimers();
+
+    await hover(all('[data-testid="verdict-filter"]')[0]);
+    expect(tooltipText()).toBe('Filter by Verdict');
+    all('[data-testid="verdict-filter"]')[0].dispatchEvent(new MouseEvent('mouseleave'));
+
+    await hover(all('[data-testid="reason-filter"]')[0]);
+    expect(tooltipText()).toBe('Filter by Reason');
   });
 
   it('virtualizes the grid so a large Session does not render every tile', async () => {

@@ -70,6 +70,11 @@ export class App {
   protected readonly analyzing = computed(
     () => this.progress.hasValue() && this.progress.value().frames_left > 0,
   );
+  protected readonly writeBackTooltip: TooltipContent = {
+    label: 'Rating write-back',
+    explanation:
+      "Previews the star ratings and color labels for your reviewed Verdicts, and writes them into the Frames' files only once you confirm.",
+  };
   // Keyed on Frames done, so the Groups are fetched again each time more Frames are analysed.
   // Without progress, the Groups are still fetched once so an analysed Session stays reviewable.
   protected readonly groups = httpResource<Group[]>(

@@ -35,7 +35,7 @@ const ROW_HEIGHT_PX = 200;
             class="group"
             data-testid="group-tile"
             [attr.aria-label]="'Open Group of ' + frameCount(group)"
-            (click)="open.emit(group.id)"
+            (click)="open.emit(group)"
           >
             <app-frame-tile class="cover" [frame]="group.frames[0]" />
             <span class="count" data-testid="frame-count">{{ frameCount(group) }}</span>
@@ -90,7 +90,7 @@ const ROW_HEIGHT_PX = 200;
 })
 export class GroupGrid {
   readonly groups = input.required<Group[]>();
-  readonly open = output<number>();
+  readonly open = output<Group>();
 
   protected readonly rowHeight = ROW_HEIGHT_PX;
   protected readonly columns = signal(4);

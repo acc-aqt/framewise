@@ -70,6 +70,12 @@ describe('Review UI', () => {
     await settle();
   }
 
+  function openFrameThumbnails(): (string | null | undefined)[] {
+    return all('[data-testid="group-view"] [data-testid="frame-tile"]').map((tile) =>
+      tile.querySelector('img')?.getAttribute('src'),
+    );
+  }
+
   it('shows the Session summary counts', async () => {
     await respond(summary, []);
 
@@ -166,6 +172,45 @@ describe('Review UI', () => {
 
     await nextPoll();
     http.expectNone('/api/progress');
+  });
+
+  it('keeps an open Group open when an update adds an earlier Frame that changes its id', async () => {
+    vi.useFakeTimers();
+    http.expectOne('/api/session').flush(summary);
+    await respondToPoll({ frames_done: 1, frames_left: 2, seconds_remaining: 90 }, [
+      group(2, [frame(2, 'jpg-only')]),
+    ]);
+    all('[data-testid="group-tile"]')[0].click();
+    await settle();
+
+    await nextPoll();
+    await respondToPoll({ frames_done: 3, frames_left: 0, seconds_remaining: 0 }, [
+      group(1, [frame(1, 'jpg-only'), frame(2, 'jpg-only'), frame(3, 'jpg-only')]),
+    ]);
+
+    expect(openFrameThumbnails()).toEqual([
+      '/api/frames/1/thumbnail',
+      '/api/frames/2/thumbnail',
+      '/api/frames/3/thumbnail',
+    ]);
+  });
+
+  it('keeps showing the Group with the opened Frame when its Frames are split across Groups', async () => {
+    vi.useFakeTimers();
+    http.expectOne('/api/session').flush(summary);
+    await respondToPoll({ frames_done: 2, frames_left: 1, seconds_remaining: 45 }, [
+      group(2, [frame(2, 'jpg-only'), frame(3, 'jpg-only')]),
+    ]);
+    all('[data-testid="group-tile"]')[0].click();
+    await settle();
+
+    await nextPoll();
+    await respondToPoll({ frames_done: 3, frames_left: 0, seconds_remaining: 0 }, [
+      group(1, [frame(1, 'jpg-only'), frame(2, 'jpg-only')]),
+      group(3, [frame(3, 'jpg-only')]),
+    ]);
+
+    expect(openFrameThumbnails()).toEqual(['/api/frames/1/thumbnail', '/api/frames/2/thumbnail']);
   });
 
   it('shows Frames done, Frames left and the estimated time remaining while analysis runs', async () => {

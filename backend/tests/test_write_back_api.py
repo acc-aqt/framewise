@@ -90,7 +90,7 @@ def english(tmp_path: Path) -> dict:
 def test_the_dry_run_lists_every_file_with_its_old_and_new_rating_and_writes_nothing(
     session_dir, review, analyzer, english
 ):
-    winner = jpg(session_dir, analyzer, "DSCF0001.JPG", stars=1, aesthetics=0.5)
+    winner = jpg(session_dir, analyzer, "DSCF0001.JPG", stars=1, aesthetics=0.75)
     raf = make_raw(session_dir / "DSCF0002.RAF")
     reject = jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3, **BLURRY)
     before = {path: path.read_bytes() for path in (winner, raf, reject)}
@@ -131,7 +131,7 @@ def test_the_dry_run_lists_every_file_with_its_old_and_new_rating_and_writes_not
 def test_each_verdict_is_written_as_its_stars_and_color_label(
     session_dir, review, analyzer, english
 ):
-    winner = jpg(session_dir, analyzer, "DSCF0001.JPG", aesthetics=0.5)
+    winner = jpg(session_dir, analyzer, "DSCF0001.JPG", aesthetics=0.75)
     keeper = jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3)
     reject = jpg(session_dir, analyzer, "DSCF0003.JPG", 0.6, **BLURRY)
     unsure = jpg(session_dir, analyzer, "DSCF0004.JPG", 0.9, **SOFT)
@@ -200,7 +200,7 @@ def test_an_existing_sidecar_is_merged_and_keeps_its_develop_settings(
 ):
     make_raw(session_dir / "DSCF0001.RAF")
     jpg(session_dir, analyzer, "DSCF0001.JPG", **BLURRY)
-    jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3, aesthetics=0.5)
+    jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3, aesthetics=0.75)
     sidecar = make_sidecar(session_dir / "DSCF0001.xmp", stars=1)
     exiftool(
         "-overwrite_original",
@@ -246,7 +246,7 @@ def test_a_jpg_keeps_its_other_metadata_and_image_data(session_dir, review, anal
 def test_label_names_come_from_the_active_lightroom_color_label_set(
     session_dir, review, analyzer, tmp_path
 ):
-    jpg(session_dir, analyzer, "DSCF0001.JPG", aesthetics=0.5)
+    jpg(session_dir, analyzer, "DSCF0001.JPG", aesthetics=0.75)
     reject = jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3, **BLURRY)
     unsure = jpg(session_dir, analyzer, "DSCF0003.JPG", 0.6, **SOFT)
     client = review(lightroom_preferences=lightroom_preferences(tmp_path, "Rot", "Gelb"))
@@ -271,7 +271,7 @@ def test_without_a_lightroom_label_set_the_english_defaults_are_used_and_the_dry
     session_dir, review, analyzer, tmp_path
 ):
     reject = jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3, **BLURRY)
-    jpg(session_dir, analyzer, "DSCF0001.JPG", aesthetics=0.5)
+    jpg(session_dir, analyzer, "DSCF0001.JPG", aesthetics=0.75)
     client = review(lightroom_preferences=tmp_path / "missing.plist")
 
     dry_run = client.get("/api/write-back").json()
@@ -288,7 +288,7 @@ def test_undo_restores_old_values_and_removes_sidecars_framewise_created(
     session_dir, review, analyzer, english
 ):
     dng = make_dng(session_dir / "L1000001.DNG", stars=1, label="Blue")
-    dng_jpg = jpg(session_dir, analyzer, "L1000001.JPG", stars=1, aesthetics=0.5)
+    dng_jpg = jpg(session_dir, analyzer, "L1000001.JPG", stars=1, aesthetics=0.75)
     new_sidecar_raf = make_raw(session_dir / "DSCF0002.RAF")
     jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3, **BLURRY)
     make_raw(session_dir / "DSCF0003.RAF")
@@ -312,7 +312,7 @@ def test_undo_restores_old_values_and_removes_sidecars_framewise_created(
 def test_re_applying_after_the_verdicts_change_writes_the_final_state_and_undo_restores_the_first(
     session_dir, review, analyzer, english
 ):
-    first = jpg(session_dir, analyzer, "DSCF0001.JPG", stars=1, aesthetics=0.5)
+    first = jpg(session_dir, analyzer, "DSCF0001.JPG", stars=1, aesthetics=0.75)
     review(**english).post("/api/write-back")
     assert rating(first) == {"stars": 3, "label": None}
 
@@ -373,7 +373,7 @@ def test_frames_are_not_analysed_again_after_write_back(session_dir, review, ana
 def test_the_camera_rating_is_kept_after_write_back_and_a_re_run(
     session_dir, review, analyzer, english
 ):
-    jpg(session_dir, analyzer, "DSCF0001.JPG", stars=1, aesthetics=0.5)
+    jpg(session_dir, analyzer, "DSCF0001.JPG", stars=1, aesthetics=0.75)
     make_raw(session_dir / "DSCF0002.RAF")
     jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3, **BLURRY)
     review(**english).post("/api/write-back")
@@ -387,7 +387,7 @@ def test_the_camera_rating_is_kept_after_write_back_and_a_re_run(
 def test_after_undo_and_a_re_run_the_camera_rating_is_read_from_the_files_again(
     session_dir, review, analyzer, english
 ):
-    winner = jpg(session_dir, analyzer, "DSCF0001.JPG", stars=1, aesthetics=0.5)
+    winner = jpg(session_dir, analyzer, "DSCF0001.JPG", stars=1, aesthetics=0.75)
     client = review(**english)
     client.post("/api/write-back")
     client.post("/api/write-back/undo")
@@ -403,7 +403,7 @@ def override(client, name: str, **change) -> None:
 
 
 def test_the_final_verdict_with_overrides_is_written(session_dir, review, analyzer, english):
-    framewise_winner = jpg(session_dir, analyzer, "DSCF0001.JPG", aesthetics=0.5)
+    framewise_winner = jpg(session_dir, analyzer, "DSCF0001.JPG", aesthetics=0.75)
     chosen_winner = jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3)
     client = keep_every_clean_frame(review(**english))
 
@@ -415,7 +415,7 @@ def test_the_final_verdict_with_overrides_is_written(session_dir, review, analyz
 
 
 def test_override_stars_and_label_beat_the_verdict_mapping(session_dir, review, analyzer, tmp_path):
-    winner = jpg(session_dir, analyzer, "DSCF0001.JPG", aesthetics=0.5)
+    winner = jpg(session_dir, analyzer, "DSCF0001.JPG", aesthetics=0.75)
     reject = jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3, **BLURRY)
     client = review(lightroom_preferences=lightroom_preferences(tmp_path, "Rot", "Gelb"))
 
@@ -433,7 +433,7 @@ def test_override_stars_and_label_beat_the_verdict_mapping(session_dir, review, 
 def test_re_applying_after_more_overrides_writes_the_final_state(
     session_dir, review, analyzer, english
 ):
-    first = jpg(session_dir, analyzer, "DSCF0001.JPG", stars=1, aesthetics=0.5)
+    first = jpg(session_dir, analyzer, "DSCF0001.JPG", stars=1, aesthetics=0.75)
     raw = make_raw(session_dir / "DSCF0002.RAF")
     second = jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3)
     client = review(**english)
@@ -457,7 +457,7 @@ def test_re_applying_after_more_overrides_writes_the_final_state(
 def test_resetting_the_session_restores_the_files_and_forgets_the_review(
     session_dir, review, analyzer, english
 ):
-    first = jpg(session_dir, analyzer, "DSCF0001.JPG", stars=1, aesthetics=0.5)
+    first = jpg(session_dir, analyzer, "DSCF0001.JPG", stars=1, aesthetics=0.75)
     raw = make_raw(session_dir / "DSCF0002.RAF")
     second = jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3)
     client = review(**english)

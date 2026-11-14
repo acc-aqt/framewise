@@ -26,7 +26,7 @@ def test_closed_eyes_make_a_frame_unsure_when_no_open_eyes_frame_beats_it(
     burst(
         session_dir,
         analyzer,
-        ("DSCF0001", {"faces": [face(eyes_open=False)], "aesthetics": 0.5}),
+        ("DSCF0001", {"faces": [face(eyes_open=False)], "aesthetics": 0.75}),
         ("DSCF0002", {"faces": [face(eyes_open=False)]}),
     )
 
@@ -58,7 +58,7 @@ def test_closed_eyes_become_a_reject_when_the_group_has_a_better_open_eyes_frame
     burst(
         session_dir,
         analyzer,
-        ("DSCF0001", {"faces": [face(eyes_open=False)], "aesthetics": 0.6}),
+        ("DSCF0001", {"faces": [face(eyes_open=False)], "aesthetics": 0.8}),
         ("DSCF0002", {"faces": [face()]}),
     )
 
@@ -75,8 +75,8 @@ def test_closed_eyes_stay_unsure_when_the_open_eyes_frame_is_itself_flawed(
     burst(
         session_dir,
         analyzer,
-        ("DSCF0001", {"faces": [face(eyes_open=False)], "aesthetics": -0.6}),
-        ("DSCF0002", {"faces": [face()], "exposure_stops": -1.0, "aesthetics": 0.6}),
+        ("DSCF0001", {"faces": [face(eyes_open=False)], "aesthetics": 0.2}),
+        ("DSCF0002", {"faces": [face()], "exposure_stops": -1.0, "aesthetics": 0.8}),
     )
 
     assert verdicts(review()) == {"DSCF0001.JPG": "unsure", "DSCF0002.JPG": "winner"}
@@ -99,9 +99,9 @@ def test_in_a_group_shot_one_closed_pair_of_eyes_loses_to_a_frame_where_everyone
         analyzer,
         (
             "DSCF0001",
-            {"faces": [face(x=0.1), face(x=0.4, eyes_open=False), face(x=0.7)], "aesthetics": 0.9},
+            {"faces": [face(x=0.1), face(x=0.4, eyes_open=False), face(x=0.7)], "aesthetics": 0.95},
         ),
-        ("DSCF0002", {"faces": [face(x=0.1), face(x=0.4), face(x=0.7)], "aesthetics": -0.5}),
+        ("DSCF0002", {"faces": [face(x=0.1), face(x=0.4), face(x=0.7)], "aesthetics": 0.25}),
     )
 
     frames = frames_by_name(review())
@@ -117,8 +117,8 @@ def test_in_a_group_shot_one_soft_face_loses_to_a_frame_where_every_face_is_shar
     burst(
         session_dir,
         analyzer,
-        ("DSCF0001", {"faces": [face(x=0.1), face(x=0.6, sharpness=0.4)], "aesthetics": 0.9}),
-        ("DSCF0002", {"faces": [face(x=0.1), face(x=0.6)], "aesthetics": -0.5}),
+        ("DSCF0001", {"faces": [face(x=0.1), face(x=0.6, sharpness=0.4)], "aesthetics": 0.95}),
+        ("DSCF0002", {"faces": [face(x=0.1), face(x=0.6)], "aesthetics": 0.25}),
     )
 
     frames = frames_by_name(review())
@@ -143,7 +143,7 @@ def test_a_sharp_background_with_a_soft_face_does_not_win_over_a_sharp_face(
     burst(
         session_dir,
         analyzer,
-        ("DSCF0001", {"sharpness": 0.95, "faces": [face(sharpness=0.55)], "aesthetics": 0.3}),
+        ("DSCF0001", {"sharpness": 0.95, "faces": [face(sharpness=0.55)], "aesthetics": 0.65}),
         ("DSCF0002", {"sharpness": 0.6, "faces": [face(sharpness=0.95)]}),
     )
 
@@ -161,8 +161,8 @@ def test_a_face_as_sharp_as_the_sharp_reference_face_scores_full_sharpness(
     burst(
         session_dir,
         analyzer,
-        ("DSCF0001", {"faces": [face(sharpness=0.67)], "aesthetics": 0.5}),
-        ("DSCF0002", {"faces": [face(sharpness=1.0)], "aesthetics": 0.3}),
+        ("DSCF0001", {"faces": [face(sharpness=0.67)], "aesthetics": 0.75}),
+        ("DSCF0002", {"faces": [face(sharpness=1.0)], "aesthetics": 0.65}),
     )
 
     frames = frames_by_name(review())

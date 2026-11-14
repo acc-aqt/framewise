@@ -3,7 +3,7 @@ import os
 import sys
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
@@ -13,17 +13,31 @@ from framewise.analyzer import FrameAnalyzer, FrameSignals
 from framewise.camera_rating import CameraRating, read_camera_rating
 from framewise.capture_time import read_capture_time
 from framewise.exiftool import ExifTool
+from framewise.grouper import group_frames
 from framewise.scan import scan_session
-from framewise.store import SessionStore
+from framewise.store import AnalyzedFrame, SessionStore
 from framewise.thumbnails import make_thumbnail
 from framewise.write_back import RatingWriteBack, WriteBackResult
 
-DEFAULT_DATA_DIR = Path.home() / "Library" / "Application Support" / "framewise"
 BACKGROUND_CORE_DIVISOR = 4
+LOWEST_PRIORITY_NICENESS = 19
+
+
+def default_data_dir(platform: str, environ: Mapping[str, str], home: Path) -> Path:
+    """Application Support on macOS, the XDG data directory elsewhere."""
+    if platform == "darwin":
+        return home / "Library" / "Application Support" / "framewise"
+    return Path(environ.get("XDG_DATA_HOME") or home / ".local" / "share") / "framewise"
 
 
 def resolve_data_dir() -> Path:
-    return Path(os.environ.get("FRAMEWISE_DATA_DIR", DEFAULT_DATA_DIR))
+    if "FRAMEWISE_DATA_DIR" in os.environ:
+        return Path(os.environ["FRAMEWISE_DATA_DIR"])
+    return default_data_dir(sys.platform, os.environ, Path.home())
+
+
+def resolve_config_path() -> Path:
+    return resolve_data_dir() / "config.toml"
 
 
 def session_database_path(root: Path, data_dir: Path) -> Path:
@@ -129,6 +143,14 @@ class SessionAnalysis:
                     )
                 self._count_done(item)
 
+    def groups(self, group_overrides: Mapping[str, str] | None = None) -> list[list[AnalyzedFrame]]:
+        """The Groups of the Frames analysed so far by the current Providers."""
+        return group_frames(
+            self._store.analyzed_frames(self._analyzer.signature),
+            self._analyzer.similarity,
+            group_overrides,
+        )
+
     def progress(self) -> AnalysisProgress:
         with self._lock:
             frames_left = self._frames_total - self._frames_done
@@ -154,7 +176,7 @@ class SessionAnalysis:
         return _FrameWork(
             jpg_path=jpg_path,
             needs_thumbnail=not self._store.has_current_thumbnail(jpg_path),
-            needs_analysis=not self._store.has_current_analysis(jpg_path),
+            needs_analysis=not self._store.has_current_analysis(jpg_path, self._analyzer.signature),
         )
 
     def _process(self, item: _FrameWork) -> _FrameResult:
@@ -172,7 +194,9 @@ class SessionAnalysis:
         if result.thumbnail is not None:
             self._store.save_thumbnail(result.jpg_path, result.thumbnail)
         if result.signals is not None:
-            self._store.save_analysis(result.jpg_path, result.signals, result.captured_at)
+            self._store.save_analysis(
+                result.jpg_path, result.signals, result.captured_at, self._analyzer.signature
+            )
 
     def _count_done(self, item: _FrameWork) -> None:
         with self._lock:
@@ -188,5 +212,10 @@ class SessionAnalysis:
         return max(1, cores // BACKGROUND_CORE_DIVISOR) if self._background else cores
 
     def _prepare_worker(self) -> None:
-        if self._background and sys.platform == "darwin":
+        if not self._background:
+            return
+        if sys.platform == "darwin":
             os.setpriority(os.PRIO_DARWIN_THREAD, 0, os.PRIO_DARWIN_BG)
+        elif sys.platform == "linux":
+            # Linux keeps a niceness per thread, addressed by its thread id.
+            os.setpriority(os.PRIO_PROCESS, threading.get_native_id(), LOWEST_PRIORITY_NICENESS)

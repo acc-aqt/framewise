@@ -6,7 +6,23 @@ from pathlib import Path
 import pytest
 from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter
 
+from framewise.providers import compose_analyzer, discover_providers, select_providers
+
 pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="Apple Vision runs on macOS only")
+
+
+def apple_vision():
+    from framewise import apple_vision as apple
+
+    return compose_analyzer(
+        [
+            apple.AppleFingerprint(),
+            apple.AppleFaceDetection(),
+            apple.AppleEyeState(),
+            apple.AppleFaceQuality(),
+            apple.AppleAesthetics(),
+        ]
+    )
 
 
 def draw_landscape(path: Path, shift: int = 0) -> Path:
@@ -48,9 +64,7 @@ def similarity(first: list[float], second: list[float]) -> float:
 
 
 def test_near_identical_frames_are_more_similar_than_unrelated_frames(tmp_path):
-    from framewise.vision_analyzer import VisionAnalyzer
-
-    analyzer = VisionAnalyzer()
+    analyzer = apple_vision()
     landscape = draw_landscape(tmp_path / "landscape.jpg")
     landscape_again = a_moment_later(landscape, tmp_path / "landscape-again.jpg")
     still_life = draw_still_life(tmp_path / "still-life.jpg")
@@ -102,9 +116,7 @@ def draw_low_key_portrait(path: Path) -> Path:
 
 
 def test_sharpness_separates_sharp_from_blurred_frames(tmp_path):
-    from framewise.vision_analyzer import VisionAnalyzer
-
-    analyzer = VisionAnalyzer()
+    analyzer = apple_vision()
     sharp = draw_landscape(tmp_path / "sharp.jpg")
     blurred = gaussian_blurred(sharp, tmp_path / "blurred.jpg")
 
@@ -113,9 +125,7 @@ def test_sharpness_separates_sharp_from_blurred_frames(tmp_path):
 
 
 def test_motion_blur_separates_steady_from_smeared_frames(tmp_path):
-    from framewise.vision_analyzer import VisionAnalyzer
-
-    analyzer = VisionAnalyzer()
+    analyzer = apple_vision()
     steady = draw_still_life(tmp_path / "steady.jpg")
     smeared = motion_blurred(steady, tmp_path / "smeared.jpg")
     defocused = gaussian_blurred(steady, tmp_path / "defocused.jpg")
@@ -126,9 +136,7 @@ def test_motion_blur_separates_steady_from_smeared_frames(tmp_path):
 
 
 def test_exposure_separates_correct_from_underexposed_frames(tmp_path):
-    from framewise.vision_analyzer import VisionAnalyzer
-
-    analyzer = VisionAnalyzer()
+    analyzer = apple_vision()
     correct = draw_landscape(tmp_path / "correct.jpg")
     dark = re_exposed(correct, tmp_path / "dark.jpg", stops=-2)
 
@@ -141,18 +149,14 @@ def test_exposure_separates_correct_from_underexposed_frames(tmp_path):
 
 
 def test_a_dark_frame_with_bright_highlights_is_low_key(tmp_path):
-    from framewise.vision_analyzer import VisionAnalyzer
-
-    signals = VisionAnalyzer().analyze(draw_low_key_portrait(tmp_path / "low-key.jpg"))
+    signals = apple_vision().analyze(draw_low_key_portrait(tmp_path / "low-key.jpg"))
 
     assert signals.exposure_stops < -1
     assert signals.low_key
 
 
 def test_a_bright_frame_with_intact_highlights_is_high_key_and_a_clipped_one_is_not(tmp_path):
-    from framewise.vision_analyzer import VisionAnalyzer
-
-    analyzer = VisionAnalyzer()
+    analyzer = apple_vision()
     bright = draw_still_life(tmp_path / "bright.jpg")
     clipped = re_exposed(bright, tmp_path / "clipped.jpg", stops=1.5)
 
@@ -169,13 +173,11 @@ def test_a_bright_frame_with_intact_highlights_is_high_key_and_a_clipped_one_is_
     sys.platform == "darwin" and int(platform.mac_ver()[0].split(".")[0]) < 15,
     reason="Apple Vision's aesthetics request needs macOS 15",
 )
-def test_the_aesthetics_score_ranges_from_minus_one_to_one(tmp_path):
-    from framewise.vision_analyzer import VisionAnalyzer
-
-    aesthetics = VisionAnalyzer().analyze(draw_still_life(tmp_path / "still-life.jpg")).aesthetics
+def test_the_aesthetics_score_ranges_from_zero_to_one(tmp_path):
+    aesthetics = apple_vision().analyze(draw_still_life(tmp_path / "still-life.jpg")).aesthetics
 
     assert aesthetics is not None
-    assert -1 <= aesthetics <= 1
+    assert 0 <= aesthetics <= 1
 
 
 FACES = Path(__file__).parent / "fixtures" / "faces"
@@ -195,15 +197,11 @@ def side_by_side(paths: list[Path], path: Path) -> Path:
 
 
 def test_a_frame_without_faces_has_none(tmp_path):
-    from framewise.vision_analyzer import VisionAnalyzer
-
-    assert VisionAnalyzer().analyze(draw_landscape(tmp_path / "landscape.jpg")).faces == []
+    assert apple_vision().analyze(draw_landscape(tmp_path / "landscape.jpg")).faces == []
 
 
 def test_the_real_analyzer_tells_open_from_closed_eyes():
-    from framewise.vision_analyzer import VisionAnalyzer
-
-    analyzer = VisionAnalyzer()
+    analyzer = apple_vision()
     [open_face] = analyzer.analyze(FACES / "eyes-open.jpg").faces
     [closed_face] = analyzer.analyze(FACES / "eyes-closed.jpg").faces
 
@@ -212,9 +210,7 @@ def test_the_real_analyzer_tells_open_from_closed_eyes():
 
 
 def test_each_face_has_a_box_from_the_top_left_a_sharpness_and_a_quality():
-    from framewise.vision_analyzer import VisionAnalyzer
-
-    [face] = VisionAnalyzer().analyze(FACES / "eyes-open.jpg").faces
+    [face] = apple_vision().analyze(FACES / "eyes-open.jpg").faces
 
     assert 0.2 < face.x < 0.4 and 0.2 < face.y < 0.4
     assert 0.3 < face.width < 0.5 and 0.3 < face.height < 0.5
@@ -223,9 +219,7 @@ def test_each_face_has_a_box_from_the_top_left_a_sharpness_and_a_quality():
 
 
 def test_a_blurred_face_is_less_sharp(tmp_path):
-    from framewise.vision_analyzer import VisionAnalyzer
-
-    analyzer = VisionAnalyzer()
+    analyzer = apple_vision()
     blurred = gaussian_blurred(FACES / "eyes-open.jpg", tmp_path / "blurred.jpg")
 
     [sharp_face] = analyzer.analyze(FACES / "eyes-open.jpg").faces
@@ -259,9 +253,7 @@ def stored_rotated(source: Path, path: Path) -> Path:
 
 
 def test_a_face_is_measured_where_it_appears_in_a_frame_stored_on_its_side(tmp_path):
-    from framewise.vision_analyzer import VisionAnalyzer
-
-    analyzer = VisionAnalyzer()
+    analyzer = apple_vision()
     upright = portrait(tmp_path / "upright.jpg", background=128)
     on_its_side = stored_rotated(upright, tmp_path / "on-its-side.jpg")
 
@@ -272,21 +264,17 @@ def test_a_face_is_measured_where_it_appears_in_a_frame_stored_on_its_side(tmp_p
 
 
 def test_a_portrait_against_a_blown_out_white_wall_is_high_key(tmp_path):
-    from framewise.vision_analyzer import VisionAnalyzer
-
-    signals = VisionAnalyzer().analyze(portrait(tmp_path / "white-wall.jpg", background=255))
+    signals = apple_vision().analyze(portrait(tmp_path / "white-wall.jpg", background=255))
 
     assert signals.exposure_stops > 1.25
     assert signals.high_key
 
 
 def test_a_portrait_whose_face_is_blown_out_is_not_high_key(tmp_path):
-    from framewise.vision_analyzer import VisionAnalyzer
-
     white_wall = portrait(tmp_path / "white-wall.jpg", background=255)
     blown_out = re_exposed(white_wall, tmp_path / "blown-out.jpg", stops=1.5)
 
-    signals = VisionAnalyzer().analyze(blown_out)
+    signals = apple_vision().analyze(blown_out)
 
     assert signals.faces
     assert signals.exposure_stops > 1.25
@@ -294,13 +282,52 @@ def test_a_portrait_whose_face_is_blown_out_is_not_high_key(tmp_path):
 
 
 def test_the_real_analyzer_checks_every_face_in_a_group_shot(tmp_path):
-    from framewise.vision_analyzer import VisionAnalyzer
-
     group_shot = side_by_side(
         [FACES / "eyes-open.jpg", FACES / "eyes-closed.jpg", FACES / "eyes-open.jpg"],
         tmp_path / "group-shot.jpg",
     )
 
-    faces = sorted(VisionAnalyzer().analyze(group_shot).faces, key=lambda face: face.x)
+    faces = sorted(apple_vision().analyze(group_shot).faces, key=lambda face: face.x)
 
     assert [face.eyes_open for face in faces] == [True, False, True]
+
+
+def test_framewise_registers_its_apple_vision_providers_like_any_plug_in():
+    chosen = select_providers(discover_providers())
+
+    assert chosen["fingerprint"].id == "apple-vision-fingerprint"
+    assert chosen["face-detection"].id == "apple-vision-face-detection"
+    assert chosen["eye-state"].id == "apple-vision-eye-state"
+    assert chosen["face-quality"].id == "apple-vision-face-quality"
+
+
+# Where the reference face sits in its fixture, as a hand-drawn box rather than Vision's own.
+FIXTURE_FACE_BOX = (0.28, 0.27, 0.42, 0.42)
+
+
+def test_eye_state_reads_the_eyes_inside_boxes_from_another_detector():
+    from framewise.apple_vision import AppleEyeState
+
+    eye_state = AppleEyeState()
+
+    assert eye_state.eyes_open(FACES / "eyes-open.jpg", [FIXTURE_FACE_BOX]) == [True]
+    assert eye_state.eyes_open(FACES / "eyes-closed.jpg", [FIXTURE_FACE_BOX]) == [False]
+
+
+def test_face_quality_scores_boxes_from_another_detector():
+    from framewise.apple_vision import AppleFaceQuality
+
+    [quality] = AppleFaceQuality().face_quality(FACES / "eyes-open.jpg", [FIXTURE_FACE_BOX])
+
+    assert quality is not None and 0 <= quality <= 1
+
+
+def test_each_face_in_a_group_shot_keeps_its_own_quality(tmp_path):
+    group_shot = side_by_side(
+        [FACES / "eyes-open.jpg", FACES / "eyes-closed.jpg"] * 2,
+        tmp_path / "group-shot.jpg",
+    )
+
+    faces = sorted(apple_vision().analyze(group_shot).faces, key=lambda face: face.x)
+
+    assert [face.quality > 0.5 for face in faces] == [True, False, True, False]

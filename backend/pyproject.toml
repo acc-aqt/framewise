@@ -13,9 +13,23 @@ dependencies = [
     "uvicorn>=0.54.0",
 ]
 
+[project.optional-dependencies]
+portable = [
+    "mediapipe>=1.2.3",
+]
+
 [project.scripts]
 framewise = "framewise.cli:main"
 framewise-benchmark = "framewise.benchmark:main"
+
+[project.entry-points."framewise.providers"]
+apple-vision-fingerprint = "framewise.apple_vision:AppleFingerprint"
+apple-vision-face-detection = "framewise.apple_vision:AppleFaceDetection"
+apple-vision-eye-state = "framewise.apple_vision:AppleEyeState"
+apple-vision-face-quality = "framewise.apple_vision:AppleFaceQuality"
+apple-vision-aesthetics = "framewise.apple_vision:AppleAesthetics"
+mediapipe-face-detection = "framewise.mediapipe_faces:MediaPipeFaceDetection"
+mediapipe-eye-state = "framewise.mediapipe_faces:MediaPipeEyeState"
 
 [build-system]
 requires = ["uv_build>=0.13.8,<0.14.0"]

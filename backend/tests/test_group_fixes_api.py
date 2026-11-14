@@ -23,10 +23,10 @@ def beach_burst(session_dir, analyzer) -> None:
         session_dir,
         analyzer,
         BEACH,
-        ("DSCF0001", 0, {"aesthetics": 0.9}),
-        ("DSCF0002", 0.3, {"aesthetics": 0.4}),
-        ("DSCF0003", 0.6, {"aesthetics": 0.0}),
-        ("DSCF0004", 0.9, {"aesthetics": -0.6}),
+        ("DSCF0001", 0, {"aesthetics": 0.95}),
+        ("DSCF0002", 0.3, {"aesthetics": 0.7}),
+        ("DSCF0003", 0.6, {"aesthetics": 0.5}),
+        ("DSCF0004", 0.9, {"aesthetics": 0.2}),
     )
 
 

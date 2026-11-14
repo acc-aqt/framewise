@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, "epic/**"]
+
+jobs:
+  backend:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install ExifTool and the OpenGL libraries MediaPipe loads (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl libgl1 libegl1 libgles2
+
+      - name: Install ExifTool (macOS)
+        if: runner.os == 'macOS'
+        run: brew install exiftool
+
+      - name: Install (macOS)
+        if: runner.os == 'macOS'
+        run: uv sync --locked
+
+      - name: Install with the portable Providers and their models (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          uv sync --locked --extra portable
+          uv run python -c "import framewise.mediapipe_faces as m; assert m.MediaPipeFaceDetection().is_available()"
+          uv run framewise models download
+
+      - run: uv run ruff check
+
+      - run: uv run ruff format --check
+
+      - run: uv run pytest

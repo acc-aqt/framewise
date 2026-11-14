@@ -254,7 +254,7 @@ def _scores(analyzed: AnalyzedFrame) -> Scores:
         "sharpness": _sharpness_score(signals),
         "steadiness": _clamp(1 - signals.motion_blur),
         "exposure": _exposure_score(signals, analyzed.frame.kind),
-        "aesthetics": None if signals.aesthetics is None else _clamp((signals.aesthetics + 1) / 2),
+        "aesthetics": None if signals.aesthetics is None else _clamp(signals.aesthetics),
         "face_quality": _face_quality(signals.faces),
     }
     available = {name: value for name, value in components.items() if value is not None}

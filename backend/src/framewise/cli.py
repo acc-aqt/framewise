@@ -1,11 +1,12 @@
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import threading
 import time
 import webbrowser
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from pathlib import Path
 
@@ -16,10 +17,13 @@ from starlette.types import ASGIApp
 from framewise.analyzer import FrameAnalyzer
 from framewise.exiftool import ExifTool
 from framewise.lightroom import LIGHTROOM_PREFERENCES
+from framewise.models import MODELS, Model, ModelError, ensure_model
+from framewise.providers import ProviderError, resolve_analyzer
 from framewise.review import (
     SessionAnalysis,
     hard_reset_session,
     open_session,
+    resolve_config_path,
     resolve_data_dir,
     session_database_path,
 )
@@ -50,28 +54,68 @@ def serve_with_uvicorn(app: ASGIApp, host: str, port: int, on_ready: Callable[[]
 
 
 @contextmanager
-def keep_mac_awake() -> Iterator[None]:
+def keep_machine_awake() -> Iterator[None]:
     """Stops idle sleep until the block ends, or until framewise exits if it ends first."""
+    command = _wake_lock_command()
+    if command is None:
+        print("framewise: warning: cannot keep the machine awake here", file=sys.stderr)
+        yield
+        return
     try:
-        caffeinate = subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())])
+        wake_lock = subprocess.Popen(command)
     except OSError as error:
-        print(f"framewise: warning: cannot keep the Mac awake: {error}", file=sys.stderr)
+        print(f"framewise: warning: cannot keep the machine awake: {error}", file=sys.stderr)
         yield
         return
     try:
         yield
     finally:
-        caffeinate.terminate()
-        caffeinate.wait()
+        wake_lock.terminate()
+        wake_lock.wait()
 
 
-def choose_folder_in_finder() -> Path | None:
-    """Asks for a Session folder with the Finder folder dialog, or None if cancelled."""
-    script = 'activate\nPOSIX path of (choose folder with prompt "Choose a Session folder")'
-    result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+def _wake_lock_command() -> list[str] | None:
+    pid = str(os.getpid())
+    if sys.platform == "darwin":
+        return ["caffeinate", "-i", "-w", pid]
+    if shutil.which("systemd-inhibit"):
+        return [
+            "systemd-inhibit",
+            "--what=idle",
+            "--who=framewise",
+            "--why=Analysing a Session",
+            "tail",
+            f"--pid={pid}",
+            "-f",
+            "/dev/null",
+        ]
+    return None
+
+
+def choose_folder_in_dialog() -> Path | None:
+    """Asks for a Session folder with the system's folder dialog, or None if cancelled or
+    there is none."""
+    command = _folder_dialog_command()
+    if command is None:
+        print(
+            "framewise: warning: no folder dialog here, pass the Session folder to "
+            "`framewise review` instead",
+            file=sys.stderr,
+        )
+        return None
+    result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:
         return None
     return Path(result.stdout.strip())
+
+
+def _folder_dialog_command() -> list[str] | None:
+    if sys.platform == "darwin":
+        script = 'activate\nPOSIX path of (choose folder with prompt "Choose a Session folder")'
+        return ["osascript", "-e", script]
+    if shutil.which("zenity"):
+        return ["zenity", "--file-selection", "--directory", "--title=Choose a Session folder"]
+    return None
 
 
 def analyze_in_background(analysis: SessionAnalysis, keep_awake: KeepAwake) -> None:
@@ -106,13 +150,25 @@ def hard_reset(folder: Path) -> None:
     )
 
 
+def download_models(models: Sequence[Model]) -> None:
+    data_dir = resolve_data_dir()
+    for model in models:
+        try:
+            path = ensure_model(model, data_dir)
+        except ModelError as error:
+            print(f"framewise: error: {error}", file=sys.stderr)
+            sys.exit(1)
+        print(f"framewise: {model.file_name} is ready at {path}")
+
+
 def main(
     argv: list[str] | None = None,
     serve: Serve = serve_with_uvicorn,
     open_browser: Callable[[str], object] = webbrowser.open,
     analyzer: FrameAnalyzer | None = None,
-    keep_awake: KeepAwake = keep_mac_awake,
-    choose_folder: ChooseFolder = choose_folder_in_finder,
+    keep_awake: KeepAwake = keep_machine_awake,
+    choose_folder: ChooseFolder = choose_folder_in_dialog,
+    models: Sequence[Model] = MODELS,
 ) -> None:
     parser = argparse.ArgumentParser(prog="framewise")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -132,7 +188,7 @@ def main(
     review.add_argument(
         "--allow-sleep",
         action="store_true",
-        help="Let the Mac go to sleep while analysis runs",
+        help="Let the machine go to sleep while analysis runs",
     )
     reset = commands.add_parser(
         "reset",
@@ -140,7 +196,16 @@ def main(
         "so the next review analyses every Frame again",
     )
     reset.add_argument("session_folder", type=Path)
+    models_command = commands.add_parser("models", help="Manage the portable Providers' models")
+    models_actions = models_command.add_subparsers(dest="action", required=True)
+    models_actions.add_parser(
+        "download", help="Fetch every model the portable Providers need, for offline use"
+    )
     args = parser.parse_args(argv)
+
+    if args.command == "models":
+        download_models(models)
+        return
 
     if args.session_folder is not None and not args.session_folder.is_dir():
         parser.error(f"not a folder: {args.session_folder}")
@@ -150,10 +215,7 @@ def main(
         return
 
     if analyzer is None:
-        # Imported here so the rest of framewise imports where Apple Vision doesn't exist.
-        from framewise.vision_analyzer import VisionAnalyzer
-
-        analyzer = VisionAnalyzer()
+        analyzer = _resolve_analyzer()
 
     def start_session(folder: Path) -> FastAPI:
         store = open_session(folder, resolve_data_dir())
@@ -176,3 +238,11 @@ def main(
             file=sys.stderr,
         )
     serve(app, HOST, args.port, lambda: open_browser(url))
+
+
+def _resolve_analyzer() -> FrameAnalyzer:
+    try:
+        return resolve_analyzer(resolve_config_path())
+    except ProviderError as error:
+        print(f"framewise: error: {error}", file=sys.stderr)
+        sys.exit(1)

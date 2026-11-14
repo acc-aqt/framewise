@@ -22,13 +22,24 @@ cd backend
 uv run framewise review /path/to/session-folder
 ```
 
-Or leave out the folder (`uv run framewise review`) and choose it in the Review UI: **Choose Session folder…** opens the Finder folder dialog. To review another Session, restart framewise. framewise scans subfolders too; put an empty `.framewise-ignore` file in a folder to leave it and everything under it out of the Session.
+Or leave out the folder (`uv run framewise review`) and choose it in the Review UI: **Choose Session folder…** opens the Finder folder dialog (on Linux, zenity's). To review another Session, restart framewise. framewise scans subfolders too; put an empty `.framewise-ignore` file in a folder to leave it and everything under it out of the Session.
 
-This scans the folder, starts the server on `http://127.0.0.1:8765/` and opens the browser straight away. It then analyses each Frame's JPG with Apple Vision (so it runs on macOS only), using every core. The Review UI shows progress and fills in with Groups of near-duplicate and burst Frames as analysis runs. Each Frame gets a proposed Verdict (Winner, Keeper, Reject or Unsure) with Reasons, judged from its sharpness, motion blur, exposure and, on macOS 15 or later, Apple Vision's aesthetics score. In Frames with faces, every face is checked for closed eyes, sharpness and Apple Vision's face capture quality, and sharpness is judged on the faces rather than the whole image. A Camera rating, such as in-camera stars, nudges a Frame up a little but never past a technical flaw. The Keeper budget slider sets roughly what share of the Session's Frames to keep (40% to start, stored per Session): each Group's Winner always stays, then the best Frames without flaws become Keepers until the budget is spent, and the slider shows how many Keepers result. The Review UI filters by Verdict and by Reason, and an open Group and the loupe show a badge on each face. Results are kept in the Session store under `~/Library/Application Support/framewise/`, so a re-run only analyses new or changed Frames.
+This scans the folder, starts the server on `http://127.0.0.1:8765/` and opens the browser straight away. It then analyses each Frame's JPG with the installed analysis Providers, using every core. framewise ships Apple Vision Providers for macOS; on Linux, everything else runs, but analysis needs a fingerprint Provider, which no built-in Provider offers there yet. The Review UI shows progress and fills in with Groups of near-duplicate and burst Frames as analysis runs. Each Frame gets a proposed Verdict (Winner, Keeper, Reject or Unsure) with Reasons, judged from its sharpness, motion blur, exposure and, on macOS 15 or later, Apple Vision's aesthetics score. In Frames with faces, every face is checked for closed eyes, sharpness and Apple Vision's face capture quality, and sharpness is judged on the faces rather than the whole image. A Camera rating, such as in-camera stars, nudges a Frame up a little but never past a technical flaw. The Keeper budget slider sets roughly what share of the Session's Frames to keep (40% to start, stored per Session): each Group's Winner always stays, then the best Frames without flaws become Keepers until the budget is spent, and the slider shows how many Keepers result. The Review UI filters by Verdict and by Reason, and an open Group and the loupe show a badge on each face. Results are kept in the Session store under `~/Library/Application Support/framewise/` (on Linux, `$XDG_DATA_HOME/framewise/`, by default `~/.local/share/framewise/`), so a re-run only analyses new or changed Frames.
 
 - `--port` picks another port.
 - `--background` analyses on a quarter of the cores at background priority, so apps like Lightroom stay responsive.
-- `--allow-sleep` lets the Mac sleep during analysis. By default framewise keeps it awake until analysis finishes. `FRAMEWISE_DATA_DIR` overrides the Session store folder. If the Review UI has not been built, `framewise review` warns you to run `npx ng build` in `frontend/`.
+- `--allow-sleep` lets the machine sleep during analysis. By default framewise keeps it awake until analysis finishes (on Linux, through `systemd-inhibit` where it exists). `FRAMEWISE_DATA_DIR` overrides the Session store folder. If the Review UI has not been built, `framewise review` warns you to run `npx ng build` in `frontend/`.
+
+By default each Capability (`fingerprint`, `face-detection`, `eye-state`, `face-quality`, `aesthetics`) uses its highest-priority Provider available on the machine. To choose one yourself, name its Provider id in a `config.toml` in the same folder as the Session store:
+
+```toml
+[providers]
+eye-state = "apple-vision-eye-state"
+```
+
+Capabilities left out keep the default. A Provider that is not installed or not available on the machine is an error, never a silent fallback. `framewise-benchmark` reads the same file, and `--provider <capability>=<id>`, repeatable, overrides it for one run, so Providers can be compared against your Reference ratings; its report names the Provider that served each Capability.
+
+The portable Providers run on Linux and macOS with free, local models. Install them with the `portable` extra (`uv sync --extra portable`): MediaPipe's Face Landmarker then serves `face-detection` (`mediapipe-face-detection`) and `eye-state` (`mediapipe-eye-state`), ranked below Apple Vision, so on macOS Apple Vision stays the default. Their model files are downloaded on first use into a `models` folder next to the Session stores and checked against pinned SHA-256 checksums. On a machine that will analyse offline, fetch them ahead of time with `uv run framewise models download`. On Linux, MediaPipe also needs the system's OpenGL libraries (`apt install libgl1 libegl1 libgles2` on Debian and Ubuntu). To write your own Provider, such as another face detector or eye-state check, see [docs/providers.md](docs/providers.md).
 
 In an open Group, review with Lightroom Classic's shortcuts: `1`–`5` set stars (`0` clears them), `6`–`9` set color labels, `P` / `X` / `U` keep, reject and clear, `W` makes the current Frame the Group's Winner, `←` / `→` move between Frames and `⌥←` / `⌥→` step through the current Group. `E` opens the loupe, `Z` zooms to 100% and `Esc` closes it. Overrides are saved in the Session store as you go (ADR-0003). The Keeper budget never changes them, and the Frames you keep count towards it. Fix wrong grouping in an open Group: split it at a Frame or split off the selected Frames, move a Frame to the previous or next Group, or merge the Group with its neighbour. Fixed Groups are kept on later re-runs (ADR-0004); "Reset grouping" hands a fixed Group back to framewise's grouping.
 
@@ -40,7 +51,7 @@ Nothing is written to the photos until you ask. Once analysis has finished, **Ra
 
 For development and demos, `uv run framewise reset /path/to/session-folder` resets harder: it undoes the write-back, then deletes the Session store, so the next `framewise review` analyses every Frame again. Quit `framewise review` first. If a file can't be restored, the store is kept so you can retry.
 
-Write-back needs [ExifTool](https://exiftool.org) (`brew install exiftool`).
+Write-back needs [ExifTool](https://exiftool.org) (`brew install exiftool`, or `apt install libimage-exiftool-perl` on Debian and Ubuntu).
 
 ## Tests
 
@@ -49,4 +60,4 @@ cd backend && uv run pytest && uv run ruff check .
 cd frontend && npx ng test --watch=false
 ```
 
-Most backend tests use a fake Frame analyzer. `tests/test_vision_analyzer.py` runs the real Apple Vision analyzer on generated images and the public-domain reference faces in `tests/fixtures/faces/`, and is skipped on other platforms.
+Most backend tests use a fake Frame analyzer. `tests/test_providers.py` composes analysis from fake Providers. `tests/test_apple_vision.py` runs the real Apple Vision Providers on generated images and the public-domain reference faces in `tests/fixtures/faces/`, and is skipped on other platforms. `tests/test_mediapipe_faces.py` runs the MediaPipe Providers on the same faces, and is skipped unless the `portable` extra is installed and `framewise models download` has run.

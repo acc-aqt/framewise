@@ -2,20 +2,21 @@ import math
 from collections.abc import Iterator, Mapping
 from datetime import datetime, timedelta
 
+from framewise.analyzer import SimilarityThresholds
 from framewise.store import AnalyzedFrame
 
 BURST_GAP = timedelta(seconds=2)
-BURST_SIMILARITY = 0.8
 NEAR_DUPLICATE_WINDOW = timedelta(minutes=5)
-NEAR_DUPLICATE_SIMILARITY = 0.9
 
 
 def group_frames(
-    frames: list[AnalyzedFrame], group_overrides: Mapping[str, str] | None = None
+    frames: list[AnalyzedFrame],
+    similarity: SimilarityThresholds,
+    group_overrides: Mapping[str, str] | None = None,
 ) -> list[list[AnalyzedFrame]]:
-    """Groups Frames in capture order. `group_overrides` holds the Groups the photographer fixed,
-    as a Group key by JPG path: Frames sharing a key form one Group, and only the other Frames
-    are grouped by similarity."""
+    """Groups Frames in capture order, by the similarity of their fingerprints. `group_overrides`
+    holds the Groups the photographer fixed, as a Group key by JPG path: Frames sharing a key
+    form one Group, and only the other Frames are grouped by similarity."""
     group_overrides = group_overrides or {}
     fixed: dict[str, list[AnalyzedFrame]] = {}
     free: list[AnalyzedFrame] = []
@@ -25,17 +26,20 @@ def group_frames(
             free.append(frame)
         else:
             fixed.setdefault(key, []).append(frame)
-    groups = _similar_groups(free) + [sorted(group, key=_capture_order) for group in fixed.values()]
+    fixed_groups = [sorted(group, key=_capture_order) for group in fixed.values()]
+    groups = _similar_groups(free, similarity) + fixed_groups
     return sorted(groups, key=lambda group: _capture_order(group[0]))
 
 
-def _similar_groups(frames: list[AnalyzedFrame]) -> list[list[AnalyzedFrame]]:
+def _similar_groups(
+    frames: list[AnalyzedFrame], thresholds: SimilarityThresholds
+) -> list[list[AnalyzedFrame]]:
     ordered = sorted(frames, key=_capture_order)
     unit_fingerprints = [_unit(frame.signals.fingerprint) for frame in ordered]
     parents = list(range(len(ordered)))
     for first, second in _candidate_pairs(ordered):
         similarity = _dot(unit_fingerprints[first], unit_fingerprints[second])
-        if _belong_together(ordered[first], ordered[second], similarity):
+        if _belong_together(ordered[first], ordered[second], similarity, thresholds):
             parents[_root(parents, second)] = _root(parents, first)
 
     groups: dict[int, list[AnalyzedFrame]] = {}
@@ -44,12 +48,17 @@ def _similar_groups(frames: list[AnalyzedFrame]) -> list[list[AnalyzedFrame]]:
     return list(groups.values())
 
 
-def _belong_together(first: AnalyzedFrame, second: AnalyzedFrame, similarity: float) -> bool:
+def _belong_together(
+    first: AnalyzedFrame,
+    second: AnalyzedFrame,
+    similarity: float,
+    thresholds: SimilarityThresholds,
+) -> bool:
     gap = _capture_gap(first, second)
     if gap is not None and gap <= BURST_GAP:
-        return similarity >= BURST_SIMILARITY
+        return similarity >= thresholds.burst
     within_window = gap is None or gap <= NEAR_DUPLICATE_WINDOW
-    return within_window and similarity >= NEAR_DUPLICATE_SIMILARITY
+    return within_window and similarity >= thresholds.near_duplicate
 
 
 def _candidate_pairs(ordered: list[AnalyzedFrame]) -> Iterator[tuple[int, int]]:

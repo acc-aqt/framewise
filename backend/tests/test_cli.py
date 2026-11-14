@@ -2,8 +2,9 @@ import sys
 from contextlib import contextmanager
 
 import pytest
-from conftest import FakeAnalyzer, make_jpg, wait_until
+from conftest import BACKGROUND_PRIORITY_PLATFORMS, FakeAnalyzer, make_jpg, wait_until
 from fastapi.testclient import TestClient
+from test_models import CONTENT, hosted_model
 from test_write_back_api import rating
 
 from framewise.cli import main
@@ -38,12 +39,6 @@ class FakeWakeLock:
             yield
         finally:
             self.held = False
-
-
-@pytest.fixture
-def isolated_data_dir(data_dir, monkeypatch):
-    monkeypatch.setenv("FRAMEWISE_DATA_DIR", str(data_dir))
-    return data_dir
 
 
 def test_review_scans_the_folder_serves_on_localhost_and_opens_the_browser(
@@ -136,7 +131,7 @@ def test_review_keeps_the_mac_awake_while_analysis_runs(session_dir, isolated_da
     assert wake_lock.times_held == 1
 
 
-def test_review_lets_the_mac_sleep_when_asked(session_dir, isolated_data_dir):
+def test_review_lets_the_machine_sleep_when_asked(session_dir, isolated_data_dir):
     make_jpg(session_dir / "DSCF0001.JPG")
     server = FakeServer()
     wake_lock = FakeWakeLock()
@@ -153,7 +148,10 @@ def test_review_lets_the_mac_sleep_when_asked(session_dir, isolated_data_dir):
     assert wake_lock.times_held == 0
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="Darwin background priority is macOS-only")
+@pytest.mark.skipif(
+    sys.platform not in BACKGROUND_PRIORITY_PLATFORMS,
+    reason="Background priority needs macOS or Linux",
+)
 def test_review_in_background_mode_analyses_at_background_priority(session_dir, isolated_data_dir):
     analyzer = FakeAnalyzer()
     make_jpg(session_dir / "DSCF0001.JPG")
@@ -267,3 +265,41 @@ def test_reset_of_a_folder_without_a_session_store_changes_nothing(
     main(["reset", str(session_dir)])
 
     assert "nothing to reset" in capsys.readouterr().out
+
+
+def test_review_refuses_to_start_with_a_broken_config(session_dir, isolated_data_dir, capsys):
+    isolated_data_dir.mkdir(parents=True)
+    (isolated_data_dir / "config.toml").write_text("[providers\n")
+
+    with pytest.raises(SystemExit) as exit_info:
+        main(
+            ["review", str(session_dir)],
+            serve=FakeServer(),
+            open_browser=print,
+            keep_awake=FakeWakeLock(),
+        )
+
+    assert exit_info.value.code == 1
+    assert "config.toml: invalid TOML" in capsys.readouterr().err
+
+
+def test_models_download_fetches_every_model_into_the_data_dir(tmp_path, isolated_data_dir, capsys):
+    model = hosted_model(tmp_path)
+
+    main(["models", "download"], models=[model])
+
+    assert (isolated_data_dir / "models" / "detector.task").read_bytes() == CONTENT
+    assert "detector.task" in capsys.readouterr().out
+
+
+def test_models_download_fails_with_the_reason_when_a_model_cannot_be_fetched(
+    tmp_path, isolated_data_dir, capsys
+):
+    model = hosted_model(tmp_path)
+    (tmp_path / "hosted" / "detector.task").unlink()
+
+    with pytest.raises(SystemExit) as exit_info:
+        main(["models", "download"], models=[model])
+
+    assert exit_info.value.code == 1
+    assert "cannot be downloaded" in capsys.readouterr().err

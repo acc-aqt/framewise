@@ -2,11 +2,13 @@ import hashlib
 import json
 import plistlib
 import sqlite3
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 from conftest import FakeAnalyzer, make_jpg
 
+from framewise.analyzer import SimilarityThresholds
 from framewise.benchmark import (
     active_catalog,
     agreement,
@@ -222,6 +224,7 @@ def test_benchmark_reports_agreement_and_timing_without_touching_session_or_cata
     assert result["agreement"]["with_reference_rejected_or_unsure"] == 1
     assert result["agreement"]["rejected_with_reference"] == 1
     assert result["timing"]["budget_seconds"] == pytest.approx(3 * 4.5)
+    assert result["providers"] == {"fingerprint": "fake-fingerprint@1"}
     assert "Rated Frames proposed as Reject or Unsure: 1 of 2" in capsys.readouterr().out
     assert fingerprint_of(session_dir) == session_before
     assert fingerprint_of(catalog.path.parent) == catalog_before
@@ -244,3 +247,99 @@ def test_benchmark_refuses_to_write_its_report_into_the_session_folder(
         )
 
     assert exit_info.value.code == 2
+
+
+@dataclass
+class NamedFingerprint:
+    id: str
+    priority: int = 0
+    available: bool = True
+    capability: str = "fingerprint"
+    version: int = 1
+    similarity: SimilarityThresholds = SimilarityThresholds(burst=0.8, near_duplicate=0.9)
+
+    def is_available(self) -> bool:
+        return self.available
+
+    def fingerprint(self, jpg_path: Path) -> list[float]:
+        return DUPLICATE
+
+
+def run_benchmark(session_dir, catalog, tmp_path, *options, providers) -> dict:
+    make_jpg(session_dir / "DSCF0001.JPG")
+    report = tmp_path / "report.json"
+    main(
+        [str(session_dir), "--catalog", str(catalog.path), "--report", str(report), *options],
+        providers=providers,
+    )
+    return json.loads(report.read_text())
+
+
+def test_a_provider_override_serves_its_capability_and_the_report_names_it(
+    session_dir, catalog, tmp_path, isolated_data_dir, capsys
+):
+    providers = [NamedFingerprint("default", priority=9), NamedFingerprint("chosen")]
+
+    report = run_benchmark(
+        session_dir, catalog, tmp_path, "--provider", "fingerprint=chosen", providers=providers
+    )
+
+    assert report["providers"] == {"fingerprint": "chosen@1"}
+    assert "fingerprint: chosen@1" in capsys.readouterr().out
+
+
+def test_a_provider_override_wins_over_the_config_file(
+    session_dir, catalog, tmp_path, isolated_data_dir
+):
+    isolated_data_dir.mkdir()
+    (isolated_data_dir / "config.toml").write_text('[providers]\nfingerprint = "configured"\n')
+    providers = [NamedFingerprint("configured"), NamedFingerprint("chosen")]
+
+    report = run_benchmark(
+        session_dir, catalog, tmp_path, "--provider", "fingerprint=chosen", providers=providers
+    )
+
+    assert report["providers"] == {"fingerprint": "chosen@1"}
+
+
+@pytest.mark.parametrize(
+    ("override", "error"),
+    [
+        ("fingerprint=missing", 'the fingerprint Provider "missing" is not installed'),
+        ("fingerprint=offline", 'the fingerprint Provider "offline" is not available'),
+        ("eyes=chosen", 'unknown Capability "eyes"'),
+    ],
+)
+def test_an_override_that_cannot_be_honoured_is_an_error(
+    session_dir, catalog, tmp_path, isolated_data_dir, capsys, override, error
+):
+    providers = [NamedFingerprint("default"), NamedFingerprint("offline", available=False)]
+
+    with pytest.raises(SystemExit) as exit_info:
+        run_benchmark(session_dir, catalog, tmp_path, "--provider", override, providers=providers)
+
+    assert exit_info.value.code == 1
+    assert f"framewise-benchmark: error: {error}" in capsys.readouterr().err
+
+
+def test_an_override_without_a_capability_and_id_is_a_usage_error(
+    session_dir, catalog, tmp_path, isolated_data_dir
+):
+    with pytest.raises(SystemExit) as exit_info:
+        run_benchmark(session_dir, catalog, tmp_path, "--provider", "fingerprint", providers=[])
+
+    assert exit_info.value.code == 2
+
+
+def test_a_provider_override_replaces_a_config_choice_that_cannot_be_honoured(
+    session_dir, catalog, tmp_path, isolated_data_dir
+):
+    isolated_data_dir.mkdir()
+    (isolated_data_dir / "config.toml").write_text('[providers]\nfingerprint = "offline"\n')
+    providers = [NamedFingerprint("offline", available=False), NamedFingerprint("chosen")]
+
+    report = run_benchmark(
+        session_dir, catalog, tmp_path, "--provider", "fingerprint=chosen", providers=providers
+    )
+
+    assert report["providers"] == {"fingerprint": "chosen@1"}

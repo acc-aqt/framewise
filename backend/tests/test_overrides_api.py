@@ -38,7 +38,7 @@ def override(client, name: str, **change):
 
 
 def test_framewise_verdicts_carry_no_override(session_dir, review, analyzer):
-    burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.4}), ("DSCF0002", {}))
+    burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.7}), ("DSCF0002", {}))
 
     frames = frames_by_name(keep_every_clean_frame(review()))
 
@@ -49,7 +49,7 @@ def test_framewise_verdicts_carry_no_override(session_dir, review, analyzer):
 
 
 def test_an_override_beats_framewise_verdict(session_dir, review, analyzer):
-    burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.4}), ("DSCF0002", {}))
+    burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.7}), ("DSCF0002", {}))
     client = review()
 
     response = override(client, "DSCF0002.JPG", verdict="reject")
@@ -64,7 +64,7 @@ def test_an_override_beats_framewise_verdict(session_dir, review, analyzer):
 def test_stars_and_a_color_label_are_saved_without_changing_the_verdict(
     session_dir, review, analyzer
 ):
-    burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.4}), ("DSCF0002", {}))
+    burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.7}), ("DSCF0002", {}))
     client = keep_every_clean_frame(review())
 
     override(client, "DSCF0002.JPG", stars=4)
@@ -90,7 +90,7 @@ def test_a_field_set_to_null_is_cleared_and_others_are_kept(session_dir, review,
 
 
 def test_clearing_an_override_returns_to_framewise_verdict(session_dir, review, analyzer):
-    burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.4}), ("DSCF0002", {}))
+    burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.7}), ("DSCF0002", {}))
     client = keep_every_clean_frame(review())
     override(client, "DSCF0002.JPG", verdict="reject", stars=1)
     frame_id = frames_by_name(client)["DSCF0002.JPG"]["id"]
@@ -107,7 +107,7 @@ def test_clearing_an_override_returns_to_framewise_verdict(session_dir, review, 
 
 
 def test_overrides_persist_across_a_re_run(session_dir, review, analyzer):
-    burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.4}), ("DSCF0002", {}))
+    burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.7}), ("DSCF0002", {}))
     override(review(), "DSCF0002.JPG", verdict="reject", stars=1, label="red")
 
     rejected = frames_by_name(review())["DSCF0002.JPG"]
@@ -117,7 +117,7 @@ def test_overrides_persist_across_a_re_run(session_dir, review, analyzer):
 
 
 def test_overrides_survive_a_re_run_with_re_analysis(session_dir, review, analyzer):
-    burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.4}), ("DSCF0002", {}))
+    burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.7}), ("DSCF0002", {}))
     override(review(), "DSCF0002.JPG", verdict="unsure", stars=2)
     analyzer.analyzed.clear()
 
@@ -134,8 +134,8 @@ def test_choosing_a_new_winner_re_judges_the_previous_winner(session_dir, review
     burst(
         session_dir,
         analyzer,
-        ("DSCF0001", {"aesthetics": 0.9}),
-        ("DSCF0002", {"aesthetics": -0.6}),
+        ("DSCF0001", {"aesthetics": 0.95}),
+        ("DSCF0002", {"aesthetics": 0.2}),
     )
     client = review()
     assert verdicts(client) == {"DSCF0001.JPG": "winner", "DSCF0002.JPG": "reject"}
@@ -155,9 +155,9 @@ def test_the_rest_of_the_group_is_re_judged_against_the_new_winner(session_dir, 
     burst(
         session_dir,
         analyzer,
-        ("DSCF0001", {"aesthetics": 0.4}),
-        ("DSCF0002", {"aesthetics": 0.4, "sharpness": 0.1}),
-        ("DSCF0003", {"aesthetics": 0.4, "sharpness": 0.35}),
+        ("DSCF0001", {"aesthetics": 0.7}),
+        ("DSCF0002", {"aesthetics": 0.7, "sharpness": 0.1}),
+        ("DSCF0003", {"aesthetics": 0.7, "sharpness": 0.35}),
     )
     client = keep_every_clean_frame(review())
 
@@ -191,9 +191,9 @@ def test_rejecting_the_winner_makes_framewise_pick_another(session_dir, review, 
     burst(
         session_dir,
         analyzer,
-        ("DSCF0001", {"aesthetics": 0.9}),
-        ("DSCF0002", {"aesthetics": 0.4}),
-        ("DSCF0003", {"aesthetics": 0.0}),
+        ("DSCF0001", {"aesthetics": 0.95}),
+        ("DSCF0002", {"aesthetics": 0.7}),
+        ("DSCF0003", {"aesthetics": 0.5}),
     )
     client = keep_every_clean_frame(review())
 

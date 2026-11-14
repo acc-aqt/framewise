@@ -11,6 +11,7 @@ import json
 import plistlib
 import shutil
 import sqlite3
+import sys
 import tempfile
 import time
 from collections import Counter
@@ -19,12 +20,12 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from framewise.analyzer import FrameAnalyzer
-from framewise.grouper import group_frames
 from framewise.judge import KEPT, Proposal, Verdict, judge
-from framewise.review import SessionAnalysis, open_session
+from framewise.lightroom import LIGHTROOM_PREFERENCES
+from framewise.providers import Provider, ProviderError, resolve_analyzer
+from framewise.review import SessionAnalysis, open_session, resolve_config_path
 from framewise.store import Frame
 
-LIGHTROOM_PREFS = Path.home() / "Library" / "Preferences" / "com.adobe.LightroomClassicCC7.plist"
 ACTIVE_CATALOG_KEY = "libraryToLoad20"
 # ADR-0002: 15 minutes for a 200-Frame Session on the first pass.
 BUDGET_SECONDS_PER_FRAME = 15 * 60 / 200
@@ -62,9 +63,16 @@ class Timing:
     within_budget: bool
 
 
-def active_catalog(prefs: Path = LIGHTROOM_PREFS) -> Path:
-    with prefs.open("rb") as file:
-        return Path(plistlib.load(file)[ACTIVE_CATALOG_KEY])
+def active_catalog(prefs: Path | None = LIGHTROOM_PREFERENCES) -> Path | None:
+    """The catalog Lightroom Classic loads, or None without its preferences."""
+    if prefs is None:
+        return None
+    try:
+        with prefs.open("rb") as file:
+            catalog = plistlib.load(file).get(ACTIVE_CATALOG_KEY)
+    except (OSError, plistlib.InvalidFileException):
+        return None
+    return None if catalog is None else Path(catalog)
 
 
 def copy_catalog(catalog: Path, into: Path) -> Path:
@@ -141,6 +149,7 @@ def main(
     argv: list[str] | None = None,
     analyzer: FrameAnalyzer | None = None,
     clock: Callable[[], float] = time.perf_counter,
+    providers: list[Provider] | None = None,
 ) -> None:
     parser = argparse.ArgumentParser(
         prog="framewise-benchmark",
@@ -153,6 +162,15 @@ def main(
         help="Lightroom Classic catalog to copy (default: the active one from Lightroom's prefs)",
     )
     parser.add_argument("--report", type=Path, default=Path("framewise-benchmark.json"))
+    parser.add_argument(
+        "--provider",
+        dest="overrides",
+        metavar="CAPABILITY=ID",
+        type=_provider_override,
+        action="append",
+        default=[],
+        help="Use this Provider for the Capability, over config.toml's choice (repeatable)",
+    )
     args = parser.parse_args(argv)
 
     session_root = args.session_folder.resolve()
@@ -161,14 +179,13 @@ def main(
     if args.report.resolve().is_relative_to(session_root):
         parser.error("the report must not be written into the Session folder")
     catalog = args.catalog or active_catalog()
+    if catalog is None:
+        parser.error("no active Lightroom Classic catalog found, pass --catalog")
     if not catalog.is_file():
         parser.error(f"no catalog at {catalog}")
 
     if analyzer is None:
-        # Imported here so the rest of framewise imports where Apple Vision doesn't exist.
-        from framewise.vision_analyzer import VisionAnalyzer
-
-        analyzer = VisionAnalyzer()
+        analyzer = _resolve_analyzer(dict(args.overrides), providers)
 
     with tempfile.TemporaryDirectory(prefix="framewise-benchmark-") as temp:
         catalog_copy = copy_catalog(catalog, Path(temp))
@@ -189,10 +206,11 @@ def _run(
     """A cold first pass: a fresh Session store, so every Frame is analysed."""
     started = clock()
     store = open_session(session_root, data_dir)
-    SessionAnalysis(store, analyzer).run()
+    analysis = SessionAnalysis(store, analyzer)
+    analysis.run()
     analysed = clock()
-    analyzed_frames = store.analyzed_frames()
-    proposal = judge(group_frames(analyzed_frames))
+    groups = analysis.groups()
+    proposal = judge(groups)
     judged = clock()
 
     frames = store.frames()
@@ -200,7 +218,8 @@ def _run(
     return {
         "session": str(session_root),
         "frames": len(frames),
-        "frames_analysed": len(analyzed_frames),
+        "frames_analysed": sum(len(group) for group in groups),
+        "providers": dict(analyzer.signature),
         "agreement": asdict(agreement(proposal, references)),
         "timing": asdict(timing(len(frames), judged - started)),
         "analysis_seconds": analysed - started,
@@ -238,6 +257,12 @@ def _summary(report: dict, catalog: Path, report_path: Path) -> str:
             f"framewise benchmark: {report['frames']} Frames in {report['session']}",
             f"Reference ratings from a copy of {catalog}",
             "",
+            "Providers",
+            *(
+                f"  {capability}: {provider}"
+                for capability, provider in report["providers"].items()
+            ),
+            "",
             "Agreement",
             f"  Rated Frames: {result['with_reference']} of {report['frames']}",
             "  Winners and Keepers with a Reference rating: "
@@ -274,3 +299,18 @@ def _folder_key(folder: Path) -> str:
 
 def _path_key(path: Path | str) -> str:
     return str(path).lower()
+
+
+def _provider_override(text: str) -> tuple[str, str]:
+    capability, separator, provider_id = text.partition("=")
+    if not separator or not capability or not provider_id:
+        raise argparse.ArgumentTypeError(f"expected CAPABILITY=ID, got {text!r}")
+    return capability, provider_id
+
+
+def _resolve_analyzer(overrides: dict[str, str], providers: list[Provider] | None) -> FrameAnalyzer:
+    try:
+        return resolve_analyzer(resolve_config_path(), overrides, providers)
+    except ProviderError as error:
+        print(f"framewise-benchmark: error: {error}", file=sys.stderr)
+        sys.exit(1)

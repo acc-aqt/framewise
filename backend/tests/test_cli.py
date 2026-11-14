@@ -63,7 +63,7 @@ def test_review_scans_the_folder_serves_on_localhost_and_opens_the_browser(
     assert (server.host, server.port) == ("127.0.0.1", 9123)
     assert opened == ["http://127.0.0.1:9123/"]
     assert TestClient(server.app).get("/api/session").json()["total_frames"] == 1
-    assert len(list(isolated_data_dir.iterdir())) == 1
+    assert len(list(isolated_data_dir.glob("*.sqlite"))) == 1
 
 
 def test_review_refuses_a_folder_that_does_not_exist(tmp_path, isolated_data_dir):

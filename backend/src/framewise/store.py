@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import threading
 import uuid
 from array import array
 from dataclasses import asdict, dataclass
@@ -119,14 +120,29 @@ class SessionSummary:
     skipped: list[str]
 
 
+BUSY_TIMEOUT_SECONDS = 30
+
+
 class SessionStore:
     def __init__(self, database_path: Path, root: Path):
         self.root = root
         database_path.parent.mkdir(parents=True, exist_ok=True)
-        self._db = sqlite3.connect(database_path, check_same_thread=False)
-        self._db.row_factory = sqlite3.Row
+        self._database_path = database_path
+        self._connections = threading.local()
+        self._db.execute("PRAGMA journal_mode=WAL")
         self._db.executescript(SCHEMA)
         self._add_missing_columns()
+
+    @property
+    def _db(self) -> sqlite3.Connection:
+        """This thread's connection. The analysis thread saves Frames while the server's threads
+        read them, and a sqlite3 connection must not be used by two threads at once."""
+        connection = getattr(self._connections, "connection", None)
+        if connection is None:
+            connection = sqlite3.connect(self._database_path, timeout=BUSY_TIMEOUT_SECONDS)
+            connection.row_factory = sqlite3.Row
+            self._connections.connection = connection
+        return connection
 
     def save_frame(self, frame: ScannedFrame, rating: CameraRating) -> None:
         with self._db:

@@ -161,3 +161,31 @@ def test_progress_counts_frames_analysed_before_as_done_before_the_run_starts(
     client = TestClient(create_app(store, SessionAnalysis(store, analyzer)))
 
     assert progress(client)["frames_left"] == 0
+
+
+def test_the_review_ui_can_load_thumbnails_and_groups_while_frames_are_saved(
+    session_dir, live_review
+):
+    for number in range(1, 61):
+        make_jpg(session_dir / f"DSCF{number:04d}.JPG")
+    client = live_review()
+    app = client.app
+    errors: list[BaseException] = []
+
+    def browse() -> None:
+        browser = TestClient(app)
+        try:
+            while progress(browser)["frames_left"] > 0:
+                for frame_id in range(1, 61):
+                    browser.get(f"/api/frames/{frame_id}/thumbnail")
+                browser.get("/api/groups")
+        except BaseException as error:
+            errors.append(error)
+
+    browsers = [threading.Thread(target=browse) for _ in range(6)]
+    for browser in browsers:
+        browser.start()
+    for browser in browsers:
+        browser.join(timeout=30)
+
+    assert errors == []

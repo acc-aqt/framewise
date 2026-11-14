@@ -24,6 +24,7 @@ const SHORTCUT_HINTS = [
   { keys: '←→', label: 'Frames' },
   { keys: '⌥←→', label: 'in Group' },
   { keys: 'E', label: 'loupe' },
+  { keys: 'C', label: 'compare' },
   { keys: 'Z', label: '100%' },
 ];
 

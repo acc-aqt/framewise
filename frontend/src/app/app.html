@@ -71,7 +71,7 @@
         [currentFrameId]="openedFrameId()"
         (back)="closeGroup()"
         (select)="openedFrameId.set($event.id)"
-        (openLoupe)="openedFrameId.set($event.id); loupeZoom.set('fit')"
+        (openLoupe)="openedFrameId.set($event.id); openLoupe()"
         (makeWinner)="changeOverride($event, { verdict: 'winner' })"
         [hasPrevious]="neighbourGroup(-1) !== null"
         [hasNext]="neighbourGroup(1) !== null"
@@ -81,12 +81,12 @@
         (resetGrouping)="resetGrouping(group)"
       />
       @if (loupeZoom(); as zoom) {
-        @if (currentFrame(); as frame) {
+        @if (loupeFrames().length > 0) {
           <app-loupe
-            [frame]="frame"
+            [frames]="loupeFrames()"
             [zoom]="zoom"
             (toggleZoom)="toggleZoom()"
-            (close)="loupeZoom.set(null)"
+            (close)="closeLoupe()"
           />
         }
       }

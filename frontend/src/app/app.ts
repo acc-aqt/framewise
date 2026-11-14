@@ -22,11 +22,14 @@ export class App {
     () => this.progress.hasValue() && this.progress.value().frames_left > 0,
   );
   // Keyed on Frames done, so the Groups are fetched again each time more Frames are analysed.
+  // Without progress, the Groups are still fetched once so an analysed Session stays reviewable.
   protected readonly groups = httpResource<Group[]>(
-    () =>
-      this.progress.hasValue()
-        ? `/api/groups?frames_done=${this.progress.value().frames_done}`
-        : undefined,
+    () => {
+      if (this.progress.hasValue()) {
+        return `/api/groups?frames_done=${this.progress.value().frames_done}`;
+      }
+      return this.progress.error() ? '/api/groups' : undefined;
+    },
     { defaultValue: [] },
   );
   protected readonly openGroupId = signal<number | null>(null);

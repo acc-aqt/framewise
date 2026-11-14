@@ -184,6 +184,21 @@ describe('Review UI', () => {
     expect(text('[data-testid="time-remaining"]')).toBe('estimating time left');
   });
 
+  it('still shows the Groups when the analysis progress fails to load', async () => {
+    http.expectOne('/api/session').flush(summary);
+    http
+      .expectOne('/api/progress')
+      .flush('boom', { status: 500, statusText: 'Internal Server Error' });
+    await settle();
+    http
+      .expectOne((request) => request.url.startsWith('/api/groups'))
+      .flush([group(1, [frame(1, 'jpg-only')]), group(2, [frame(2, 'jpg-only')])]);
+    await settle();
+
+    expect(all('[data-testid="group-tile"]').length).toBe(2);
+    expect(text('header .error')).toBe('Could not load the analysis progress.');
+  });
+
   it('hides the progress once every Frame is analysed', async () => {
     await respond(summary, []);
 

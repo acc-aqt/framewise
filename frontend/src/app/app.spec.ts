@@ -675,6 +675,27 @@ describe('Review UI', () => {
       expect(text('[data-testid="loupe-zoom"]')).toBe('Fit');
     });
 
+    it('shows a badge on each face in the loupe, at fit and at 100%', async () => {
+      await openFirstGroup([
+        group(1, [
+          frame(1, 'jpg-only', {
+            verdict: 'unsure',
+            faces: [face(0.1, 'open', 'sharp'), face(0.6, 'closed', 'sharp')],
+          }),
+        ]),
+      ]);
+
+      await press('e');
+      const badges = () =>
+        all('[data-testid="loupe"] [data-testid="face-badge"]').map((badge) =>
+          badge.textContent?.replace(/\s+/g, ' ').trim(),
+        );
+      expect(badges()).toEqual(['Eyes open · Sharp', 'Eyes closed · Sharp']);
+
+      await press('z');
+      expect(badges()).toEqual(['Eyes open · Sharp', 'Eyes closed · Sharp']);
+    });
+
     it('moves the loupe between Frames with the arrow keys', async () => {
       await openFirstGroup();
       await press('e');

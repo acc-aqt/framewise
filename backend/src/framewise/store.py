@@ -1,12 +1,12 @@
 import json
 import sqlite3
 from array import array
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from framewise.analyzer import FrameSignals
+from framewise.analyzer import ANALYSIS_VERSION, FrameSignals
 from framewise.camera_rating import CameraRating
 from framewise.scan import ScannedFrame
 
@@ -29,12 +29,18 @@ CREATE TABLE IF NOT EXISTS analyses (
     jpg_size INTEGER NOT NULL,
     jpg_mtime_ns INTEGER NOT NULL,
     fingerprint BLOB NOT NULL,
-    captured_at TEXT
+    captured_at TEXT,
+    version INTEGER,
+    signals TEXT
 );
 CREATE TABLE IF NOT EXISTS skipped_files (
     path TEXT PRIMARY KEY
 );
 """
+
+# Columns added to tables after the first release. Adding them to an existing Session store keeps
+# its rows; analyses saved before then have no version, so they no longer count as current.
+ADDED_COLUMNS = {"analyses": {"version": "INTEGER", "signals": "TEXT"}}
 
 FrameKind = Literal["jpg-only", "raw+jpg"]
 
@@ -54,7 +60,7 @@ class Frame:
 @dataclass(frozen=True)
 class AnalyzedFrame:
     frame: Frame
-    fingerprint: list[float]
+    signals: FrameSignals
     captured_at: datetime | None
 
 
@@ -73,6 +79,7 @@ class SessionStore:
         self._db = sqlite3.connect(database_path, check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._db.executescript(SCHEMA)
+        self._add_missing_columns()
 
     def save_frame(self, frame: ScannedFrame, rating: CameraRating) -> None:
         with self._db:
@@ -106,7 +113,12 @@ class SessionStore:
         return self._has_current_row("thumbnails", jpg_path)
 
     def has_current_analysis(self, jpg_path: Path) -> bool:
-        return self._has_current_row("analyses", jpg_path)
+        row = self._db.execute(
+            "SELECT 1 FROM analyses "
+            "WHERE jpg_path = ? AND jpg_size = ? AND jpg_mtime_ns = ? AND version = ?",
+            (*self._file_key(jpg_path), ANALYSIS_VERSION),
+        ).fetchone()
+        return row is not None
 
     def save_analysis(
         self, jpg_path: Path, signals: FrameSignals, captured_at: datetime | None
@@ -114,12 +126,14 @@ class SessionStore:
         with self._db:
             self._db.execute(
                 "INSERT OR REPLACE INTO analyses "
-                "(jpg_path, jpg_size, jpg_mtime_ns, fingerprint, captured_at) "
-                "VALUES (?, ?, ?, ?, ?)",
+                "(jpg_path, jpg_size, jpg_mtime_ns, fingerprint, captured_at, version, signals) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     *self._file_key(jpg_path),
                     array("f", signals.fingerprint).tobytes(),
                     None if captured_at is None else captured_at.isoformat(),
+                    ANALYSIS_VERSION,
+                    json.dumps(_signals_without_fingerprint(signals)),
                 ),
             )
 
@@ -145,13 +159,18 @@ class SessionStore:
 
     def analyzed_frames(self) -> list[AnalyzedFrame]:
         rows = self._db.execute(
-            "SELECT frames.*, analyses.fingerprint, analyses.captured_at FROM frames "
-            "JOIN analyses ON analyses.jpg_path = frames.jpg_path ORDER BY frames.jpg_path"
+            "SELECT frames.*, analyses.fingerprint, analyses.signals, analyses.captured_at "
+            "FROM frames JOIN analyses ON analyses.jpg_path = frames.jpg_path "
+            "WHERE analyses.version = ? ORDER BY frames.jpg_path",
+            (ANALYSIS_VERSION,),
         )
         return [
             AnalyzedFrame(
                 frame=_frame(row),
-                fingerprint=array("f", row["fingerprint"]).tolist(),
+                signals=FrameSignals(
+                    fingerprint=array("f", row["fingerprint"]).tolist(),
+                    **json.loads(row["signals"]),
+                ),
                 captured_at=(
                     None
                     if row["captured_at"] is None
@@ -183,6 +202,14 @@ class SessionStore:
         rows = self._db.execute("SELECT path FROM skipped_files ORDER BY path")
         return [row["path"] for row in rows]
 
+    def _add_missing_columns(self) -> None:
+        for table, columns in ADDED_COLUMNS.items():
+            existing = {row["name"] for row in self._db.execute(f"PRAGMA table_info({table})")}
+            with self._db:
+                for name, column_type in columns.items():
+                    if name not in existing:
+                        self._db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {column_type}")
+
     def _has_current_row(self, table: str, jpg_path: Path) -> bool:
         row = self._db.execute(
             f"SELECT 1 FROM {table} WHERE jpg_path = ? AND jpg_size = ? AND jpg_mtime_ns = ?",
@@ -196,6 +223,12 @@ class SessionStore:
 
     def _relative(self, path: Path | None) -> str | None:
         return None if path is None else path.relative_to(self.root).as_posix()
+
+
+def _signals_without_fingerprint(signals: FrameSignals) -> dict:
+    values = asdict(signals)
+    del values["fingerprint"]
+    return values
 
 
 def _frame(row: sqlite3.Row) -> Frame:

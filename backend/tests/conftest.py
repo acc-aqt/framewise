@@ -98,6 +98,7 @@ class FakeAnalyzer:
         self.fingerprints: dict[Path, list[float]] = {}
         self.analyzed: list[Path] = []
         self.in_flight = 0
+        self.peak_in_flight = 0
         self.at_background_priority: list[bool] = []
         self._held: dict[Path, threading.Event] = {}
         self._failing: set[Path] = set()
@@ -122,6 +123,7 @@ class FakeAnalyzer:
     def analyze(self, jpg_path: Path) -> FrameSignals:
         with self._lock:
             self.in_flight += 1
+            self.peak_in_flight = max(self.peak_in_flight, self.in_flight)
             if sys.platform == "darwin":
                 self.at_background_priority.append(os.getpriority(os.PRIO_DARWIN_THREAD, 0) != 0)
         gate = self._held.get(jpg_path.resolve())

@@ -65,7 +65,7 @@ interface Outcome {
         <p class="count" data-testid="write-back-count">
           {{ changing().length }} of {{ dryRun.value().files.length }} files change.
         </p>
-        @if (confirming()) {
+        @if (confirming() === 'write') {
           <div class="confirmation" role="alertdialog" data-testid="write-back-confirmation">
             <p>
               Write ratings and color labels into {{ changing().length }} files? Only the rating and
@@ -76,7 +76,7 @@ interface Outcome {
                 type="button"
                 class="btn btn-ghost"
                 data-testid="write-back-cancel"
-                (click)="confirming.set(false)"
+                (click)="confirming.set(null)"
               >
                 Cancel
               </button>
@@ -97,7 +97,7 @@ interface Outcome {
             class="btn btn-primary"
             data-testid="write-back-apply"
             [disabled]="busy() || changing().length === 0"
-            (click)="confirming.set(true)"
+            (click)="confirming.set('write')"
           >
             Write ratings…
           </button>
@@ -112,6 +112,43 @@ interface Outcome {
           >
             <app-icon name="reset" [size]="14" />
             Undo write-back
+          </button>
+        }
+        @if (confirming() === 'reset') {
+          <div class="confirmation" role="alertdialog" data-testid="session-reset-confirmation">
+            <p>
+              Reset the Session? Ratings framewise wrote are restored in the files, and all
+              Overrides, fixed Groups and the Keeper budget are cleared. The analysis is kept.
+            </p>
+            <div class="confirmation-actions">
+              <button
+                type="button"
+                class="btn btn-ghost"
+                data-testid="session-reset-cancel"
+                (click)="confirming.set(null)"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                class="btn btn-primary"
+                data-testid="session-reset-confirm"
+                [disabled]="busy()"
+                (click)="reset()"
+              >
+                Reset Session
+              </button>
+            </div>
+          </div>
+        } @else {
+          <button
+            type="button"
+            class="btn btn-ghost"
+            data-testid="session-reset"
+            [disabled]="busy()"
+            (click)="confirming.set('reset')"
+          >
+            Reset Session…
           </button>
         }
       </div>
@@ -316,10 +353,12 @@ interface Outcome {
 })
 export class WriteBackView {
   readonly back = output<void>();
+  /** The Session was reset, so its Groups, Overrides and Keeper budget have changed. */
+  readonly sessionReset = output<void>();
 
   private readonly http = inject(HttpClient);
   protected readonly dryRun = httpResource<WriteBackDryRun>(() => '/api/write-back');
-  protected readonly confirming = signal(false);
+  protected readonly confirming = signal<'write' | 'reset' | null>(null);
   protected readonly busy = signal(false);
   protected readonly outcome = signal<Outcome | null>(null);
   protected readonly changing = computed(() =>
@@ -336,17 +375,28 @@ export class WriteBackView {
     return rating.label === null ? stars : `${stars} ${rating.label}`;
   }
 
-  protected apply(): Promise<void> {
-    return this.run('/api/write-back', 'Wrote');
+  protected async apply(): Promise<void> {
+    await this.run('/api/write-back', 'Wrote');
   }
 
-  protected undo(): Promise<void> {
-    return this.run('/api/write-back/undo', 'Restored');
+  protected async undo(): Promise<void> {
+    await this.run('/api/write-back/undo', 'Restored');
   }
 
-  private async run(url: string, verb: string): Promise<void> {
+  protected async reset(): Promise<void> {
+    if (await this.run('/api/session/reset', 'Reset the Session and restored', 'Reset failed.')) {
+      this.sessionReset.emit();
+    }
+  }
+
+  /** Posts to `url` and reports the outcome. Returns whether the request succeeded. */
+  private async run(
+    url: string,
+    verb: string,
+    failure = 'Rating write-back failed.',
+  ): Promise<boolean> {
     this.busy.set(true);
-    this.confirming.set(false);
+    this.confirming.set(null);
     try {
       const result = await firstValueFrom(this.http.post<WriteBackResult>(url, null));
       this.outcome.set({
@@ -354,8 +404,10 @@ export class WriteBackView {
         summary: `${verb} ${files(result.written.length)}.`,
         failed: result.failed,
       });
+      return true;
     } catch {
-      this.outcome.set({ ok: false, summary: 'Rating write-back failed.', failed: [] });
+      this.outcome.set({ ok: false, summary: failure, failed: [] });
+      return false;
     } finally {
       this.busy.set(false);
       this.dryRun.reload();

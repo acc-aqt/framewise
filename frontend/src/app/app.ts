@@ -161,6 +161,11 @@ export class App {
     });
   }
 
+  protected onSessionReset(): void {
+    this.summary.reload();
+    this.groups.reload();
+  }
+
   protected closeGroup(): void {
     this.loupeZoom.set(null);
     this.openedFrameId.set(null);

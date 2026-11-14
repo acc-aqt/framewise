@@ -271,6 +271,13 @@ class SessionStore:
         row = self._db.execute("SELECT value FROM settings WHERE name = 'keeper_budget'").fetchone()
         return None if row is None else row["value"]
 
+    def clear_review(self) -> None:
+        """Forgets the photographer's Overrides, fixed Groups and Session settings, keeping the
+        analysis and the write-back originals."""
+        with self._db:
+            for table in ("overrides", "group_overrides", "settings"):
+                self._db.execute(f"DELETE FROM {table}")
+
     def frame(self, frame_id: int) -> Frame | None:
         row = self._db.execute("SELECT * FROM frames WHERE id = ?", (frame_id,)).fetchone()
         return None if row is None else _frame(row)

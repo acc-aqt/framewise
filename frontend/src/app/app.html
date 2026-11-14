@@ -61,7 +61,7 @@
     @if (groups.error()) {
       <p class="error">Could not load the Groups.</p>
     } @else if (writingBack()) {
-      <app-write-back (back)="writingBack.set(false)" />
+      <app-write-back (back)="writingBack.set(false)" (sessionReset)="onSessionReset()" />
     } @else if (openGroup(); as group) {
       @if (overrideFailed()) {
         <p class="error" data-testid="override-error">Could not save the Override.</p>

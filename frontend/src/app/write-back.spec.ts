@@ -168,6 +168,30 @@ describe('Rating write-back', () => {
     expect(text('[data-testid="write-back-result"]')).toBe('Restored 2 files.');
     expect(all('[data-testid="write-back-undo"]')).toEqual([]);
   });
+
+  it('resets the Session only after the photographer confirms', async () => {
+    let resets = 0;
+    fixture.componentInstance.sessionReset.subscribe(() => resets++);
+    await showDryRun();
+
+    await click('session-reset');
+    await click('session-reset-cancel');
+    http.expectNone({ method: 'POST' });
+
+    await click('session-reset');
+    await click('session-reset-confirm');
+    http.expectOne({ method: 'POST', url: '/api/session/reset' }).flush({
+      written: ['DSCF0001.JPG'],
+      failed: [],
+    });
+    await settle();
+    await showDryRun();
+
+    expect(text('[data-testid="write-back-result"]')).toBe(
+      'Reset the Session and restored 1 file.',
+    );
+    expect(resets).toBe(1);
+  });
 });
 
 function file(

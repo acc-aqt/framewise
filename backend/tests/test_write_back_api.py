@@ -448,3 +448,59 @@ def test_re_applying_after_more_overrides_writes_the_final_state(
     assert rating(first) == {"stars": 1, "label": None}
     assert rating(second) == {"stars": None, "label": None}
     assert not raw.with_suffix(".xmp").exists()
+
+
+def test_resetting_the_session_restores_the_files_and_forgets_the_review(
+    session_dir, review, analyzer, english
+):
+    first = jpg(session_dir, analyzer, "DSCF0001.JPG", stars=1, aesthetics=0.5)
+    raw = make_raw(session_dir / "DSCF0002.RAF")
+    second = jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3)
+    client = review(**english)
+    override(client, "DSCF0002.JPG", verdict="winner", stars=4)
+    assert client.post("/api/groups/split", json={"frame_ids": [2]}).status_code == 204
+    client.patch("/api/session", json={"keeper_budget": 0.9})
+    client.post("/api/write-back")
+
+    result = client.post("/api/session/reset").json()
+
+    assert result["failed"] == []
+    assert rating(first) == {"stars": 1, "label": None}
+    assert rating(second) == {"stars": None, "label": None}
+    assert not raw.with_suffix(".xmp").exists()
+    groups = client.get("/api/groups").json()
+    assert [[frame["id"] for frame in group["frames"]] for group in groups] == [[1, 2]]
+    assert all(frame["override"] is None for group in groups for frame in group["frames"])
+    assert client.get("/api/session").json()["keeper_budget"] == 0.4
+    assert client.get("/api/write-back").json()["can_undo"] is False
+
+
+def test_resetting_a_session_without_write_back_forgets_the_review(
+    session_dir, review, analyzer, english
+):
+    jpg(session_dir, analyzer, "DSCF0001.JPG")
+    client = review(**english)
+    override(client, "DSCF0001.JPG", verdict="reject")
+
+    assert client.post("/api/session/reset").json() == {"written": [], "failed": []}
+    assert client.get("/api/groups").json()[0]["frames"][0]["override"] is None
+
+
+def test_a_file_that_fails_to_restore_on_reset_stays_undoable(
+    session_dir, review, analyzer, english
+):
+    locked = jpg(session_dir, analyzer, "DSCF0001.JPG", stars=1)
+    client = review(**english)
+    client.post("/api/write-back")
+    locked.chmod(0o444)
+
+    result = client.post("/api/session/reset").json()
+
+    assert [failure["path"] for failure in result["failed"]] == ["DSCF0001.JPG"]
+    assert client.get("/api/write-back").json()["can_undo"] is True
+
+
+def test_reset_waits_until_analysis_has_finished(session_dir, live_review, analyzer, english):
+    analyzer.hold(make_jpg(session_dir / "DSCF0001.JPG"))
+
+    assert live_review(**english).post("/api/session/reset").status_code == 409

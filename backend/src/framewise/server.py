@@ -255,6 +255,15 @@ def create_app(
         require_finished_analysis()
         return _write_back_result_json(write_back.undo())
 
+    @app.post("/api/session/reset")
+    def reset_session() -> dict:
+        """Undoes Rating write-back and forgets the photographer's review, so the Session is
+        reviewed afresh from framewise's proposal. Files that fail to restore stay undoable."""
+        require_finished_analysis()
+        result = write_back.undo()
+        store.clear_review()
+        return _write_back_result_json(result)
+
     @app.get("/api/frames/{frame_id}/thumbnail")
     def frame_thumbnail(frame_id: int) -> Response:
         thumbnail = store.thumbnail(frame_id)

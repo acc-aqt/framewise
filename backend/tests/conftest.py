@@ -116,6 +116,9 @@ class FakeAnalyzer:
         self._failing.add(jpg_path.resolve())
         return jpg_path
 
+    def release(self, jpg_path: Path) -> None:
+        self._held[jpg_path.resolve()].set()
+
     def release_all(self) -> None:
         for gate in self._held.values():
             gate.set()
@@ -152,6 +155,21 @@ def wait_until(condition: Callable[[], bool], timeout: float = 5) -> None:
         time.sleep(0.01)
 
 
+class FakeClock:
+    """A monotonic clock that only moves when a test sets it."""
+
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+@pytest.fixture
+def clock() -> FakeClock:
+    return FakeClock()
+
+
 @pytest.fixture
 def analyzer():
     fake = FakeAnalyzer()
@@ -173,12 +191,12 @@ def review(session_dir: Path, data_dir: Path, analyzer: FakeAnalyzer):
 
 
 @pytest.fixture
-def live_review(session_dir: Path, data_dir: Path, analyzer: FakeAnalyzer):
+def live_review(session_dir: Path, data_dir: Path, analyzer: FakeAnalyzer, clock: FakeClock):
     """Opens the Review UI while analysis runs in the background."""
 
     def start(background: bool = False) -> TestClient:
         store = open_session(session_dir, data_dir)
-        analysis = SessionAnalysis(store, analyzer, background=background)
+        analysis = SessionAnalysis(store, analyzer, background=background, clock=clock)
         threading.Thread(target=analysis.run, daemon=True).start()
         return TestClient(create_app(store, analysis))
 

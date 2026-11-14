@@ -1,10 +1,12 @@
 import os
 import sys
+import threading
 
 import pytest
 from conftest import make_jpg, wait_until
 from fastapi.testclient import TestClient
 
+from framewise.analyzer import FrameSignals
 from framewise.review import SessionAnalysis, open_session
 from framewise.server import create_app
 
@@ -62,6 +64,50 @@ def test_background_mode_analyses_fewer_frames_at_once(
     wait_until(lambda: progress(client)["frames_left"] == 0)
 
     assert analyzer.peak_in_flight == expected_peak
+
+
+def test_time_remaining_allows_for_frames_still_being_analysed(
+    session_dir, live_review, analyzer, clock, monkeypatch
+):
+    monkeypatch.setattr(os, "cpu_count", lambda: 4)
+    for number in range(1, 9):
+        analyzer.hold(make_jpg(session_dir / f"DSCF{number:04d}.JPG"))
+
+    client = live_review()
+    wait_until(lambda: analyzer.in_flight == 4)
+    assert progress(client)["seconds_remaining"] is None
+
+    clock.now = 10
+    analyzer.release(session_dir / "DSCF0001.JPG")
+    wait_until(lambda: progress(client)["frames_done"] == 1 and analyzer.in_flight == 4)
+
+    # 7 Frames of 10 s left on 4 workers, 3 of them 10 s in already
+    assert progress(client)["seconds_remaining"] == 10
+
+
+def test_time_remaining_ignores_frames_that_only_needed_a_thumbnail(
+    session_dir, data_dir, analyzer, clock, monkeypatch
+):
+    monkeypatch.setattr(os, "cpu_count", lambda: 1)
+    for number in range(1, 4):
+        make_jpg(session_dir / f"DSCF{number:04d}.JPG")
+    analyzer.hold(make_jpg(session_dir / "DSCF0004.JPG"))
+    analyzer.hold(make_jpg(session_dir / "DSCF0005.JPG"))
+    store = open_session(session_dir, data_dir)
+    for number in range(1, 4):
+        store.save_analysis(session_dir / f"DSCF{number:04d}.JPG", FrameSignals([1.0]), None)
+
+    analysis = SessionAnalysis(store, analyzer, clock=clock)
+    threading.Thread(target=analysis.run, daemon=True).start()
+    client = TestClient(create_app(store, analysis))
+    wait_until(lambda: progress(client)["frames_done"] == 3 and analyzer.in_flight == 1)
+    assert progress(client)["seconds_remaining"] is None
+
+    clock.now = 12
+    analyzer.release(session_dir / "DSCF0004.JPG")
+    wait_until(lambda: progress(client)["frames_done"] == 4 and analyzer.in_flight == 1)
+
+    assert progress(client)["seconds_remaining"] == 12
 
 
 def test_a_re_run_counts_frames_analysed_before_as_done(session_dir, review, analyzer):

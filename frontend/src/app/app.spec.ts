@@ -1063,6 +1063,11 @@ describe('Review UI', () => {
       ]);
       const moveNext = { label: 'Move to next Group', title: 'Move to next Group' };
       expect(accessibleNames('[data-testid="move-next"]')).toEqual([moveNext, moveNext, moveNext]);
+      const makeWinner = accessibleNames('[data-testid="make-winner"]');
+      expect(makeWinner.length).toBeGreaterThan(0);
+      expect(makeWinner).toEqual(
+        makeWinner.map(() => ({ label: 'Make Winner', title: 'Make Winner' })),
+      );
     });
 
     it('moves a Frame to the previous or next Group', async () => {

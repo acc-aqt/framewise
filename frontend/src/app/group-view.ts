@@ -178,12 +178,13 @@ const SHORTCUT_HINTS = [
             @if (frame.verdict !== 'winner') {
               <button
                 type="button"
-                class="btn make-winner"
+                class="btn btn-icon make-winner"
                 data-testid="make-winner"
+                aria-label="Make Winner"
+                title="Make Winner"
                 (click)="makeWinner.emit(frame)"
               >
                 <app-icon name="crown" [size]="14" />
-                Make Winner
               </button>
             }
           </div>
@@ -296,7 +297,6 @@ const SHORTCUT_HINTS = [
     }
     .actions {
       display: flex;
-      flex-wrap: wrap;
       align-items: center;
       gap: var(--space-1);
       margin-top: auto;

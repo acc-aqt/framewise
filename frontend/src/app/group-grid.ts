@@ -12,6 +12,7 @@ import {
   signal,
 } from '@angular/core';
 import { FrameTile } from './frame-tile';
+import { Icon } from './icon';
 import { isFiltering, matchesFilter, NO_FILTER, ProposalFilter, winnerOf } from './proposal';
 import { Frame, Group } from './session-api';
 
@@ -26,7 +27,7 @@ interface GridTile {
 @Component({
   selector: 'app-group-grid',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ScrollingModule, FrameTile],
+  imports: [ScrollingModule, FrameTile, Icon],
   template: `
     <cdk-virtual-scroll-viewport [itemSize]="rowHeight" class="viewport">
       <div
@@ -43,8 +44,12 @@ interface GridTile {
             [attr.aria-label]="'Open Group of ' + frameCount(tile.group)"
             (click)="open.emit(tile.frame)"
           >
-            <app-frame-tile class="cover" [frame]="tile.frame" />
-            <span class="count" data-testid="frame-count">{{ frameCount(tile.group) }}</span>
+            <app-frame-tile class="cover" [frame]="tile.frame">
+              <span class="count" data-testid="frame-count">
+                <app-icon name="layers" [size]="12" />
+                {{ frameCount(tile.group) }}
+              </span>
+            </app-frame-tile>
           </button>
         }
       </div>
@@ -60,16 +65,16 @@ interface GridTile {
     }
     .row {
       display: grid;
-      gap: 8px;
-      padding-bottom: 8px;
+      gap: var(--space-3);
+      padding-bottom: var(--space-3);
       box-sizing: border-box;
     }
     .group {
-      position: relative;
       display: flex;
       min-width: 0;
       padding: 0;
       border: 0;
+      border-radius: var(--radius-md);
       background: none;
       color: inherit;
       font: inherit;
@@ -83,14 +88,24 @@ interface GridTile {
     .cover {
       flex: 1;
     }
+    .group:hover .cover {
+      border-color: var(--color-border-strong);
+    }
     .count {
       position: absolute;
       right: 6px;
-      bottom: 28px;
-      padding: 1px 6px;
-      border-radius: 3px;
-      font-size: 0.7rem;
+      bottom: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-1);
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
       background: var(--color-overlay);
+      color: var(--color-text);
+      font-size: var(--text-xs);
+      font-variant-numeric: tabular-nums;
+      line-height: 1.3;
+      white-space: nowrap;
     }
   `,
 })

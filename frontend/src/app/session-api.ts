@@ -11,6 +11,31 @@ export interface CameraRating {
   label: string | null;
 }
 
+export type Verdict = 'winner' | 'keeper' | 'reject' | 'unsure';
+
+export interface Reason {
+  code: string;
+  label: string;
+  text: string;
+}
+
+export interface Scores {
+  sharpness: number;
+  steadiness: number;
+  exposure: number;
+  aesthetics: number | null;
+  total: number;
+}
+
+export interface Signals {
+  sharpness: number;
+  motion_blur: number;
+  exposure_stops: number;
+  low_key: boolean;
+  high_key: boolean;
+  aesthetics: number | null;
+}
+
 export interface Frame {
   id: number;
   jpg_path: string;
@@ -18,6 +43,10 @@ export interface Frame {
   kind: 'jpg-only' | 'raw+jpg';
   camera_rating: CameraRating;
   thumbnail_url: string;
+  verdict: Verdict;
+  reasons: Reason[];
+  scores: Scores;
+  signals: Signals;
 }
 
 export interface Group {

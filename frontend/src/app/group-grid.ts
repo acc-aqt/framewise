@@ -12,10 +12,16 @@ import {
   signal,
 } from '@angular/core';
 import { FrameTile } from './frame-tile';
-import { Group } from './session-api';
+import { isFiltering, matchesFilter, NO_FILTER, ProposalFilter, winnerOf } from './proposal';
+import { Frame, Group } from './session-api';
 
 const TILE_WIDTH_PX = 220;
 const ROW_HEIGHT_PX = 200;
+
+interface GridTile {
+  frame: Frame;
+  group: Group;
+}
 
 @Component({
   selector: 'app-group-grid',
@@ -29,16 +35,16 @@ const ROW_HEIGHT_PX = 200;
         [style.height.px]="rowHeight"
         [style.grid-template-columns]="'repeat(' + columns() + ', 1fr)'"
       >
-        @for (group of row; track group.id) {
+        @for (tile of row; track tile.frame.id) {
           <button
             type="button"
             class="group"
             data-testid="group-tile"
-            [attr.aria-label]="'Open Group of ' + frameCount(group)"
-            (click)="open.emit(group)"
+            [attr.aria-label]="'Open Group of ' + frameCount(tile.group)"
+            (click)="open.emit(tile.frame)"
           >
-            <app-frame-tile class="cover" [frame]="group.frames[0]" />
-            <span class="count" data-testid="frame-count">{{ frameCount(group) }}</span>
+            <app-frame-tile class="cover" [frame]="tile.frame" />
+            <span class="count" data-testid="frame-count">{{ frameCount(tile.group) }}</span>
           </button>
         }
       </div>
@@ -90,11 +96,25 @@ const ROW_HEIGHT_PX = 200;
 })
 export class GroupGrid {
   readonly groups = input.required<Group[]>();
-  readonly open = output<Group>();
+  readonly filter = input<ProposalFilter>(NO_FILTER);
+  /** Emits the Frame shown on the clicked tile. */
+  readonly open = output<Frame>();
 
   protected readonly rowHeight = ROW_HEIGHT_PX;
   protected readonly columns = signal(4);
-  protected readonly rows = computed(() => chunk(this.groups(), this.columns()));
+  // Each Group's Winner stands for it, but a filter lists every matching Frame on its own tile.
+  protected readonly tiles = computed<GridTile[]>(() => {
+    const filter = this.filter();
+    if (!isFiltering(filter)) {
+      return this.groups().map((group) => ({ frame: winnerOf(group), group }));
+    }
+    return this.groups().flatMap((group) =>
+      group.frames
+        .filter((frame) => matchesFilter(frame, filter))
+        .map((frame) => ({ frame, group })),
+    );
+  });
+  protected readonly rows = computed(() => chunk(this.tiles(), this.columns()));
 
   constructor() {
     const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;

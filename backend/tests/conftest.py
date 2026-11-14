@@ -89,13 +89,30 @@ def data_dir(tmp_path: Path) -> Path:
     return tmp_path / "app-support"
 
 
+CLEAN_SIGNALS = {
+    "sharpness": 0.9,
+    "motion_blur": 0.05,
+    "exposure_stops": 0.0,
+    "low_key": False,
+    "high_key": False,
+    "aesthetics": 0.0,
+}
+
+
+def clean_signals(fingerprint: list[float]) -> FrameSignals:
+    """The signals of a sharp, well-exposed Frame of average aesthetics."""
+    return FrameSignals(fingerprint=fingerprint, **CLEAN_SIGNALS)
+
+
 class FakeAnalyzer:
-    """Returns scripted fingerprints, and a fingerprint unlike any other for unscripted Frames.
+    """Returns scripted fingerprints and signals. An unscripted Frame gets a fingerprint unlike any
+    other and the signals of a sharp, well-exposed Frame of average aesthetics.
     A held Frame's analysis blocks until released, to observe a run in progress. Records whether
     each analysing thread runs at Darwin background priority on macOS."""
 
     def __init__(self):
         self.fingerprints: dict[Path, list[float]] = {}
+        self.signals: dict[Path, dict] = {}
         self.analyzed: list[Path] = []
         self.in_flight = 0
         self.peak_in_flight = 0
@@ -104,8 +121,10 @@ class FakeAnalyzer:
         self._failing: set[Path] = set()
         self._lock = threading.Lock()
 
-    def script(self, jpg_path: Path, fingerprint: list[float]) -> Path:
-        self.fingerprints[jpg_path.resolve()] = fingerprint
+    def script(self, jpg_path: Path, fingerprint: list[float] | None = None, **signals) -> Path:
+        if fingerprint is not None:
+            self.fingerprints[jpg_path.resolve()] = fingerprint
+        self.signals[jpg_path.resolve()] = signals
         return jpg_path
 
     def hold(self, jpg_path: Path) -> Path:
@@ -139,7 +158,8 @@ class FakeAnalyzer:
         if jpg_path.resolve() in self._failing:
             raise RuntimeError(f"cannot analyse {jpg_path}")
         fingerprint = self.fingerprints.get(jpg_path.resolve()) or _unrelated_fingerprint(jpg_path)
-        return FrameSignals(fingerprint=fingerprint)
+        scripted = self.signals.get(jpg_path.resolve(), {})
+        return FrameSignals(fingerprint=fingerprint, **(CLEAN_SIGNALS | scripted))
 
 
 def _unrelated_fingerprint(jpg_path: Path) -> list[float]:

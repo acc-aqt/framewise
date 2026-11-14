@@ -1,11 +1,13 @@
+from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 
 from framewise.grouper import group_frames
+from framewise.judge import Judgement, judge
 from framewise.review import SessionAnalysis
-from framewise.store import Frame, SessionStore
+from framewise.store import AnalyzedFrame, Frame, SessionStore
 
 
 def create_app(
@@ -39,12 +41,16 @@ def create_app(
 
     @app.get("/api/groups")
     def group_list() -> list[dict]:
+        groups = group_frames(store.analyzed_frames())
+        proposal = judge(groups)
         return [
             {
                 "id": group[0].frame.id,
-                "frames": [_frame_json(analyzed.frame) for analyzed in group],
+                "frames": [
+                    _judged_frame_json(analyzed, proposal[analyzed.frame.id]) for analyzed in group
+                ],
             }
-            for group in group_frames(store.analyzed_frames())
+            for group in groups
         ]
 
     @app.get("/api/frames/{frame_id}/thumbnail")
@@ -68,4 +74,19 @@ def _frame_json(frame: Frame) -> dict:
         "kind": frame.kind,
         "camera_rating": {"stars": frame.camera_rating.stars, "label": frame.camera_rating.label},
         "thumbnail_url": f"/api/frames/{frame.id}/thumbnail",
+    }
+
+
+def _judged_frame_json(analyzed: AnalyzedFrame, judgement: Judgement) -> dict:
+    signals = asdict(analyzed.signals)
+    del signals["fingerprint"]
+    return {
+        **_frame_json(analyzed.frame),
+        "verdict": judgement.verdict.value,
+        "reasons": [asdict(reason) for reason in judgement.reasons],
+        "scores": {
+            name: None if value is None else round(value, 3)
+            for name, value in asdict(judgement.scores).items()
+        },
+        "signals": signals,
     }

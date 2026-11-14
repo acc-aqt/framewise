@@ -9,6 +9,10 @@
   --color-rating: #fdd663;
   --color-error: #f28b82;
   --color-focus: #8ab4f8;
+  --color-winner: #fdd663;
+  --color-keeper: #81c995;
+  --color-reject: #f28b82;
+  --color-unsure: #fcad70;
 }
 
 html,

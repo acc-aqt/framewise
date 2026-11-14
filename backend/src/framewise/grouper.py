@@ -12,7 +12,7 @@ NEAR_DUPLICATE_SIMILARITY = 0.9
 
 def group_frames(frames: list[AnalyzedFrame]) -> list[list[AnalyzedFrame]]:
     ordered = sorted(frames, key=_capture_order)
-    unit_fingerprints = [_unit(frame.fingerprint) for frame in ordered]
+    unit_fingerprints = [_unit(frame.signals.fingerprint) for frame in ordered]
     parents = list(range(len(ordered)))
     for first, second in _candidate_pairs(ordered):
         similarity = _dot(unit_fingerprints[first], unit_fingerprints[second])

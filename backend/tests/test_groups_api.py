@@ -126,7 +126,9 @@ def test_each_group_carries_its_frames_with_kind_camera_rating_and_thumbnail(
     [group] = client.get("/api/groups").json()
 
     [frame] = client.get("/api/frames").json()
-    assert group == {"id": frame["id"], "frames": [frame]}
+    [group_frame] = group["frames"]
+    assert group["id"] == frame["id"]
+    assert {key: group_frame[key] for key in frame} == frame
     assert frame["kind"] == "raw+jpg"
     assert frame["camera_rating"] == {"stars": 2, "label": None}
     assert client.get(frame["thumbnail_url"]).status_code == 200

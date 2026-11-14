@@ -3,10 +3,9 @@ import sys
 import threading
 
 import pytest
-from conftest import make_jpg, wait_until
+from conftest import clean_signals, make_jpg, wait_until
 from fastapi.testclient import TestClient
 
-from framewise.analyzer import FrameSignals
 from framewise.review import SessionAnalysis, open_session
 from framewise.server import create_app
 
@@ -95,7 +94,7 @@ def test_time_remaining_ignores_frames_that_only_needed_a_thumbnail(
     analyzer.hold(make_jpg(session_dir / "DSCF0005.JPG"))
     store = open_session(session_dir, data_dir)
     for number in range(1, 4):
-        store.save_analysis(session_dir / f"DSCF{number:04d}.JPG", FrameSignals([1.0]), None)
+        store.save_analysis(session_dir / f"DSCF{number:04d}.JPG", clean_signals([1.0]), None)
 
     analysis = SessionAnalysis(store, analyzer, clock=clock)
     threading.Thread(target=analysis.run, daemon=True).start()

@@ -176,3 +176,72 @@ def test_the_aesthetics_score_ranges_from_minus_one_to_one(tmp_path):
 
     assert aesthetics is not None
     assert -1 <= aesthetics <= 1
+
+
+FACES = Path(__file__).parent / "fixtures" / "faces"
+
+
+def side_by_side(paths: list[Path], path: Path) -> Path:
+    """A group shot made of the reference faces next to each other."""
+    images = [Image.open(source).convert("RGB") for source in paths]
+    width = sum(image.width for image in images)
+    group_shot = Image.new("RGB", (width, max(image.height for image in images)))
+    left = 0
+    for image in images:
+        group_shot.paste(image, (left, 0))
+        left += image.width
+    group_shot.save(path, "JPEG", quality=90)
+    return path
+
+
+def test_a_frame_without_faces_has_none(tmp_path):
+    from framewise.vision_analyzer import VisionAnalyzer
+
+    assert VisionAnalyzer().analyze(draw_landscape(tmp_path / "landscape.jpg")).faces == []
+
+
+def test_the_real_analyzer_tells_open_from_closed_eyes():
+    from framewise.vision_analyzer import VisionAnalyzer
+
+    analyzer = VisionAnalyzer()
+    [open_face] = analyzer.analyze(FACES / "eyes-open.jpg").faces
+    [closed_face] = analyzer.analyze(FACES / "eyes-closed.jpg").faces
+
+    assert open_face.eyes_open is True
+    assert closed_face.eyes_open is False
+
+
+def test_each_face_has_a_box_from_the_top_left_a_sharpness_and_a_quality():
+    from framewise.vision_analyzer import VisionAnalyzer
+
+    [face] = VisionAnalyzer().analyze(FACES / "eyes-open.jpg").faces
+
+    assert 0.2 < face.x < 0.4 and 0.2 < face.y < 0.4
+    assert 0.3 < face.width < 0.5 and 0.3 < face.height < 0.5
+    assert face.sharpness > 0.5
+    assert face.quality is not None and 0 <= face.quality <= 1
+
+
+def test_a_blurred_face_is_less_sharp(tmp_path):
+    from framewise.vision_analyzer import VisionAnalyzer
+
+    analyzer = VisionAnalyzer()
+    blurred = gaussian_blurred(FACES / "eyes-open.jpg", tmp_path / "blurred.jpg")
+
+    [sharp_face] = analyzer.analyze(FACES / "eyes-open.jpg").faces
+    [blurred_face] = analyzer.analyze(blurred).faces
+
+    assert blurred_face.sharpness < 0.25 < sharp_face.sharpness
+
+
+def test_the_real_analyzer_checks_every_face_in_a_group_shot(tmp_path):
+    from framewise.vision_analyzer import VisionAnalyzer
+
+    group_shot = side_by_side(
+        [FACES / "eyes-open.jpg", FACES / "eyes-closed.jpg", FACES / "eyes-open.jpg"],
+        tmp_path / "group-shot.jpg",
+    )
+
+    faces = sorted(VisionAnalyzer().analyze(group_shot).faces, key=lambda face: face.x)
+
+    assert [face.eyes_open for face in faces] == [True, False, True]

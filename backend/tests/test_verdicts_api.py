@@ -196,8 +196,16 @@ def test_each_frame_carries_its_score_breakdown_and_signals(session_dir, review,
 
     [frame] = frames_by_name(review()).values()
 
-    assert set(frame["scores"]) == {"sharpness", "steadiness", "exposure", "aesthetics", "total"}
-    assert all(0 <= value <= 1 for value in frame["scores"].values())
+    assert set(frame["scores"]) == {
+        "sharpness",
+        "steadiness",
+        "exposure",
+        "aesthetics",
+        "face_quality",
+        "total",
+    }
+    assert frame["scores"]["face_quality"] is None
+    assert all(0 <= value <= 1 for value in frame["scores"].values() if value is not None)
     assert frame["scores"]["aesthetics"] == 0.75
     assert frame["signals"] == {
         "sharpness": 0.9,
@@ -206,6 +214,7 @@ def test_each_frame_carries_its_score_breakdown_and_signals(session_dir, review,
         "low_key": False,
         "high_key": False,
         "aesthetics": 0.5,
+        "faces": [],
     }
 
 

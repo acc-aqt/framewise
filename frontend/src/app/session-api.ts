@@ -24,6 +24,7 @@ export interface Scores {
   steadiness: number;
   exposure: number;
   aesthetics: number | null;
+  face_quality: number | null;
   total: number;
 }
 
@@ -48,6 +49,20 @@ export interface Override {
 /** The Override fields to change. A field sent as null is cleared; one left out is kept. */
 export type OverrideChange = Partial<Override>;
 
+export interface FaceBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** A face in a Frame, its box a fraction of the Frame measured from the top left. */
+export interface Face {
+  box: FaceBox;
+  eyes: 'open' | 'closed' | 'unknown';
+  focus: 'sharp' | 'soft';
+}
+
 export interface Frame {
   id: number;
   jpg_path: string;
@@ -63,6 +78,7 @@ export interface Frame {
   reasons: Reason[];
   scores: Scores;
   signals: Signals;
+  faces: Face[];
 }
 
 export interface Group {

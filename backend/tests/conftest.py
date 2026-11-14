@@ -96,17 +96,18 @@ CLEAN_SIGNALS = {
     "low_key": False,
     "high_key": False,
     "aesthetics": 0.0,
+    "faces": [],
 }
 
 
 def clean_signals(fingerprint: list[float]) -> FrameSignals:
-    """The signals of a sharp, well-exposed Frame of average aesthetics."""
+    """The signals of a sharp, well-exposed Frame of average aesthetics without faces."""
     return FrameSignals(fingerprint=fingerprint, **CLEAN_SIGNALS)
 
 
 class FakeAnalyzer:
     """Returns scripted fingerprints and signals. An unscripted Frame gets a fingerprint unlike any
-    other and the signals of a sharp, well-exposed Frame of average aesthetics.
+    other and the signals of a sharp, well-exposed Frame of average aesthetics without faces.
     A held Frame's analysis blocks until released, to observe a run in progress. Records whether
     each analysing thread runs at Darwin background priority on macOS."""
 

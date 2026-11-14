@@ -4,6 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { App, POLL_INTERVAL_MS } from './app';
 import {
   AnalysisProgress,
+  Face,
   Frame,
   Group,
   OverrideChange,
@@ -141,7 +142,7 @@ describe('Review UI', () => {
       group(1, [
         frame(1, 'jpg-only', {
           verdict: 'winner',
-          scores: { sharpness: 0.9, steadiness: 0.95, exposure: 1, aesthetics: null, total: 0.93 },
+          scores: { ...SCORES, exposure: 1, aesthetics: null, total: 0.93 },
         }),
       ]),
     ]);
@@ -160,7 +161,7 @@ describe('Review UI', () => {
         frame(2, 'jpg-only', {
           verdict: 'reject',
           reasons: [reason('underexposed', 'Underexposed', 'Underexposed 1.5 stops')],
-          scores: { sharpness: 0.9, steadiness: 0.95, exposure: 0, aesthetics: 0.5, total: 0.6 },
+          scores: { ...SCORES, exposure: 0, total: 0.6 },
           signals: {
             sharpness: 0.9,
             motion_blur: 0.05,
@@ -281,6 +282,80 @@ describe('Review UI', () => {
       ),
     ).toEqual(['★ Rot', null, null]);
     expect(all('[data-testid="group-tile"]')).toEqual([]);
+  });
+
+  it('shows a badge on each face of a Frame in an open Group, placed on its face', async () => {
+    await respond(summary, [
+      group(1, [
+        frame(1, 'jpg-only', {
+          verdict: 'unsure',
+          faces: [
+            face(0.1, 'open', 'sharp'),
+            face(0.6, 'closed', 'soft'),
+            face(0.8, 'unknown', 'sharp'),
+          ],
+        }),
+      ]),
+    ]);
+    all('[data-testid="group-tile"]')[0].click();
+    await fixture.whenStable();
+
+    const badges = all('[data-testid="group-view"] [data-testid="face-badge"]');
+    expect(badges.map((badge) => badge.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
+      'Eyes open · Sharp',
+      'Eyes closed · Soft',
+      'Sharp',
+    ]);
+    expect(badges.map((badge) => badge.classList.contains('flagged'))).toEqual([
+      false,
+      true,
+      false,
+    ]);
+    const { left, top, width, height } = badges[1].style;
+    expect([left, top, width, height]).toEqual(['60%', '30%', '20%', '25%']);
+  });
+
+  it('fits the picture to the image once it loads, so face badges land on their faces', async () => {
+    await respond(summary, [
+      group(1, [frame(1, 'jpg-only', { verdict: 'winner', faces: [face(0.1, 'open', 'sharp')] })]),
+    ]);
+    all('[data-testid="group-tile"]')[0].click();
+    await fixture.whenStable();
+    const [image] = all('[data-testid="group-view"] [data-testid="frame-tile"] img');
+
+    Object.defineProperty(image, 'naturalWidth', { value: 300 });
+    Object.defineProperty(image, 'naturalHeight', { value: 200 });
+    image.dispatchEvent(new Event('load'));
+    await fixture.whenStable();
+
+    expect(image.parentElement?.style.width).toBe('min(100cqw, 150cqh)');
+  });
+
+  it('shows no face badges on the grid of Groups', async () => {
+    await respond(summary, [
+      group(1, [frame(1, 'jpg-only', { verdict: 'winner', faces: [face(0.1, 'closed', 'soft')] })]),
+    ]);
+
+    expect(all('[data-testid="face-badge"]')).toEqual([]);
+  });
+
+  it('includes face quality in the score breakdown of a Frame with faces', async () => {
+    await respond(summary, [
+      group(1, [
+        frame(1, 'jpg-only', {
+          verdict: 'winner',
+          scores: { ...SCORES, face_quality: 0.64 },
+          faces: [face(0.1, 'open', 'sharp')],
+        }),
+        frame(2, 'jpg-only'),
+      ]),
+    ]);
+    all('[data-testid="group-tile"]')[0].click();
+    await fixture.whenStable();
+
+    const frames = all('[data-testid="group-view"] [data-testid="frame-details"]');
+    expect(text('[data-testid="score-breakdown"]', frames[0])).toContain('Face quality 0.64');
+    expect(text('[data-testid="score-breakdown"]', frames[1])).not.toContain('Face quality');
   });
 
   it('returns from an open Group to the grid of Groups', async () => {
@@ -600,6 +675,27 @@ describe('Review UI', () => {
       expect(text('[data-testid="loupe-zoom"]')).toBe('Fit');
     });
 
+    it('shows a badge on each face in the loupe, at fit and at 100%', async () => {
+      await openFirstGroup([
+        group(1, [
+          frame(1, 'jpg-only', {
+            verdict: 'unsure',
+            faces: [face(0.1, 'open', 'sharp'), face(0.6, 'closed', 'sharp')],
+          }),
+        ]),
+      ]);
+
+      await press('e');
+      const badges = () =>
+        all('[data-testid="loupe"] [data-testid="face-badge"]').map((badge) =>
+          badge.textContent?.replace(/\s+/g, ' ').trim(),
+        );
+      expect(badges()).toEqual(['Eyes open · Sharp', 'Eyes closed · Sharp']);
+
+      await press('z');
+      expect(badges()).toEqual(['Eyes open · Sharp', 'Eyes closed · Sharp']);
+    });
+
     it('moves the loupe between Frames with the arrow keys', async () => {
       await openFirstGroup();
       await press('e');
@@ -653,6 +749,15 @@ describe('Review UI', () => {
   });
 });
 
+const SCORES: Frame['scores'] = {
+  sharpness: 0.9,
+  steadiness: 0.95,
+  exposure: 1,
+  aesthetics: 0.5,
+  face_quality: null,
+  total: 0.8,
+};
+
 function group(id: number, frames: Frame[]): Group {
   return { id, frames };
 }
@@ -670,7 +775,7 @@ function frame(id: number, kind: Frame['kind'], overrides: Partial<Frame> = {}):
     verdict_overridden: false,
     override: null,
     reasons: [],
-    scores: { sharpness: 0.9, steadiness: 0.95, exposure: 1, aesthetics: 0.5, total: 0.8 },
+    scores: SCORES,
     signals: {
       sharpness: 0.9,
       motion_blur: 0.05,
@@ -679,8 +784,13 @@ function frame(id: number, kind: Frame['kind'], overrides: Partial<Frame> = {}):
       high_key: false,
       aesthetics: 0,
     },
+    faces: [],
     ...overrides,
   };
+}
+
+function face(x: number, eyes: Face['eyes'], focus: Face['focus']): Face {
+  return { box: { x, y: 0.3, width: 0.2, height: 0.25 }, eyes, focus };
 }
 
 function reason(code: string, label: string, text = label): Reason {

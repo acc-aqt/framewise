@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { FramePicture } from './frame-picture';
 import { VERDICT_LABELS } from './proposal';
 import { Frame } from './session-api';
 
@@ -7,10 +8,18 @@ export type LoupeZoom = 'fit' | '100%';
 @Component({
   selector: 'app-loupe',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [FramePicture],
   host: { 'data-testid': 'loupe', role: 'dialog', '[attr.aria-label]': 'frame().jpg_path' },
   template: `
     <div class="stage" [class.actual-size]="zoom() === '100%'" (click)="toggleZoom.emit()">
-      <img data-testid="loupe-image" [src]="frame().image_url" [alt]="frame().jpg_path" />
+      <app-frame-picture
+        class="picture"
+        imageTestId="loupe-image"
+        [src]="frame().image_url"
+        [alt]="frame().jpg_path"
+        [faces]="frame().faces"
+        [fit]="zoom() === 'fit'"
+      />
     </div>
     <div class="bar">
       <span>{{ frame().jpg_path }}</span>
@@ -37,19 +46,18 @@ export type LoupeZoom = 'fit' | '100%';
       overflow: hidden;
       cursor: zoom-in;
     }
-    .stage img {
-      margin: auto;
-      max-width: 100%;
-      max-height: 100%;
-      object-fit: contain;
+    .picture {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
     }
     .stage.actual-size {
       overflow: auto;
       cursor: zoom-out;
     }
-    .stage.actual-size img {
-      max-width: none;
-      max-height: none;
+    .stage.actual-size .picture {
+      flex: none;
+      margin: auto;
     }
     .bar {
       display: flex;

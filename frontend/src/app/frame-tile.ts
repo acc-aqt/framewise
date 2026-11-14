@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { FramePicture } from './frame-picture';
 import { scoreBreakdown, VERDICT_LABELS } from './proposal';
 import { CameraRating, ColorLabel, Frame } from './session-api';
 
@@ -10,9 +11,16 @@ const KIND_BADGES: Record<Frame['kind'], string> = {
 @Component({
   selector: 'app-frame-tile',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [FramePicture],
   host: { '[attr.title]': 'breakdown()' },
   template: `
-    <img [src]="frame().thumbnail_url" [alt]="frame().jpg_path" loading="lazy" />
+    <app-frame-picture
+      class="picture"
+      [src]="frame().thumbnail_url"
+      [alt]="frame().jpg_path"
+      [faces]="showFaces() ? frame().faces : null"
+      [lazy]="true"
+    />
     <span class="badge" data-testid="kind-badge">{{ kindBadges[frame().kind] }}</span>
     @if (ratingText(frame().camera_rating); as rating) {
       <span class="rating" data-testid="camera-rating">{{ rating }}</span>
@@ -44,11 +52,9 @@ const KIND_BADGES: Record<Frame['kind'], string> = {
       border-radius: 4px;
       overflow: hidden;
     }
-    img {
+    .picture {
       flex: 1;
       min-height: 0;
-      width: 100%;
-      object-fit: contain;
     }
     .badge,
     .rating,
@@ -111,6 +117,8 @@ const KIND_BADGES: Record<Frame['kind'], string> = {
 })
 export class FrameTile {
   readonly frame = input.required<Frame>();
+  /** Marks each face of the Frame on its image. */
+  readonly showFaces = input(false);
 
   protected readonly kindBadges = KIND_BADGES;
   protected readonly verdictLabels = VERDICT_LABELS;

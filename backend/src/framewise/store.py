@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from framewise.analyzer import ANALYSIS_VERSION, FrameSignals
+from framewise.analyzer import ANALYSIS_VERSION, Face, FrameSignals
 from framewise.camera_rating import CameraRating
 from framewise.scan import ScannedFrame
 
@@ -209,10 +209,7 @@ class SessionStore:
         return [
             AnalyzedFrame(
                 frame=_frame(row),
-                signals=FrameSignals(
-                    fingerprint=array("f", row["fingerprint"]).tolist(),
-                    **json.loads(row["signals"]),
-                ),
+                signals=_signals(row),
                 captured_at=(
                     None
                     if row["captured_at"] is None
@@ -271,6 +268,12 @@ def _signals_without_fingerprint(signals: FrameSignals) -> dict:
     values = asdict(signals)
     del values["fingerprint"]
     return values
+
+
+def _signals(row: sqlite3.Row) -> FrameSignals:
+    values = json.loads(row["signals"])
+    faces = [Face(**face) for face in values.pop("faces")]
+    return FrameSignals(fingerprint=array("f", row["fingerprint"]).tolist(), faces=faces, **values)
 
 
 def _frame(row: sqlite3.Row) -> Frame:

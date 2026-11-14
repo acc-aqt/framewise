@@ -41,6 +41,7 @@ export function scoreBreakdown(frame: Frame): string[] {
     scores.aesthetics === null
       ? 'Aesthetics unavailable'
       : `Aesthetics ${score(scores.aesthetics)}`,
+    ...(scores.face_quality === null ? [] : [`Face quality ${score(scores.face_quality)}`]),
   ];
 }
 

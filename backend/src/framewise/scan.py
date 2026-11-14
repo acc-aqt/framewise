@@ -4,6 +4,7 @@ from pathlib import Path
 
 JPG_EXTENSIONS = {".jpg", ".jpeg"}
 RAW_EXTENSIONS = {".dng", ".raf", ".arw", ".nef", ".cr3"}
+IGNORE_MARKER = ".framewise-ignore"
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,9 @@ def scan_session(root: Path) -> Scan:
     frames: list[ScannedFrame] = []
     skipped: list[Path] = []
     for folder, subfolders, names in os.walk(root):
+        if IGNORE_MARKER in names:
+            subfolders.clear()
+            continue
         subfolders.sort()
         files = [Path(folder) / name for name in names if not name.startswith(".")]
         result = _pair_folder(files)

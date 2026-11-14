@@ -93,6 +93,21 @@ def test_subfolders_are_scanned_and_pairing_stays_within_one_folder(session_dir,
     ]
 
 
+def test_folders_containing_a_framewise_ignore_file_are_not_scanned(session_dir, review):
+    make_jpg(session_dir / "keep" / "DSCF0001.JPG")
+    make_jpg(session_dir / "exports" / "DSCF0002.JPG")
+    make_raw(session_dir / "exports" / "nested" / "DSCF0003.RAF")
+    (session_dir / "exports" / ".framewise-ignore").touch()
+
+    client = review()
+    summary = client.get("/api/session").json()
+    frames = client.get("/api/frames").json()
+
+    assert summary["total_frames"] == 1
+    assert summary["skipped"] == []
+    assert [frame["jpg_path"] for frame in frames] == ["keep/DSCF0001.JPG"]
+
+
 def test_each_frame_has_a_reduced_size_jpeg_thumbnail(session_dir, review):
     make_jpg(session_dir / "DSCF0001.JPG", size=(2400, 1600))
     client = review()

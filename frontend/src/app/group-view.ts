@@ -21,6 +21,7 @@ const SHORTCUT_HINTS = [
   { keys: '1–5', label: 'stars' },
   { keys: '6–9', label: 'labels' },
   { keys: 'P', label: 'keep' },
+  { keys: 'W', label: 'Winner' },
   { keys: 'X', label: 'reject' },
   { keys: 'U', label: 'clear' },
   { keys: '←→', label: 'Frames' },

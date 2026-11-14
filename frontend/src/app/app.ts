@@ -310,7 +310,9 @@ export class App {
       case 'move':
         return this.moveFrame(frame, shortcut.by);
       case 'makeWinner':
-        return this.changeOverride(frame, { verdict: 'winner' });
+        return frame.verdict === 'winner'
+          ? undefined
+          : this.changeOverride(frame, { verdict: 'winner' });
     }
   }
 

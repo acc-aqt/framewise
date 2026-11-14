@@ -870,6 +870,23 @@ describe('Review UI', () => {
       expect(http.expectOne('/api/frames/1/override').request.body).toEqual({ verdict: 'winner' });
     });
 
+    it('makes the current Frame the Winner when pressing W', async () => {
+      await openFirstGroup();
+      await press('ArrowRight');
+
+      await press('w');
+
+      expect(http.expectOne('/api/frames/2/override').request.body).toEqual({ verdict: 'winner' });
+    });
+
+    it('saves nothing when pressing W on the Winner', async () => {
+      await openFirstGroup();
+
+      await press('w');
+
+      http.expectNone((request) => request.url.includes('/override'));
+    });
+
     it('removes a color label when pressing its key again', async () => {
       await openFirstGroup([
         group(1, [
@@ -1123,6 +1140,7 @@ describe('Review UI', () => {
         expect(rows()).toContain('Mark as Keeper P');
         expect(rows()).toContain('Next Frame in Group ⌥→');
         expect(rows()).toContain('Close Esc');
+        expect(rows()).toContain('Make Winner W');
         expect(rows().length).toBe(29);
       });
 
@@ -1141,7 +1159,7 @@ describe('Review UI', () => {
 
         await type('WINNER');
 
-        expect(rows()).toEqual(['Compare with Winner C', 'Make Winner']);
+        expect(rows()).toEqual(['Compare with Winner C', 'Make Winner W']);
       });
 
       it('runs the highlighted command on Enter, as its key would, and closes', async () => {
@@ -1715,7 +1733,7 @@ describe('Review UI', () => {
       ['split-here', 'Split here'],
       ['move-previous', 'Move to previous Group'],
       ['move-next', 'Move to next Group'],
-      ['make-winner', 'Make Winner'],
+      ['make-winner', 'Make Winner W'],
     ];
 
     for (const [testId, expected] of groupButtonTooltips) {

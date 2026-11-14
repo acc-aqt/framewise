@@ -160,12 +160,14 @@ export const COMMANDS: readonly Command[] = [
     { kind: 'move', by: 1 },
     (context) => context.hasNextGroup,
   ),
-  paletteCommand(
-    'make-winner',
-    'Make Winner',
-    { kind: 'makeWinner' },
-    (context) => context.canMakeWinner,
-  ),
+  {
+    id: 'make-winner',
+    label: 'Make Winner',
+    key: 'W',
+    eventKey: 'w',
+    shortcut: { kind: 'makeWinner' },
+    appliesTo: (context) => context.canMakeWinner,
+  },
   paletteCommand(
     'write-back',
     'Rating write-back',

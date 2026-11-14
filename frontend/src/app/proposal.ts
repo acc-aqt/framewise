@@ -27,8 +27,12 @@ export function matchesFilter(frame: Frame, filter: ProposalFilter): boolean {
   );
 }
 
+export function findWinner(group: Group): Frame | undefined {
+  return group.frames.find((frame) => frame.verdict === 'winner');
+}
+
 export function winnerOf(group: Group): Frame {
-  return group.frames.find((frame) => frame.verdict === 'winner') ?? group.frames[0];
+  return findWinner(group) ?? group.frames[0];
 }
 
 export function scoreBreakdown(frame: Frame): string[] {

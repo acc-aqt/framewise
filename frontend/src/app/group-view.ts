@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   afterRenderEffect,
   ChangeDetectionStrategy,
@@ -11,7 +12,7 @@ import {
 } from '@angular/core';
 import { FrameTile } from './frame-tile';
 import { Icon } from './icon';
-import { scoreBreakdown } from './proposal';
+import { findWinner, scoreBreakdown } from './proposal';
 import { Frame, Group } from './session-api';
 
 const SHORTCUT_HINTS = [
@@ -26,10 +27,28 @@ const SHORTCUT_HINTS = [
   { keys: 'Z', label: '100%' },
 ];
 
+const PINNED_WINNER_COLLAPSED_KEY = 'framewise.pinnedWinnerCollapsed';
+
+function readPinnedWinnerCollapsed(): boolean {
+  try {
+    return localStorage.getItem(PINNED_WINNER_COLLAPSED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function writePinnedWinnerCollapsed(collapsed: boolean): void {
+  try {
+    localStorage.setItem(PINNED_WINNER_COLLAPSED_KEY, String(collapsed));
+  } catch {
+    // Without browser storage the choice lasts until the page reloads.
+  }
+}
+
 @Component({
   selector: 'app-group-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FrameTile, Icon],
+  imports: [FrameTile, Icon, NgTemplateOutlet],
   host: { 'data-testid': 'group-view' },
   template: `
     <div class="toolbar">
@@ -102,94 +121,127 @@ const SHORTCUT_HINTS = [
         }
       </span>
     </div>
-    <div class="frames">
-      @for (frame of group().frames; track frame.id) {
-        <section
-          class="frame"
-          data-testid="frame-details"
-          [class.current]="frame.id === currentFrameId()"
-          (click)="select.emit(frame)"
-          (dblclick)="openLoupe.emit(frame)"
-        >
-          <app-frame-tile
-            class="tile"
-            data-testid="frame-tile"
-            [frame]="frame"
-            [showFaces]="true"
-          />
-          @if (frame.reasons.length > 0) {
-            <ul class="reasons">
-              @for (reason of frame.reasons; track reason.code) {
-                <li data-testid="reason">{{ reason.text }}</li>
-              }
-            </ul>
+    <ng-template #frameInfo let-frame>
+      @if (frame.reasons.length > 0) {
+        <ul class="reasons">
+          @for (reason of frame.reasons; track reason.code) {
+            <li data-testid="reason">{{ reason.text }}</li>
           }
-          <ul class="breakdown" data-testid="score-breakdown">
-            @for (line of breakdown(frame); track line) {
-              <li>{{ line }}</li>
-            }
-          </ul>
-          <div class="actions">
-            <label class="select">
-              <input
-                type="checkbox"
-                data-testid="select-frame"
-                [checked]="selectedIds().has(frame.id)"
-                (change)="toggleSelected(frame)"
-              />
-              Select
-            </label>
-            @if (!$first) {
-              <button
-                type="button"
-                class="btn btn-icon btn-ghost"
-                data-testid="split-here"
-                aria-label="Split here"
-                title="Split here"
-                (click)="splitAt($index)"
-              >
-                <app-icon name="scissors" [size]="14" />
-              </button>
-            }
-            @if (hasPrevious()) {
-              <button
-                type="button"
-                class="btn btn-icon btn-ghost"
-                data-testid="move-previous"
-                aria-label="Move to previous Group"
-                title="Move to previous Group"
-                (click)="move.emit({ frame, by: -1 })"
-              >
-                <app-icon name="arrow-left" [size]="14" />
-              </button>
-            }
-            @if (hasNext()) {
-              <button
-                type="button"
-                class="btn btn-icon btn-ghost"
-                data-testid="move-next"
-                aria-label="Move to next Group"
-                title="Move to next Group"
-                (click)="move.emit({ frame, by: 1 })"
-              >
-                <app-icon name="arrow-right" [size]="14" />
-              </button>
-            }
-            @if (frame.verdict !== 'winner') {
-              <button
-                type="button"
-                class="btn btn-icon make-winner"
-                data-testid="make-winner"
-                aria-label="Make Winner"
-                title="Make Winner"
-                (click)="makeWinner.emit(frame)"
-              >
-                <app-icon name="crown" [size]="14" />
-              </button>
-            }
-          </div>
-        </section>
+        </ul>
       }
+      <ul class="breakdown" data-testid="score-breakdown">
+        @for (line of breakdown(frame); track line) {
+          <li>{{ line }}</li>
+        }
+      </ul>
+    </ng-template>
+    <div class="body">
+      @if (pinnedWinner(); as winner) {
+        <aside
+          class="pinned frame"
+          data-testid="pinned-winner"
+          aria-label="Winner"
+          [class.collapsed]="pinnedWinnerCollapsed()"
+        >
+          <button
+            type="button"
+            class="btn btn-ghost toggle"
+            data-testid="toggle-pinned-winner"
+            [attr.aria-expanded]="!pinnedWinnerCollapsed()"
+            [attr.aria-label]="pinnedWinnerToggleLabel()"
+            [title]="pinnedWinnerToggleLabel()"
+            (click)="togglePinnedWinner()"
+          >
+            <app-icon name="crown" [size]="14" />
+            @if (!pinnedWinnerCollapsed()) {
+              <span class="toggle-label">Winner</span>
+            }
+            <app-icon class="chevron" name="chevron-down" [size]="14" />
+          </button>
+          @if (!pinnedWinnerCollapsed()) {
+            <app-frame-tile class="tile" [frame]="winner" [showFaces]="true" />
+            <ng-container *ngTemplateOutlet="frameInfo; context: { $implicit: winner }" />
+          }
+        </aside>
+      }
+      <div class="frames">
+        @for (frame of group().frames; track frame.id) {
+          <section
+            class="frame"
+            data-testid="frame-details"
+            [class.current]="frame.id === currentFrameId()"
+            (click)="select.emit(frame)"
+            (dblclick)="openLoupe.emit(frame)"
+          >
+            <app-frame-tile
+              class="tile"
+              data-testid="frame-tile"
+              [frame]="frame"
+              [showFaces]="true"
+            />
+            <ng-container *ngTemplateOutlet="frameInfo; context: { $implicit: frame }" />
+            <div class="actions">
+              <label class="select">
+                <input
+                  type="checkbox"
+                  data-testid="select-frame"
+                  [checked]="selectedIds().has(frame.id)"
+                  (change)="toggleSelected(frame)"
+                />
+                Select
+              </label>
+              @if (!$first) {
+                <button
+                  type="button"
+                  class="btn btn-icon btn-ghost"
+                  data-testid="split-here"
+                  aria-label="Split here"
+                  title="Split here"
+                  (click)="splitAt($index)"
+                >
+                  <app-icon name="scissors" [size]="14" />
+                </button>
+              }
+              @if (hasPrevious()) {
+                <button
+                  type="button"
+                  class="btn btn-icon btn-ghost"
+                  data-testid="move-previous"
+                  aria-label="Move to previous Group"
+                  title="Move to previous Group"
+                  (click)="move.emit({ frame, by: -1 })"
+                >
+                  <app-icon name="arrow-left" [size]="14" />
+                </button>
+              }
+              @if (hasNext()) {
+                <button
+                  type="button"
+                  class="btn btn-icon btn-ghost"
+                  data-testid="move-next"
+                  aria-label="Move to next Group"
+                  title="Move to next Group"
+                  (click)="move.emit({ frame, by: 1 })"
+                >
+                  <app-icon name="arrow-right" [size]="14" />
+                </button>
+              }
+              @if (frame.verdict !== 'winner') {
+                <button
+                  type="button"
+                  class="btn btn-icon make-winner"
+                  data-testid="make-winner"
+                  aria-label="Make Winner"
+                  title="Make Winner"
+                  (click)="makeWinner.emit(frame)"
+                >
+                  <app-icon name="crown" [size]="14" />
+                </button>
+              }
+            </div>
+          </section>
+        }
+      </div>
     </div>
   `,
   styles: `
@@ -252,9 +304,43 @@ const SHORTCUT_HINTS = [
       line-height: 1.6;
       text-align: center;
     }
-    .frames {
+    .body {
       flex: 1;
       min-height: 0;
+      display: flex;
+      gap: var(--space-3);
+    }
+    .frame.pinned {
+      flex: 0 0 clamp(250px, 30%, 420px);
+      overflow-y: auto;
+      margin: var(--space-3) 0 var(--space-2);
+      outline-color: var(--color-winner);
+    }
+    .frame.pinned.collapsed {
+      flex-basis: auto;
+    }
+    .toggle {
+      align-self: stretch;
+      justify-content: flex-start;
+      gap: var(--space-1);
+      color: var(--color-winner);
+    }
+    .pinned.collapsed .toggle {
+      flex-direction: column;
+    }
+    .toggle-label {
+      margin-right: auto;
+      font-weight: 600;
+    }
+    .chevron {
+      transform: rotate(90deg);
+    }
+    .pinned.collapsed .chevron {
+      transform: rotate(-90deg);
+    }
+    .frames {
+      flex: 1;
+      min-width: 0;
       display: flex;
       gap: var(--space-3);
       padding: var(--space-3) 2px var(--space-2);
@@ -338,6 +424,13 @@ export class GroupView {
   protected readonly selected = computed(() =>
     this.group().frames.filter((frame) => this.selectedIds().has(frame.id)),
   );
+  protected readonly pinnedWinner = computed(() =>
+    this.group().frames.length > 1 ? findWinner(this.group()) : undefined,
+  );
+  protected readonly pinnedWinnerCollapsed = signal(readPinnedWinnerCollapsed());
+  protected readonly pinnedWinnerToggleLabel = computed(() =>
+    this.pinnedWinnerCollapsed() ? 'Show Winner' : 'Hide Winner',
+  );
   protected readonly canSplitSelected = computed(
     () => this.selected().length > 0 && this.selected().length < this.group().frames.length,
   );
@@ -350,6 +443,11 @@ export class GroupView {
       }
       return updated;
     });
+  }
+
+  protected togglePinnedWinner(): void {
+    this.pinnedWinnerCollapsed.update((collapsed) => !collapsed);
+    writePinnedWinnerCollapsed(this.pinnedWinnerCollapsed());
   }
 
   protected splitAt(index: number): void {

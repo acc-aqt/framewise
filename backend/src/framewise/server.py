@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from framewise.grouper import group_frames
-from framewise.judge import Judgement, Verdict, judge
+from framewise.judge import FaceCheck, Judgement, Verdict, judge
 from framewise.review import SessionAnalysis
 from framewise.store import AnalyzedFrame, Frame, Override, SessionStore
 
@@ -174,4 +174,18 @@ def _judged_frame_json(
             for name, value in asdict(judgement.scores).items()
         },
         "signals": signals,
+        "faces": [_face_json(check) for check in judgement.faces],
+    }
+
+
+def _face_json(check: FaceCheck) -> dict:
+    face = check.face
+    if face.eyes_open is None:
+        eyes = "unknown"
+    else:
+        eyes = "closed" if check.eyes_closed else "open"
+    return {
+        "box": {"x": face.x, "y": face.y, "width": face.width, "height": face.height},
+        "eyes": eyes,
+        "focus": "soft" if check.soft else "sharp",
     }

@@ -1,4 +1,5 @@
-"""Sharpness, motion blur and exposure from image maths on a Frame's downscaled JPG."""
+"""Sharpness, motion blur and exposure from image maths on a Frame's downscaled JPG, and the
+sharpness of regions of it such as faces."""
 
 import math
 from dataclasses import dataclass
@@ -23,6 +24,11 @@ LOW_KEY_MIN_HIGHLIGHT_SHARE = 0.005
 # A high-key Frame is bright yet keeps its highlights; an overexposed one clips them.
 CLIPPED_TONE = 250
 HIGH_KEY_MAX_CLIPPED_SHARE = 0.01
+# Regions narrower or shorter than this, in pixels of the downscaled JPG, are too small to measure.
+MIN_REGION_SIDE = 32
+
+Region = tuple[float, float, float, float]
+"""x, y, width and height as fractions of the image, measured from the top left."""
 
 
 @dataclass(frozen=True)
@@ -32,9 +38,11 @@ class ImageMeasures:
     exposure_stops: float
     low_key: bool
     high_key: bool
+    region_sharpness: list[float | None]
+    """The sharpness of each region asked for, or None where it is too small to measure."""
 
 
-def measure_image(jpg_path: Path) -> ImageMeasures:
+def measure_image(jpg_path: Path, regions: list[Region] | None = None) -> ImageMeasures:
     with Image.open(jpg_path) as image:
         image.draft("L", MEASURE_BOX)
         grey = image.convert("L")
@@ -44,14 +52,38 @@ def measure_image(jpg_path: Path) -> ImageMeasures:
     histogram = grey.histogram()
     stops = _exposure_stops(histogram)
     return ImageMeasures(
-        sharpness=_clamp((sharpest - SMEARED_RATIO) / (CRISP_RATIO - SMEARED_RATIO)),
+        sharpness=_sharpness(ratios),
         motion_blur=0.0 if sharpest == 0 else 1 - softest / sharpest,
         exposure_stops=stops,
         low_key=stops <= -KEY_FROM_STOPS
         and _share_from(histogram, LOW_KEY_HIGHLIGHT_TONE) >= LOW_KEY_MIN_HIGHLIGHT_SHARE,
         high_key=stops >= KEY_FROM_STOPS
         and _share_from(histogram, CLIPPED_TONE) < HIGH_KEY_MAX_CLIPPED_SHARE,
+        region_sharpness=[_region_sharpness(grey, region) for region in regions or []],
     )
+
+
+def _sharpness(ratios: list[float]) -> float:
+    return _clamp((max(ratios) - SMEARED_RATIO) / (CRISP_RATIO - SMEARED_RATIO))
+
+
+def _region_sharpness(grey: Image.Image, region: Region) -> float | None:
+    """Measures the region with a margin of the pixels around it, which the edge shifts use."""
+    width, height = grey.size
+    x, y, region_width, region_height = region
+    left, top = round(x * width), round(y * height)
+    right, bottom = round((x + region_width) * width), round((y + region_height) * height)
+    if min(right - left, bottom - top) < MIN_REGION_SIDE:
+        return None
+    crop = grey.crop(
+        (
+            max(0, left - EDGE_MARGIN),
+            max(0, top - EDGE_MARGIN),
+            min(width, right + EDGE_MARGIN),
+            min(height, bottom + EDGE_MARGIN),
+        )
+    )
+    return _sharpness(_edge_ratios(crop))
 
 
 def _edge_ratios(grey: Image.Image) -> list[float]:

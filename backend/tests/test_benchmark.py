@@ -100,7 +100,10 @@ def fingerprint_of(folder: Path) -> dict[str, str]:
 
 
 def judgement(verdict: Verdict) -> Judgement:
-    return Judgement(verdict, [], Scores(1, 1, 1, None, 1))
+    scores = Scores(
+        sharpness=1, steadiness=1, exposure=1, aesthetics=None, face_quality=None, total=1
+    )
+    return Judgement(verdict, [], scores, faces=[])
 
 
 def frame(frame_id: int, jpg_path: str) -> Frame:

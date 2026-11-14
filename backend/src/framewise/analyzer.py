@@ -4,7 +4,24 @@ from typing import Protocol
 
 # Bump whenever FrameSignals gains or changes a signal, so a re-run re-analyses Frames whose
 # saved analysis predates it.
-ANALYSIS_VERSION = 2
+ANALYSIS_VERSION = 3
+
+
+@dataclass(frozen=True)
+class Face:
+    """One face Apple Vision found in a Frame. Its box is a fraction of the Frame's width and
+    height, measured from the top left."""
+
+    x: float
+    y: float
+    width: float
+    height: float
+    eyes_open: bool | None
+    """None where Apple Vision could not place the eyes."""
+    sharpness: float
+    """Like the Frame's sharpness, measured on the face alone."""
+    quality: float | None
+    """Apple Vision's face capture quality from 0 to 1, or None where it is unavailable."""
 
 
 @dataclass(frozen=True)
@@ -23,6 +40,7 @@ class FrameSignals:
     """Bright overall but with deep shadows, so deliberately bright rather than overexposed."""
     aesthetics: float | None
     """Apple Vision's overall aesthetics score from -1 to 1, or None where it is unavailable."""
+    faces: list[Face]
 
 
 class FrameAnalyzer(Protocol):

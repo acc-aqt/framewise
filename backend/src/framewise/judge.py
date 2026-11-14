@@ -4,6 +4,9 @@ Each Frame is first assessed on its own: its signals become Scores, and each fla
 find a Flaw that caps its Verdict at Unsure or Reject. Then each Group picks its Winner and
 proposes the rest as Keepers, Unsure or Rejects.
 
+A Frame with faces is judged on its faces: its sharpness is that of its softest face, and every
+face must have open eyes and be sharp for the Frame to pass.
+
 The photographer's Verdict Overrides steer the Winner: a Frame they made the Winner wins its
 Group, and a Frame they overrode to another Verdict is not picked, so the rest of the Group is
 re-judged against the Winner that remains. Applying the Overrides themselves is up to the caller.
@@ -14,7 +17,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import PurePosixPath
 
-from framewise.analyzer import FrameSignals
+from framewise.analyzer import Face, FrameSignals
 from framewise.store import AnalyzedFrame, FrameKind
 
 BLURRY_BELOW = 0.25
@@ -27,7 +30,14 @@ EXPOSURE_TOLERANCE_STOPS = 0.7
 EXPOSURE_REJECT_BEYOND_STOPS: dict[FrameKind, float] = {"jpg-only": 1.25, "raw+jpg": 2.0}
 # A Frame scoring within this margin of its Group's Winner is a Keeper.
 KEEPER_MARGIN = 0.1
-WEIGHTS = {"sharpness": 0.35, "steadiness": 0.15, "exposure": 0.2, "aesthetics": 0.3}
+WEIGHTS = {
+    "sharpness": 0.35,
+    "steadiness": 0.15,
+    "exposure": 0.2,
+    "aesthetics": 0.3,
+    "face_quality": 0.2,
+}
+EYES_CLOSED = "eyes-closed"
 
 
 class Verdict(StrEnum):
@@ -52,7 +62,16 @@ class Scores:
     steadiness: float
     exposure: float
     aesthetics: float | None
+    face_quality: float | None
+    """The quality of the Frame's weakest face, or None without faces."""
     total: float
+
+
+@dataclass(frozen=True)
+class FaceCheck:
+    face: Face
+    eyes_closed: bool
+    soft: bool
 
 
 @dataclass(frozen=True)
@@ -60,6 +79,7 @@ class Judgement:
     verdict: Verdict
     reasons: list[Reason]
     scores: Scores
+    faces: list[FaceCheck]
 
 
 Proposal = dict[int, Judgement]
@@ -91,6 +111,22 @@ class _Assessment:
     def reasons(self) -> list[Reason]:
         return [flaw.reason for flaw in self.flaws]
 
+    @property
+    def faces(self) -> list[FaceCheck]:
+        return [_check_face(face) for face in self.analyzed.signals.faces]
+
+    @property
+    def has_eyes_closed(self) -> bool:
+        return any(flaw.reason.code == EYES_CLOSED for flaw in self.flaws)
+
+    @property
+    def is_clean_with_open_eyes(self) -> bool:
+        faces = self.analyzed.signals.faces
+        return self.worst is None and bool(faces) and all(face.eyes_open for face in faces)
+
+    def judgement(self, verdict: Verdict, reasons: list[Reason]) -> Judgement:
+        return Judgement(verdict, reasons, self.scores, self.faces)
+
 
 def judge(
     groups: list[list[AnalyzedFrame]], verdict_overrides: Mapping[str, Verdict] | None = None
@@ -106,7 +142,7 @@ def judge(
 
 def _judge_group(assessments: list[_Assessment], overrides: Mapping[str, Verdict]) -> Proposal:
     winner = _pick_winner(assessments, overrides)
-    proposal = {winner.analyzed.frame.id: Judgement(Verdict.WINNER, winner.reasons, winner.scores)}
+    proposal = {winner.analyzed.frame.id: winner.judgement(Verdict.WINNER, winner.reasons)}
     for assessment in assessments:
         if assessment is not winner:
             proposal[assessment.analyzed.frame.id] = _judge_against_winner(assessment, winner)
@@ -134,13 +170,17 @@ def _winner_rank(assessment: _Assessment) -> tuple[int, float, str]:
 
 
 def _judge_against_winner(assessment: _Assessment, winner: _Assessment) -> Judgement:
+    """Closed eyes alone only make a Frame Unsure, as they may be deliberate, unless the Group's
+    Winner shows the same moment with every eye open."""
+    if assessment.has_eyes_closed and winner.is_clean_with_open_eyes:
+        return assessment.judgement(Verdict.REJECT, assessment.reasons)
     if assessment.worst is not None:
-        return Judgement(assessment.worst, assessment.reasons, assessment.scores)
+        return assessment.judgement(assessment.worst, assessment.reasons)
     if assessment.scores.total >= winner.scores.total - KEEPER_MARGIN:
-        return Judgement(Verdict.KEEPER, [], assessment.scores)
+        return assessment.judgement(Verdict.KEEPER, [])
     winner_name = PurePosixPath(winner.analyzed.frame.jpg_path).stem
     reason = Reason("weaker-duplicate", "Weaker duplicate", f"Weaker duplicate of {winner_name}")
-    return Judgement(Verdict.REJECT, [reason], assessment.scores)
+    return assessment.judgement(Verdict.REJECT, [reason])
 
 
 def _assess(analyzed: AnalyzedFrame) -> _Assessment:
@@ -151,10 +191,11 @@ def _assess(analyzed: AnalyzedFrame) -> _Assessment:
 def _scores(analyzed: AnalyzedFrame) -> Scores:
     signals = analyzed.signals
     components = {
-        "sharpness": _clamp(signals.sharpness),
+        "sharpness": _clamp(_judged_sharpness(signals)),
         "steadiness": _clamp(1 - signals.motion_blur),
         "exposure": _exposure_score(signals, analyzed.frame.kind),
         "aesthetics": None if signals.aesthetics is None else _clamp((signals.aesthetics + 1) / 2),
+        "face_quality": _face_quality(signals.faces),
     }
     available = {name: value for name, value in components.items() if value is not None}
     total_weight = sum(WEIGHTS[name] for name in available)
@@ -169,12 +210,39 @@ def _exposure_score(signals: FrameSignals, kind: FrameKind) -> float:
     return _clamp(1 - excess / (EXPOSURE_REJECT_BEYOND_STOPS[kind] - EXPOSURE_TOLERANCE_STOPS))
 
 
+def _judged_sharpness(signals: FrameSignals) -> float:
+    if signals.faces:
+        return min(face.sharpness for face in signals.faces)
+    return signals.sharpness
+
+
+def _face_quality(faces: list[Face]) -> float | None:
+    qualities = [face.quality for face in faces if face.quality is not None]
+    return _clamp(min(qualities)) if qualities else None
+
+
+def _check_face(face: Face) -> FaceCheck:
+    return FaceCheck(face, eyes_closed=face.eyes_open is False, soft=face.sharpness < SOFT_BELOW)
+
+
 def _sharpness_flaws(analyzed: AnalyzedFrame) -> list[Flaw]:
-    sharpness = analyzed.signals.sharpness
+    sharpness = _judged_sharpness(analyzed.signals)
+    if analyzed.signals.faces:
+        blurry = Reason("blurry-face", "Blurry face", "Blurry face")
+        soft = Reason("soft-face", "Soft face", "Soft face")
+    else:
+        blurry = Reason("blurry", "Blurry", "Blurry")
+        soft = Reason("soft", "Slightly soft", "Slightly soft")
     if sharpness < BLURRY_BELOW:
-        return [Flaw(Reason("blurry", "Blurry", "Blurry"), Verdict.REJECT)]
+        return [Flaw(blurry, Verdict.REJECT)]
     if sharpness < SOFT_BELOW:
-        return [Flaw(Reason("soft", "Slightly soft", "Slightly soft"), Verdict.UNSURE)]
+        return [Flaw(soft, Verdict.UNSURE)]
+    return []
+
+
+def _eyes_flaws(analyzed: AnalyzedFrame) -> list[Flaw]:
+    if any(face.eyes_open is False for face in analyzed.signals.faces):
+        return [Flaw(Reason(EYES_CLOSED, "Eyes closed", "Eyes closed"), Verdict.UNSURE)]
     return []
 
 
@@ -200,6 +268,7 @@ def _exposure_flaws(analyzed: AnalyzedFrame) -> list[Flaw]:
 
 
 FLAW_CHECKS: tuple[Callable[[AnalyzedFrame], list[Flaw]], ...] = (
+    _eyes_flaws,
     _sharpness_flaws,
     _motion_blur_flaws,
     _exposure_flaws,

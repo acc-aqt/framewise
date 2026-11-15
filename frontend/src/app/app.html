@@ -118,6 +118,7 @@
         [groups]="groups.value()"
         [filter]="filter()"
         (open)="openedFrameId.set($event.id)"
+        (clearFilters)="clearFilters()"
       />
     }
   </main>

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, model } from '@angular/core';
 import { Icon } from './icon';
-import { NO_FILTER, ProposalFilter, VERDICT_LABELS, VERDICTS } from './proposal';
+import { matchesFilter, NO_FILTER, ProposalFilter, VERDICT_LABELS, VERDICTS } from './proposal';
 import { Group, Verdict } from './session-api';
 import { Tooltip } from './tooltip';
 
@@ -24,7 +24,11 @@ interface ReasonOption {
       >
         <option value="" [selected]="filter().verdict === null">All Verdicts</option>
         @for (option of verdictOptions(); track option.verdict) {
-          <option [value]="option.verdict" [selected]="filter().verdict === option.verdict">
+          <option
+            [value]="option.verdict"
+            [selected]="filter().verdict === option.verdict"
+            [disabled]="option.count === 0 && filter().verdict !== option.verdict"
+          >
             {{ option.label }} ({{ option.count }})
           </option>
         }
@@ -40,7 +44,11 @@ interface ReasonOption {
       >
         <option value="" [selected]="filter().reason === null">All Reasons</option>
         @for (option of reasonOptions(); track option.code) {
-          <option [value]="option.code" [selected]="filter().reason === option.code">
+          <option
+            [value]="option.code"
+            [selected]="filter().reason === option.code"
+            [disabled]="option.count === 0 && filter().reason !== option.code"
+          >
             {{ option.label }} ({{ option.count }})
           </option>
         }
@@ -114,18 +122,23 @@ export class ProposalFilters {
   readonly filter = model<ProposalFilter>(NO_FILTER);
 
   private readonly frames = computed(() => this.groups().flatMap((group) => group.frames));
-  protected readonly verdictOptions = computed(() =>
-    VERDICTS.map((verdict) => ({
+  // Each filter counts only the Frames that match the other one.
+  protected readonly verdictOptions = computed(() => {
+    const frames = this.frames().filter((frame) =>
+      matchesFilter(frame, { ...this.filter(), verdict: null }),
+    );
+    return VERDICTS.map((verdict) => ({
       verdict,
       label: VERDICT_LABELS[verdict],
-      count: this.frames().filter((frame) => frame.verdict === verdict).length,
-    })),
-  );
+      count: frames.filter((frame) => frame.verdict === verdict).length,
+    }));
+  });
   protected readonly reasonOptions = computed(() => {
     const options = new Map<string, ReasonOption>();
     for (const frame of this.frames()) {
+      const counted = matchesFilter(frame, { ...this.filter(), reason: null });
       for (const reason of frame.reasons) {
-        const count = (options.get(reason.code)?.count ?? 0) + 1;
+        const count = (options.get(reason.code)?.count ?? 0) + (counted ? 1 : 0);
         options.set(reason.code, { code: reason.code, label: reason.label, count });
       }
     }

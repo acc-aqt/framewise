@@ -200,3 +200,35 @@ def test_camera_ratings_fall_back_to_the_raw_file_and_its_sidecar(session_dir, r
         "DSCF0001.JPG": {"stars": None, "label": "Yellow"},
         "L1000001.JPG": {"stars": 1, "label": "Gelb"},
     }
+
+
+def test_symbolic_links_are_not_frames(session_dir, review, tmp_path):
+    secret = make_jpg(tmp_path / "elsewhere" / "private.jpg")
+    make_jpg(session_dir / "DSCF0001.JPG")
+    (session_dir / "DSCF0002.JPG").symlink_to(secret)
+    (session_dir / "DSCF0003.JPG").symlink_to(tmp_path / "missing.jpg")
+
+    client = review()
+
+    assert [frame["jpg_path"] for frame in client.get("/api/frames").json()] == ["DSCF0001.JPG"]
+
+
+def test_files_with_a_line_break_in_their_name_are_not_frames(session_dir, review):
+    make_jpg(session_dir / "DSCF0001.JPG")
+    make_jpg(session_dir / "DSCF\r0002.JPG")
+
+    assert review().get("/api/session").json()["total_frames"] == 1
+
+
+@pytest.mark.parametrize("stars", ["nan", "inf", "lots", "99"])
+def test_a_nonsensical_camera_rating_is_read_as_none(session_dir, review, stars):
+    make_jpg(session_dir / "DSCF0001.JPG", stars=stars)
+
+    assert camera_ratings(review()) == {"DSCF0001.JPG": {"stars": None, "label": None}}
+
+
+def test_a_decompression_bomb_does_not_stop_the_session_opening(session_dir, review, monkeypatch):
+    make_jpg(session_dir / "DSCF0001.JPG", exif_stars=2, size=(64, 48))
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 10)
+
+    assert review().get("/api/session").json()["total_frames"] == 1

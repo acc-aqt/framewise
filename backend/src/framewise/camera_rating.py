@@ -1,3 +1,4 @@
+import math
 import mmap
 import xml.etree.ElementTree as ElementTree
 from collections.abc import Mapping
@@ -47,15 +48,18 @@ def _read_exif(jpg_path: Path) -> CameraRating:
     try:
         with Image.open(jpg_path) as image:
             stars = image.getexif().get(EXIF_RATING_TAG)
-    except OSError:
+    except (OSError, ValueError, Image.DecompressionBombError):
         return CameraRating()
-    return CameraRating(stars=_parse_stars(stars))
+    return CameraRating(stars=parse_stars(stars))
 
 
 def _read_xmp(path: Path, originals: Mapping[Path, CameraRating]) -> CameraRating:
     if path in originals:
         return originals[path]
-    packet = _find_xmp_packet(path)
+    try:
+        packet = _find_xmp_packet(path)
+    except (OSError, ValueError):
+        return CameraRating()
     if packet is None:
         return CameraRating()
     try:
@@ -63,12 +67,20 @@ def _read_xmp(path: Path, originals: Mapping[Path, CameraRating]) -> CameraRatin
     except ElementTree.ParseError:
         return CameraRating()
     return CameraRating(
-        stars=_parse_stars(_xmp_value(root, "Rating")), label=_xmp_value(root, "Label")
+        stars=parse_stars(_xmp_value(root, "Rating")), label=_xmp_value(root, "Label")
     )
 
 
-def _parse_stars(value: int | str | None) -> int | None:
-    return None if value is None else int(float(value))
+def parse_stars(value: object) -> int | None:
+    """A star rating from 0 to 5, or None for a missing or nonsensical one. Lightroom's -1 for
+    rejected is kept."""
+    try:
+        stars = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(stars) or not -1 <= stars <= 5:
+        return None
+    return int(stars)
 
 
 def _find_xmp_packet(path: Path) -> bytes | None:

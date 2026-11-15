@@ -541,3 +541,52 @@ def test_a_running_write_back_and_reset_report_their_progress(
         PausingExifTool.let_through.release()
         request.join()
         assert progress() == {"running": False, "files_done": 0, "files_total": None}
+
+
+def test_write_back_refuses_a_sidecar_that_is_a_symbolic_link_and_creates_nothing_outside(
+    session_dir, review, analyzer, english, tmp_path
+):
+    outside = tmp_path / "outside" / "planted.xmp"
+    outside.parent.mkdir()
+    make_raw(session_dir / "DSCF0001.RAF")
+    jpg(session_dir, analyzer, "DSCF0001.JPG")
+    (session_dir / "DSCF0001.xmp").symlink_to(outside)
+
+    result = review(**english).post("/api/write-back").json()
+
+    assert [failure["path"] for failure in result["failed"]] == ["DSCF0001.RAF"]
+    assert result["written"] == ["DSCF0001.JPG"]
+    assert not outside.exists()
+
+
+def test_write_back_refuses_a_file_whose_exiftool_temporary_file_already_exists(
+    session_dir, review, analyzer, english, tmp_path
+):
+    outside = tmp_path / "outside" / "planted"
+    outside.parent.mkdir()
+    planted = jpg(session_dir, analyzer, "DSCF0001.JPG")
+    (session_dir / "DSCF0001.JPG_exiftool_tmp").symlink_to(outside)
+
+    result = review(**english).post("/api/write-back").json()
+
+    assert [failure["path"] for failure in result["failed"]] == ["DSCF0001.JPG"]
+    assert not outside.exists()
+    assert rating(planted) == {"stars": None, "label": None}
+
+
+def test_undo_restores_the_other_files_when_one_original_cannot_be_written_back(
+    session_dir, review, analyzer, english
+):
+    # An XML character reference puts a line break into the camera's label.
+    broken = make_jpg(session_dir / "DSCF0001.JPG", label="Rot&#10;-all=", captured_at=START)
+    analyzer.script(broken, BEACH)
+    fine = jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3, stars=1)
+    client = review(**english)
+    client.post("/api/write-back")
+
+    result = client.post("/api/write-back/undo").json()
+
+    assert [failure["path"] for failure in result["failed"]] == ["DSCF0001.JPG"]
+    assert rating(fine) == {"stars": 1, "label": None}
+    assert rating(broken)["stars"] is not None
+    assert client.post("/api/session/reset").status_code == 200

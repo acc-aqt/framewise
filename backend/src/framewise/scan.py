@@ -27,11 +27,21 @@ def scan_session(root: Path) -> Scan:
             subfolders.clear()
             continue
         subfolders.sort()
-        files = [Path(folder) / name for name in names if not name.startswith(".")]
+        files = [
+            Path(folder) / name
+            for name in names
+            if not name.startswith(".") and _is_plain_file(Path(folder) / name)
+        ]
         result = _pair_folder(files)
         frames.extend(result.frames)
         skipped.extend(result.skipped)
     return Scan(frames=frames, skipped=skipped)
+
+
+def _is_plain_file(path: Path) -> bool:
+    """A regular file in the Session itself: not a symbolic link, which could point outside it,
+    and without a line break in its name, which ExifTool cannot take."""
+    return not path.is_symlink() and path.is_file() and not any(c in path.name for c in "\r\n")
 
 
 def _pair_folder(files: list[Path]) -> Scan:

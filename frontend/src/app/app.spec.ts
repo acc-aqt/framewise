@@ -29,6 +29,7 @@ const summary: SessionSummary = {
     },
     aesthetics: { active: null },
   },
+  config_path: '/Users/me/Library/Application Support/framewise/config.toml',
 };
 
 describe('Review UI', () => {
@@ -273,6 +274,20 @@ describe('Review UI', () => {
 
       expect(text('[data-testid="built-in-image-maths"]')).toBe(
         "Sharpness, motion blur, exposure and low and high key come from framewise's built-in image maths.",
+      );
+    });
+
+    it('ends with where to switch a Provider and when the change applies', async () => {
+      await openSettings();
+
+      expect(text('[data-testid="config-path"]')).toBe(
+        '/Users/me/Library/Application Support/framewise/config.toml',
+      );
+      expect(all('[data-testid="config-example"]')[0].textContent).toBe(
+        '[providers]\nfingerprint = "apple-vision-fingerprint"',
+      );
+      expect(text('[data-testid="config-applies"]')).toBe(
+        'A change applies on the next framewise review, which re-analyses only the Frames it affects.',
       );
     });
 

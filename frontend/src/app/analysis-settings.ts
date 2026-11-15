@@ -98,6 +98,15 @@ const SOURCES: Record<ActiveProvider['source'], string> = {
           Sharpness, motion blur, exposure and low and high key come from framewise's built-in image
           maths.
         </p>
+        <footer class="config">
+          <p>To switch a Provider, edit</p>
+          <code class="path" data-testid="config-path">{{ configPath() }}</code>
+          <pre data-testid="config-example">{{ configExample() }}</pre>
+          <p data-testid="config-applies">
+            A change applies on the next <code>framewise review</code>, which re-analyses only the
+            Frames it affects.
+          </p>
+        </footer>
       </div>
     }
   `,
@@ -152,6 +161,31 @@ const SOURCES: Record<ActiveProvider['source'], string> = {
       border-top: 1px solid var(--color-border);
       color: var(--color-text-muted);
     }
+    .config {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      margin-top: var(--space-3);
+      padding-top: var(--space-3);
+      border-top: 1px solid var(--color-border);
+      color: var(--color-text-muted);
+    }
+    .config p {
+      margin: 0;
+    }
+    .path {
+      overflow-wrap: anywhere;
+      color: var(--color-text);
+    }
+    pre {
+      margin: 0;
+      padding: var(--space-2) var(--space-3);
+      border-radius: var(--radius-md);
+      background: var(--color-surface-1);
+      color: var(--color-text);
+      font-family: var(--font-mono);
+      white-space: pre-wrap;
+    }
     .meta {
       color: var(--color-text-muted);
     }
@@ -159,6 +193,7 @@ const SOURCES: Record<ActiveProvider['source'], string> = {
 })
 export class AnalysisSettings {
   readonly providers = input.required<ProviderLineup>();
+  readonly configPath = input.required<string>();
 
   protected readonly open = signal(false);
   protected readonly sources = SOURCES;
@@ -168,6 +203,12 @@ export class AnalysisSettings {
       active: this.providers()[entry.capability]?.active ?? null,
     })),
   );
+
+  /** Uses the Provider in use for the mandatory Fingerprint, so the example is a real id. */
+  protected readonly configExample = computed(() => {
+    const id = this.providers().fingerprint?.active?.id ?? '<provider-id>';
+    return `[providers]\nfingerprint = "${id}"`;
+  });
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
   private readonly gear = viewChild.required<ElementRef<HTMLButtonElement>>('gear');

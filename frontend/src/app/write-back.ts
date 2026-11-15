@@ -368,6 +368,12 @@ interface Outcome {
       text-align: left;
       white-space: nowrap;
     }
+    @media (width < 600px) {
+      th,
+      td {
+        padding-inline: var(--space-2);
+      }
+    }
     tbody tr:last-child td {
       border-bottom: none;
     }
@@ -396,6 +402,7 @@ interface Outcome {
       font-size: var(--text-xs);
     }
     .rating {
+      white-space: normal;
       font-variant-numeric: tabular-nums;
     }
     .rating.old {
@@ -413,6 +420,7 @@ interface Outcome {
       color: var(--color-text);
     }
     .swatch {
+      flex: none;
       width: 10px;
       height: 10px;
       border-radius: 2px;

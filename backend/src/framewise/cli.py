@@ -27,7 +27,7 @@ from framewise.review import (
     resolve_data_dir,
     session_database_path,
 )
-from framewise.server import SessionPicker, create_app
+from framewise.server import LocalOnly, SessionPicker, create_app
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
@@ -243,7 +243,7 @@ def main(
             f"framewise: warning: no Review UI build in {UI_DIR}, run scripts/setup.sh first",
             file=sys.stderr,
         )
-    serve(app, HOST, args.port, lambda: open_browser(url))
+    serve(LocalOnly(app), HOST, args.port, lambda: open_browser(url))
 
 
 def _resolve_analyzer() -> FrameAnalyzer:

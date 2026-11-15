@@ -11,7 +11,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from framewise.exiftool import ExifTool
+from framewise.camera_rating import parse_stars
+from framewise.exiftool import EXIFTOOL_TEMP_SUFFIX, ExifTool
 from framewise.judge import Verdict
 from framewise.lightroom import LabelSet
 from framewise.store import Frame, SessionStore, WrittenFileOriginal
@@ -20,6 +21,9 @@ from framewise.store import Frame, SessionStore, WrittenFileOriginal
 EMBEDDED_XMP_EXTENSIONS = {".jpg", ".jpeg", ".dng"}
 SIDECAR_EXTENSION = ".xmp"
 READ_ONLY_ERROR = "File is read-only"
+SYMLINK_ERROR = "File is a symbolic link"
+LEFTOVER_TEMP_ERROR = "ExifTool's temporary file for it already exists"
+OUTSIDE_SESSION_ERROR = "File is outside the Session folder"
 # Each Verdict's stars and color label (ADR-0001).
 VERDICT_RATINGS: dict[Verdict, tuple[int, str | None]] = {
     Verdict.WINNER: (3, None),
@@ -149,7 +153,10 @@ class RatingWriteBack:
         written, failed = [], []
         self._progress = WriteBackProgress(running=True, files_total=len(items))
         for done, item in enumerate(items, start=1):
-            error = change(item)
+            try:
+                error = change(item)
+            except (OSError, ValueError) as raised:
+                error = str(raised)
             if error is None:
                 written.append(path_of(item))
             else:
@@ -165,6 +172,9 @@ class RatingWriteBack:
 
     def _apply_change(self, change: FileChange) -> str | None:
         target = self._absolute(change.written_to)
+        unsafe = self._unsafe(target)
+        if unsafe is not None:
+            return unsafe
         created = not target.exists()
         if not created and not os.access(target, os.W_OK):
             return READ_ONLY_ERROR
@@ -186,6 +196,9 @@ class RatingWriteBack:
         if original.created:
             target.unlink(missing_ok=True)
             return None
+        unsafe = self._unsafe(target)
+        if unsafe is not None:
+            return unsafe
         if not target.exists():
             return "File no longer exists"
         if not os.access(target, os.W_OK):
@@ -210,6 +223,17 @@ class RatingWriteBack:
             self._store.keep_current_after_metadata_write(
                 target, before.st_size, before.st_mtime_ns
             )
+        return None
+
+    def _unsafe(self, target: Path) -> str | None:
+        """Why ExifTool must not write `target`: a symbolic link, or a leftover ExifTool temporary
+        file, could make it create a file wherever the link points, outside the Session."""
+        if target.is_symlink():
+            return SYMLINK_ERROR
+        if os.path.lexists(f"{target}{EXIFTOOL_TEMP_SUFFIX}"):
+            return LEFTOVER_TEMP_ERROR
+        if not target.parent.resolve().is_relative_to(self._store.root.resolve()):
+            return OUTSIDE_SESSION_ERROR
         return None
 
     def _rating_source(self, path: str) -> Path:
@@ -241,9 +265,8 @@ def _written_to(path: str) -> str:
 
 
 def _rating_from(entry: dict) -> Rating:
-    stars = entry.get("Rating")
     label = entry.get("Label")
     return Rating(
-        stars=None if stars is None else int(float(stars)),
+        stars=parse_stars(entry.get("Rating")),
         label=None if label in (None, "") else str(label),
     )

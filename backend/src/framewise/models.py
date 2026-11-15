@@ -64,7 +64,7 @@ def is_verified(model: Model, data_dir: Path) -> bool:
 def _download(model: Model, path: Path) -> None:
     """Downloads next to the model's place and moves it there only once verified, so a partial
     or tampered download is never taken for the model."""
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     partial = path.with_name(path.name + ".part")
     try:
         _fetch(model, partial)

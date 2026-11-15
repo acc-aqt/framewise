@@ -1,4 +1,5 @@
 import json
+import secrets
 import shutil
 import subprocess
 import threading
@@ -7,7 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 HOMEBREW_EXIFTOOL = "/opt/homebrew/bin/exiftool"
-READY = "{ready}"
+EXIFTOOL_TEMP_SUFFIX = "_exiftool_tmp"
+"""ExifTool writes a file's new version next to it under this suffix, then moves it over."""
 
 
 @dataclass(frozen=True)
@@ -24,18 +26,23 @@ class ExifTool:
         self._executable = executable or shutil.which("exiftool") or HOMEBREW_EXIFTOOL
         self._process: subprocess.Popen[str] | None = None
         self._lock = threading.Lock()
+        # Unguessable, so no file name or metadata ExifTool echoes can pass for the end of output.
+        self._batch = secrets.randbelow(10**18)
+        self._ready = f"{{ready{self._batch}}}"
 
     def run(self, *args: str | Path) -> ExifToolResult:
         lines = [str(arg) for arg in args]
-        if any("\n" in line for line in lines):
+        if any("\n" in line or "\r" in line for line in lines):
             raise ValueError("exiftool arguments cannot contain line breaks")
         with self._lock:
             process = self._started()
             assert process.stdin is not None
-            process.stdin.write("\n".join([*lines, "-echo4", READY, "-execute", ""]))
+            process.stdin.write(
+                "\n".join([*lines, "-echo4", self._ready, f"-execute{self._batch}", ""])
+            )
             process.stdin.flush()
-            output = _read_until_ready(process.stdout)
-            errors = _read_until_ready(process.stderr)
+            output = _read_until(process.stdout, self._ready)
+            errors = _read_until(process.stderr, self._ready)
         return ExifToolResult(
             output=output,
             errors=[line for line in errors.splitlines() if line.startswith("Error")],
@@ -65,10 +72,10 @@ class ExifTool:
         return self._process
 
 
-def _read_until_ready(stream) -> str:
+def _read_until(stream, ready: str) -> str:
     lines = []
     for line in stream:
-        if line.rstrip("\n") == READY:
+        if line.rstrip("\n") == ready:
             break
         lines.append(line)
     return "".join(lines)

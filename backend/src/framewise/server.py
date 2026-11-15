@@ -5,10 +5,11 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Response
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from starlette.types import Receive, Scope, Send
+from starlette.datastructures import Headers
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from framewise.analyzer import ProviderLineup
 from framewise.exiftool import ExifTool
@@ -174,7 +175,7 @@ def create_app(
     @app.get("/api/frames/{frame_id}/image")
     def frame_image(frame_id: int) -> FileResponse:
         path = store.root / _known_frame(frame_id).jpg_path
-        if not path.is_file():
+        if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(store.root):
             raise HTTPException(status_code=404, detail="JPG not found")
         return FileResponse(path, media_type="image/jpeg")
 
@@ -283,6 +284,43 @@ def create_app(
 
     _mount_review_ui(app, ui_dir)
     return app
+
+
+class LocalOnly:
+    """Lets through only requests the Review UI itself makes on this machine: the Host must be
+    the loopback address, so a rebound domain cannot reach the server, and other sites may not
+    send it changes or fetch from it, only open it."""
+
+    LOCAL_HOSTNAMES = {"127.0.0.1", "localhost"}
+    SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+    OWN_FETCH_SITES = {"same-origin", "none"}
+
+    def __init__(self, app: ASGIApp):
+        self._app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            refusal = self._refusal(scope)
+            if refusal is not None:
+                await PlainTextResponse(refusal, status_code=403)(scope, receive, send)
+                return
+        await self._app(scope, receive, send)
+
+    def _refusal(self, scope: Scope) -> str | None:
+        headers = Headers(scope=scope)
+        host = headers.get("host", "")
+        if host.rsplit(":", 1)[0] not in self.LOCAL_HOSTNAMES:
+            return "Only the Review UI on this machine can reach framewise"
+        fetch_site = headers.get("sec-fetch-site")
+        from_other_site = fetch_site is not None and fetch_site not in self.OWN_FETCH_SITES
+        if scope["method"] in self.SAFE_METHODS:
+            if from_other_site and headers.get("sec-fetch-mode") != "navigate":
+                return "Other sites cannot fetch from framewise"
+            return None
+        origin = headers.get("origin")
+        if from_other_site or (origin is not None and origin != f"http://{host}"):
+            return "Other sites cannot change framewise's Session"
+        return None
 
 
 class SessionPicker:

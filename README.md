@@ -14,10 +14,11 @@ git clone https://github.com/acc-aqt/framewise.git
 cd framewise
 ```
 
-Install the two prerequisites yourself:
+Install the prerequisites yourself:
 
 - [uv](https://docs.astral.sh/uv/getting-started/installation/).
-- [Node.js](https://nodejs.org), in the version recorded in [`frontend/.nvmrc`](frontend/.nvmrc). With [nvm](https://github.com/nvm-sh/nvm), `nvm use` in `frontend/` reads it.
+- [Node.js](https://nodejs.org), preferably in the version recorded in [`frontend/.nvmrc`](frontend/.nvmrc). With [nvm](https://github.com/nvm-sh/nvm), `nvm use` in `frontend/` reads it. The setup script warns if your Node.js is a different version.
+- On macOS, [Homebrew](https://brew.sh).
 
 Then run the setup script:
 
@@ -65,7 +66,7 @@ eye-state = "apple-vision-eye-state"
 
 Capabilities left out keep the default. A Provider that is not installed or not available on the machine is an error, never a silent fallback. `framewise-benchmark` reads the same file, and `--provider <capability>=<id>`, repeatable, overrides it for one run, so Providers can be compared against your Reference ratings; its report names the Provider that served each Capability.
 
-The portable Providers run on Linux and macOS with free, local models. On Linux the [setup script](#install) installs them. On macOS, install them with the `portable` extra (`cd backend && uv sync --extra portable`), and again after each run of the setup script, which installs the backend without it. DINOv2-small, run by onnxruntime, then serves `fingerprint` (`dinov2-small-fingerprint`), and MediaPipe's Face Landmarker serves `face-detection` (`mediapipe-face-detection`) and `eye-state` (`mediapipe-eye-state`). They rank below Apple Vision, so on macOS Apple Vision stays the default ([Platform support](#platform-support)). Their model files are downloaded on first use into a `models` folder next to the Session stores and checked against pinned SHA-256 checksums. On a machine that will analyse offline, fetch them ahead of time with `uv run framewise models download`. To write your own Provider, such as another face detector or eye-state check, see [docs/providers.md](docs/providers.md).
+The portable Providers run on Linux and macOS with free, local models. On Linux the [setup script](#install) installs them. On macOS, install them with the `portable` extra (`cd backend && uv sync --extra portable`); the setup script keeps them when you run it again. DINOv2-small, run by onnxruntime, then serves `fingerprint` (`dinov2-small-fingerprint`), and MediaPipe's Face Landmarker serves `face-detection` (`mediapipe-face-detection`) and `eye-state` (`mediapipe-eye-state`). They rank below Apple Vision, so on macOS Apple Vision stays the default ([Platform support](#platform-support)). Their model files are downloaded on first use into a `models` folder next to the Session stores and checked against pinned SHA-256 checksums. On a machine that will analyse offline, fetch them ahead of time with `uv run framewise models download`. To write your own Provider, such as another face detector or eye-state check, see [docs/providers.md](docs/providers.md).
 
 ## Rating write-back
 

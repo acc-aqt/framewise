@@ -128,7 +128,7 @@ BUSY_TIMEOUT_SECONDS = 30
 class SessionStore:
     def __init__(self, database_path: Path, root: Path):
         self.root = root
-        database_path.parent.mkdir(parents=True, exist_ok=True)
+        database_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         self._database_path = database_path
         self._connections = threading.local()
         self._db.execute("PRAGMA journal_mode=WAL")

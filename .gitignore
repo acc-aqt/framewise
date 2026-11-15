@@ -19,3 +19,9 @@ framewise-benchmark*.json
 .env
 .idea/
 .vscode/
+
+# Security audit reports (public repo: keep local)
+.security/
+
+# Claude Code worktrees
+.claude/worktrees/

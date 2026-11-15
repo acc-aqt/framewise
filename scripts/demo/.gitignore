@@ -1,2 +1,3 @@
 out/
-demo.config.json
+*.config.json
+!demo.config.example.json

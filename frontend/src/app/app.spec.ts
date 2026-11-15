@@ -543,7 +543,7 @@ describe('Review UI', () => {
     ).toEqual(['2 Frames', '1 Frame']);
   });
 
-  it('covers each Group with its Winner and shows its Verdict', async () => {
+  it('covers each Group with its Winner, leaving off the Verdict every tile shares', async () => {
     await respond(summary, [
       group(1, [frame(1, 'jpg-only'), frame(2, 'jpg-only', { verdict: 'winner' })]),
     ]);
@@ -551,7 +551,47 @@ describe('Review UI', () => {
     const [tile] = all('[data-testid="group-tile"]');
 
     expect(tile.querySelector('img')?.getAttribute('src')).toBe('/api/frames/2/thumbnail');
-    expect(text('[data-testid="verdict-badge"]', tile)).toBe('Winner');
+    expect(tile.querySelector('[data-testid="verdict-badge"]')).toBeNull();
+  });
+
+  it("shows each Group's kept and out Frames on its tile's caption, except for a single Frame", async () => {
+    await respond(summary, [
+      group(1, [
+        frame(1, 'raw+jpg', { verdict: 'winner' }),
+        frame(2, 'raw+jpg', { verdict: 'keeper' }),
+        frame(3, 'raw+jpg', { verdict: 'reject' }),
+        frame(4, 'raw+jpg', { verdict: 'unsure' }),
+        frame(5, 'raw+jpg', { verdict: 'reject' }),
+      ]),
+      group(6, [frame(6, 'raw+jpg', { verdict: 'winner' })]),
+    ]);
+
+    expect(
+      all('[data-testid="group-tile"]').map((tile) => text('[data-testid="group-makeup"]', tile)),
+    ).toEqual(['2 kept · 3 out', '']);
+  });
+
+  it('marks only JPG-only Frames with their kind on the grid', async () => {
+    await respond(summary, [
+      group(1, [frame(1, 'raw+jpg', { verdict: 'winner' })]),
+      group(2, [frame(2, 'jpg-only', { verdict: 'winner' })]),
+    ]);
+
+    expect(
+      all('[data-testid="group-tile"]').map((tile) => text('[data-testid="kind-badge"]', tile)),
+    ).toEqual(['', 'JPG-only']);
+  });
+
+  it("names each tile after its Frame's file, Verdict and Group size", async () => {
+    await respond(summary, [
+      group(1, [frame(1, 'jpg-only'), frame(2, 'jpg-only', { verdict: 'winner' })]),
+      group(3, [frame(3, 'jpg-only', { verdict: 'unsure' })]),
+    ]);
+
+    expect(accessibleNames('[data-testid="group-tile"]').map(({ label }) => label)).toEqual([
+      'DSCF0002.JPG, Winner, Group of 2',
+      'DSCF0003.JPG, Unsure, Group of 1',
+    ]);
   });
 
   it('shows the score breakdown when hovering a tile', async () => {
@@ -631,6 +671,29 @@ describe('Review UI', () => {
     expect(coverThumbnails()).toEqual(['/api/frames/2/thumbnail', '/api/frames/3/thumbnail']);
   });
 
+  it("shows each filtered Frame's Verdict and the size of the Group it is in", async () => {
+    await respond(summary, [
+      group(1, [
+        frame(1, 'jpg-only', { verdict: 'winner' }),
+        frame(2, 'jpg-only', { verdict: 'reject' }),
+        frame(3, 'jpg-only', { verdict: 'keeper' }),
+      ]),
+      group(4, [frame(4, 'jpg-only', { verdict: 'reject' })]),
+    ]);
+    await choose(all('[data-testid="verdict-filter"]')[0] as HTMLSelectElement, 'reject');
+
+    const tiles = all('[data-testid="group-tile"]');
+    expect(tiles.map((tile) => text('[data-testid="verdict-badge"]', tile))).toEqual([
+      'Reject',
+      'Reject',
+    ]);
+    expect(tiles.map((tile) => text('[data-testid="frame-count"]', tile))).toEqual([
+      'in Group of 3',
+      'in Group of 1',
+    ]);
+    expect(all('[data-testid="group-makeup"]')).toEqual([]);
+  });
+
   it('filters the Frames by Reason', async () => {
     const blur = reason('motion-blur', 'Motion blur');
     await respond(summary, [
@@ -671,7 +734,7 @@ describe('Review UI', () => {
     expect(openFrameThumbnails()).toEqual(['/api/frames/1/thumbnail', '/api/frames/2/thumbnail']);
   });
 
-  it('opens a Group to show its Frames side by side with kind badge and Camera rating', async () => {
+  it('opens a Group to show its Frames side by side with JPG-only badge and Camera rating', async () => {
     await respond(summary, [
       group(1, [frame(1, 'jpg-only')]),
       group(2, [
@@ -691,8 +754,10 @@ describe('Review UI', () => {
       '/api/frames/4/thumbnail',
     ]);
     expect(
-      tiles.map((tile) => tile.querySelector('[data-testid="kind-badge"]')?.textContent?.trim()),
-    ).toEqual(['RAW+JPG', 'JPG-only', 'RAW+JPG']);
+      tiles.map(
+        (tile) => tile.querySelector('[data-testid="kind-badge"]')?.textContent?.trim() ?? null,
+      ),
+    ).toEqual([null, 'JPG-only', null]);
     expect(
       tiles.map(
         (tile) => tile.querySelector('[data-testid="camera-rating"]')?.textContent?.trim() ?? null,

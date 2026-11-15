@@ -13,11 +13,19 @@ import {
 } from '@angular/core';
 import { FrameTile } from './frame-tile';
 import { Icon } from './icon';
-import { isFiltering, matchesFilter, NO_FILTER, ProposalFilter, winnerOf } from './proposal';
-import { Frame, Group } from './session-api';
+import {
+  isFiltering,
+  matchesFilter,
+  NO_FILTER,
+  ProposalFilter,
+  VERDICT_LABELS,
+  winnerOf,
+} from './proposal';
+import { Frame, Group, Verdict } from './session-api';
 
 const TILE_WIDTH_PX = 220;
 const ROW_HEIGHT_PX = 200;
+const KEPT_VERDICTS: Verdict[] = ['winner', 'keeper'];
 
 interface GridTile {
   frame: Frame;
@@ -41,14 +49,19 @@ interface GridTile {
             type="button"
             class="group"
             data-testid="group-tile"
-            [attr.aria-label]="'Open Group of ' + frameCount(tile.group)"
+            [attr.aria-label]="tileName(tile)"
             (click)="open.emit(tile.frame)"
           >
-            <app-frame-tile class="cover" [frame]="tile.frame">
-              <span class="count" data-testid="frame-count">
+            <app-frame-tile class="cover" [frame]="tile.frame" [showVerdict]="filtering()">
+              <span tile-mark class="count" data-testid="frame-count">
                 <app-icon name="layers" [size]="12" />
                 {{ frameCount(tile.group) }}
               </span>
+              @if (!filtering() && tile.group.frames.length > 1) {
+                <span tile-caption class="makeup" data-testid="group-makeup">
+                  {{ makeup(tile.group) }}
+                </span>
+              }
             </app-frame-tile>
           </button>
         }
@@ -91,10 +104,12 @@ interface GridTile {
     .group:hover .cover {
       border-color: var(--color-border-strong);
     }
+    .makeup {
+      flex: none;
+      font-variant-numeric: tabular-nums;
+    }
     .count {
-      position: absolute;
-      right: 6px;
-      bottom: 6px;
+      margin-left: auto;
       display: inline-flex;
       align-items: center;
       gap: var(--space-1);
@@ -117,6 +132,7 @@ export class GroupGrid {
 
   protected readonly rowHeight = ROW_HEIGHT_PX;
   protected readonly columns = signal(4);
+  protected readonly filtering = computed(() => isFiltering(this.filter()));
   // Each Group's Winner stands for it, but a filter lists every matching Frame on its own tile.
   protected readonly tiles = computed<GridTile[]>(() => {
     const filter = this.filter();
@@ -147,7 +163,19 @@ export class GroupGrid {
   }
 
   protected frameCount(group: Group): string {
+    if (this.filtering()) {
+      return `in Group of ${group.frames.length}`;
+    }
     return group.frames.length === 1 ? '1 Frame' : `${group.frames.length} Frames`;
+  }
+
+  protected tileName({ frame, group }: GridTile): string {
+    return `${frame.jpg_path}, ${VERDICT_LABELS[frame.verdict]}, Group of ${group.frames.length}`;
+  }
+
+  protected makeup(group: Group): string {
+    const kept = group.frames.filter((frame) => KEPT_VERDICTS.includes(frame.verdict)).length;
+    return `${kept} kept · ${group.frames.length - kept} out`;
   }
 }
 

@@ -434,6 +434,19 @@ describe('Review UI', () => {
       expect(document.activeElement).toBe(gear());
     });
 
+    it('shows no tooltip on the gear when Escape gives focus back to it', async () => {
+      await openSettings();
+      vi.useFakeTimers();
+
+      document.activeElement!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
+      await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+
+      expect(document.activeElement).toBe(gear());
+      expect(visibleTooltip()).toBeNull();
+    });
+
     it('closes on a click outside it, but not on a click inside it', async () => {
       await openSettings();
 
@@ -1275,6 +1288,15 @@ describe('Review UI', () => {
       expect(all('[data-testid="loupe-image"]')[0].getAttribute('src')).toBe('/api/frames/2/image');
     });
 
+    it("shows the Frame's position in its Group in the loupe caption", async () => {
+      await openFirstGroup();
+      await press('e');
+      expect(text('[data-testid="loupe-position"]')).toBe('1 / 3');
+
+      await press('ArrowRight');
+      expect(text('[data-testid="loupe-position"]')).toBe('2 / 3');
+    });
+
     it('closes the loupe with Escape, then the Group', async () => {
       await openFirstGroup();
       await press('e');
@@ -1330,10 +1352,11 @@ describe('Review UI', () => {
       expect(visibleTooltip()).toBeNull();
     });
 
-    it('shows a tooltip when a button gets keyboard focus', async () => {
+    it('shows a tooltip when tabbing to a button', async () => {
       await openFirstGroup();
       vi.useFakeTimers();
 
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
       all('[data-testid="back-to-groups"]')[0].focus();
       await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
 
@@ -1566,6 +1589,19 @@ describe('Review UI', () => {
         expect(
           all('[data-testid="loupe-side"]').map((side) => text('[data-testid="face-badge"]', side)),
         ).toEqual(['Eyes closed · Soft', 'Eyes open · Sharp']);
+      });
+
+      it("shows the position on the current Frame's side", async () => {
+        await openFirstGroup();
+        await press('ArrowRight');
+
+        await press('c');
+
+        expect(
+          all('[data-testid="loupe-side"]').map((side) =>
+            text('[data-testid="loupe-position"]', side),
+          ),
+        ).toEqual(['2 / 3', '']);
       });
 
       it('zooms both sides together', async () => {

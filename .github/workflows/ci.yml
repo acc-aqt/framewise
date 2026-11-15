@@ -38,6 +38,11 @@ jobs:
       - name: Set up framewise again, to prove re-running is safe
         run: ../scripts/setup.sh
 
+      - name: Test the Review UI
+        if: runner.os == 'Linux'
+        working-directory: frontend
+        run: npx ng test --watch=false
+
       - name: Check the portable Providers are available (Linux)
         if: runner.os == 'Linux'
         run: |

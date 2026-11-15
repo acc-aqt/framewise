@@ -282,7 +282,7 @@ describe('Review UI', () => {
       expect(all('[data-testid="command-palette"]')).toEqual([]);
     });
 
-    it('keeps offering to choose a folder when the dialog is cancelled', async () => {
+    it('keeps offering to choose a folder when the dialog is canceled', async () => {
       await respondWithoutSession();
 
       await choose({ opened: false });
@@ -382,7 +382,7 @@ describe('Review UI', () => {
         '/Users/me/Library/Application Support/framewise/config.toml',
       );
       expect(text('[data-testid="config-applies"]')).toBe(
-        'A change applies on the next framewise review, which re-analyses only the Frames it affects.',
+        'A change applies on the next framewise review, which re-analyzes only the Frames it affects.',
       );
     });
 
@@ -1004,7 +1004,7 @@ describe('Review UI', () => {
     expect(all('[data-testid="group-tile"]').length).toBe(2);
   });
 
-  it('fills the grid in as Frames are analysed and stops polling once analysis finishes', async () => {
+  it('fills the grid in as Frames are analyzed and stops polling once analysis finishes', async () => {
     vi.useFakeTimers();
     const frames = [frame(1, 'jpg-only'), frame(2, 'jpg-only'), frame(3, 'jpg-only')];
     http.expectOne('/api/session').flush(summary);
@@ -1151,7 +1151,7 @@ describe('Review UI', () => {
     expect(text('header .error')).toBe('Could not load the analysis progress.');
   });
 
-  it('hides the progress once every Frame is analysed', async () => {
+  it('hides the progress once every Frame is analyzed', async () => {
     await respond(summary, []);
 
     expect(all('[data-testid="analysis-progress"]')).toEqual([]);
@@ -1741,7 +1741,7 @@ describe('Review UI', () => {
         expect(all('[data-testid="command-palette"]')).toEqual([]);
       });
 
-      it('greys out commands that do not apply, which then do nothing', async () => {
+      it('grays out commands that do not apply, which then do nothing', async () => {
         await respond(summary, groups());
         await openPalette();
 
@@ -2191,7 +2191,7 @@ describe('Review UI', () => {
         expect(all('[data-testid="group-tile"]').length).toBe(3);
       });
 
-      it('lists the Group commands without a key, greyed out where they do not apply', async () => {
+      it('lists the Group commands without a key, grayed out where they do not apply', async () => {
         await openGroup(0);
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
         await settle();

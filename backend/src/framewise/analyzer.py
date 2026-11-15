@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal, Protocol
 
 # Bump whenever the built-in image maths or the shape of FrameSignals changes, so a re-run
-# re-analyses Frames whose saved analysis predates it. A Provider's own changes are covered by
+# re-analyzes Frames whose saved analysis predates it. A Provider's own changes are covered by
 # its version, in the ProviderSignature.
 ANALYSIS_VERSION = 5
 
@@ -78,7 +78,7 @@ class FrameSignals:
     """0 when the Frame is equally sharp in every direction, towards 1 when it is smeared along
     one direction."""
     exposure_stops: float
-    """How far the Frame is over (positive) or under (negative) a mid-grey exposure."""
+    """How far the Frame is over (positive) or under (negative) a mid-gray exposure."""
     low_key: bool
     """Dark overall but with bright highlights, so deliberately dark rather than underexposed."""
     high_key: bool
@@ -92,7 +92,7 @@ class FrameSignals:
 
 class FrameAnalyzer(Protocol):
     signature: ProviderSignature
-    """Saved with each analysis, so a re-run re-analyses the Frames whose Providers changed."""
+    """Saved with each analysis, so a re-run re-analyzes the Frames whose Providers changed."""
     similarity: SimilarityThresholds
     provider_lineup: ProviderLineup
     """Shown in the Review UI, so the photographer can see how new analyses are made."""

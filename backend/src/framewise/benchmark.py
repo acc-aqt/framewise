@@ -1,5 +1,5 @@
-"""The sewts benchmark: how often the Proposal agrees with the photographer's Reference ratings in
-Lightroom Classic, and how long a cold first pass over a Session takes.
+"""The reference benchmark: how often the Proposal agrees with the photographer's Reference
+ratings in Lightroom Classic, and how long a cold first pass over a Session takes.
 
 Run by hand, not in CI. It reads a copy of the Lightroom Classic catalog, never the catalog
 itself, and keeps its Session store in a temporary folder, so it writes nothing outside the
@@ -203,7 +203,7 @@ def _run(
     ratings: dict[Path, int],
     clock: Callable[[], float],
 ) -> dict:
-    """A cold first pass: a fresh Session store, so every Frame is analysed."""
+    """A cold first pass: a fresh Session store, so every Frame is analyzed."""
     started = clock()
     store = open_session(session_root, data_dir)
     analysis = SessionAnalysis(store, analyzer)

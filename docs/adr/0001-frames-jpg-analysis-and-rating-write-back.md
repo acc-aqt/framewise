@@ -52,6 +52,6 @@ Facts about the photographer's Lightroom setup, checked on 2026-11-13:
 
 ## Consequences
 
-- Exposure judgements come from the camera's JPG, which may clip highlight or shadow detail that the RAW still holds. RAW+JPG Frames are therefore treated more leniently on exposure than JPG-only Frames.
+- Exposure judgments come from the camera's JPG, which may clip highlight or shadow detail that the RAW still holds. RAW+JPG Frames are therefore treated more leniently on exposure than JPG-only Frames.
 - Writing XMP into JPGs and DNGs changes those files' bytes, though not their image data. This narrows the handover's rule of never modifying source photos to "never change image data, and change metadata only after review".
 - Adding RAW-only support later means extracting the preview JPG embedded in each RAW, which slots in as an alternative Analysis source.

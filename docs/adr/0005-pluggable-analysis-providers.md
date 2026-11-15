@@ -24,7 +24,7 @@ Tier 1 analysis (ADR-0002) was written directly against Apple Vision, so framewi
    - Face quality and aesthetics are scores from 0 to 1. A Provider maps its model's own scale onto that range and keeps any threshold, such as for closed eyes, to itself.
 7. **Provider signatures drive re-analysis.**
    - Each saved analysis records which Provider, and which version of it, served each Capability.
-   - A Frame whose recorded Providers differ from the current ones is analysed again. Until then it is left out of Groups, so fingerprints from two Providers are never compared.
+   - A Frame whose recorded Providers differ from the current ones is analyzed again. Until then it is left out of Groups, so fingerprints from two Providers are never compared.
    - The analysis version now covers only the built-in image maths and the shape of the saved signals. A Provider signals a change in its output by bumping its own version.
 
 ## Considered Options
@@ -35,7 +35,7 @@ Tier 1 analysis (ADR-0002) was written directly against Apple Vision, so framewi
 
 ## Consequences
 
-- Changing any Provider, even one that has nothing to do with grouping such as eye state, empties the Proposal and the Groups, fixed ones included, until the affected Frames are analysed again. This is the same as bumping the analysis version.
+- Changing any Provider, even one that has nothing to do with grouping such as eye state, empties the Proposal and the Groups, fixed ones included, until the affected Frames are analyzed again. This is the same as bumping the analysis version.
 - framewise runs on Linux with the portable Providers of the `portable` extra: DINOv2-small serves the fingerprint, with similarity thresholds calibrated so its Groups match Apple Vision's on a benchmark Session, and MediaPipe serves face detection and eye state. Linux has no face quality or aesthetics Provider yet.
 - Providers in one package may share work between themselves. framewise's Apple Vision Providers share one Vision image per thread, so face detection's observations are reused by eye state and face quality. That sharing is a Provider's own business and not part of the Provider protocol.
 - A plug-in author's guide lives in `docs/providers.md`.

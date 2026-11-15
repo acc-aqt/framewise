@@ -1,4 +1,4 @@
-"""The Judge: turns Groups of analysed Frames into a Proposal of Verdicts with Reasons.
+"""The Judge: turns Groups of analyzed Frames into a Proposal of Verdicts with Reasons.
 
 Each Frame is first assessed on its own: its signals become Scores, and each flaw check may
 find a Flaw that caps its Verdict at Unsure or Reject. A Camera rating nudges a Frame's Scores up
@@ -25,9 +25,10 @@ from framewise.camera_rating import CameraRating
 from framewise.store import AnalyzedFrame, FrameKind
 
 # A whole Frame's sharpness counts its blurred background and plain walls too, so a Frame with a
-# sharp subject and a shallow depth of field measures about 0.45 (sewts benchmark, #24). A face
+# sharp subject and a shallow depth of field measures about 0.45 (reference benchmark, #24). A face
 # is measured on its own. Skin has few hard edges, so a sharp face measures only about 0.67 and
-# scores full sharpness from there; sharp faces on sewts measure 0.57 to 1 (#30).
+# scores full sharpness from there; sharp faces on the reference benchmark measure 0.57 to 1
+# (#30).
 BLURRY_BELOW = 0.25
 SOFT_BELOW = 0.4
 FACE_BLURRY_BELOW = 0.25

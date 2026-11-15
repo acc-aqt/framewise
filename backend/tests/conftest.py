@@ -116,7 +116,7 @@ class FakeAnalyzer:
     """Returns scripted fingerprints and signals. An unscripted Frame gets a fingerprint unlike any
     other and the signals of a sharp, well-exposed Frame of average aesthetics without faces.
     A held Frame's analysis blocks until released, to observe a run in progress. Records whether
-    each analysing thread runs at background priority on macOS and Linux."""
+    each analyzing thread runs at background priority on macOS and Linux."""
 
     def __init__(self):
         self.fingerprints: dict[Path, list[float]] = {}
@@ -167,7 +167,7 @@ class FakeAnalyzer:
         if not released:
             raise TimeoutError(f"held Frame was never released: {jpg_path}")
         if jpg_path.resolve() in self._failing:
-            raise RuntimeError(f"cannot analyse {jpg_path}")
+            raise RuntimeError(f"cannot analyze {jpg_path}")
         fingerprint = self.fingerprints.get(jpg_path.resolve()) or _unrelated_fingerprint(jpg_path)
         scripted = self.signals.get(jpg_path.resolve(), {})
         return FrameSignals(fingerprint=fingerprint, **(CLEAN_SIGNALS | scripted))

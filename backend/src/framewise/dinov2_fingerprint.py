@@ -33,8 +33,9 @@ class DinoV2Fingerprint:
     id = "dinov2-small-fingerprint"
     version = 1
     priority = PRIORITY
-    # Calibrated on sewts against Apple Vision's Groups: near_duplicate 0.82 matches them best
-    # (pairwise same-Group F1 0.93, 33 Groups to Apple's 30), with 0.80 to 0.83 close behind.
+    # Calibrated on the reference benchmark against Apple Vision's Groups: near_duplicate 0.82
+    # matches them best (pairwise same-Group F1 0.93, 33 Groups to Apple's 30), with 0.80 to 0.83
+    # close behind.
     # Any burst threshold from 0.4 to 0.76 gives the same Groups there; 0.7 sits inside that.
     similarity = SimilarityThresholds(burst=0.7, near_duplicate=0.82)
 
@@ -64,7 +65,7 @@ def _session():
     """One session for every analysis thread, made on first use, when its model is downloaded
     if it is missing. onnxruntime runs a session from several threads at once; with one thread
     of its own per run, it runs on the thread that calls it, as many at once as framewise
-    analyses Frames."""
+    analyzes Frames."""
     global _shared_session
     with _session_lock:
         if _shared_session is None:
@@ -81,7 +82,7 @@ def _session():
 
 def _pixel_values(jpg_path: Path):
     """The Frame as it is displayed, after its EXIF orientation, prepared as DINOv2 was trained:
-    its shortest edge resized to 256, its centre cropped to 224 square and normalised by
+    its shortest edge resized to 256, its center cropped to 224 square and normalized by
     ImageNet's mean and spread, channels first."""
     with Image.open(jpg_path) as image:
         image.draft("RGB", (SHORTEST_EDGE, SHORTEST_EDGE))

@@ -4,12 +4,12 @@
 
 ## Context
 
-The photographer reviews the Proposal with Lightroom Classic's shortcuts and Overrides what framewise judged. The Judge recomputes Verdicts on every request from the Groups, and Groups change as Frames are analysed or re-analysed, so a Group's id (its first Frame's id) is not stable. Overrides have to survive closing the browser, re-running `framewise review` and re-analysis. Rating write-back (ADR-0001) is a separate step; here Overrides are only stored. Fixing Groups (split, merge, move) builds on this model.
+The photographer reviews the Proposal with Lightroom Classic's shortcuts and Overrides what framewise judged. The Judge recomputes Verdicts on every request from the Groups, and Groups change as Frames are analyzed or re-analyzed, so a Group's id (its first Frame's id) is not stable. Overrides have to survive closing the browser, re-running `framewise review` and re-analysis. Rating write-back (ADR-0001) is a separate step; here Overrides are only stored. Fixing Groups (split, merge, move) builds on this model.
 
 ## Decision
 
 1. **An Override belongs to a Frame and is keyed by its JPG path** in an `overrides` table of the Session store. It never refers to a Group id. Overrides of Frames that vanish from the Session folder are kept, so they come back with the files.
-2. **An Override has three independent, optional fields.** A field left empty keeps framewise's judgement.
+2. **An Override has three independent, optional fields.** A field left empty keeps framewise's judgment.
    - `verdict`: Winner, Keeper, Reject or Unsure. `P` sets Keeper (or confirms the Winner), `X` sets Reject.
    - `stars`: 0–5, set with `1`–`5`. `0` clears it.
    - `label`: a color, set with `6` red, `7` yellow, `8` green, `9` blue. Pressing the same key again clears it.

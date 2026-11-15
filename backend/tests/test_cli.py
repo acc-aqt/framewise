@@ -90,7 +90,7 @@ def test_review_warns_when_the_review_ui_has_not_been_built(
         keep_awake=FakeWakeLock(),
     )
 
-    assert "ng build" in capsys.readouterr().err
+    assert "scripts/setup.sh" in capsys.readouterr().err
 
 
 def test_review_opens_the_review_ui_before_analysis_finishes(session_dir, isolated_data_dir):

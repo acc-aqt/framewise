@@ -1033,6 +1033,54 @@ describe('Review UI', () => {
     http.expectNone('/api/progress');
   });
 
+  it('keeps showing the last Groups while the next ones are fetched during analysis', async () => {
+    vi.useFakeTimers();
+    http.expectOne('/api/session').flush(summary);
+    await respondToPoll({ frames_done: 1, frames_left: 2, seconds_remaining: 90 }, [
+      group(1, [frame(1, 'jpg-only')]),
+      group(2, [frame(2, 'jpg-only')]),
+    ]);
+
+    await nextPoll();
+    http
+      .expectOne('/api/progress')
+      .flush({ frames_done: 2, frames_left: 1, seconds_remaining: 45 });
+    await settle();
+
+    expect(all('[data-testid="group-tile"]').length).toBe(2);
+
+    http
+      .expectOne((request) => request.url.startsWith('/api/groups'))
+      .flush([
+        group(1, [frame(1, 'jpg-only')]),
+        group(2, [frame(2, 'jpg-only')]),
+        group(3, [frame(3, 'jpg-only')]),
+      ]);
+    await settle();
+    expect(all('[data-testid="group-tile"]').length).toBe(3);
+  });
+
+  it('keeps an open Group and its Frame open while the next Groups are fetched', async () => {
+    vi.useFakeTimers();
+    http.expectOne('/api/session').flush(summary);
+    await respondToPoll({ frames_done: 2, frames_left: 1, seconds_remaining: 45 }, [
+      group(1, [frame(1, 'jpg-only'), frame(2, 'jpg-only')]),
+    ]);
+    all('[data-testid="group-tile"]')[0].click();
+    await settle();
+
+    await nextPoll();
+    http.expectOne('/api/progress').flush({ frames_done: 3, frames_left: 0, seconds_remaining: 0 });
+    await settle();
+
+    expect(openFrameThumbnails()).toEqual(['/api/frames/1/thumbnail', '/api/frames/2/thumbnail']);
+
+    http
+      .expectOne((request) => request.url.startsWith('/api/groups'))
+      .flush([group(1, [frame(1, 'jpg-only'), frame(2, 'jpg-only')])]);
+    await settle();
+  });
+
   it('keeps an open Group open when an update adds an earlier Frame that changes its id', async () => {
     vi.useFakeTimers();
     http.expectOne('/api/session').flush(summary);

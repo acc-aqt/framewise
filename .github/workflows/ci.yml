@@ -22,25 +22,25 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install ExifTool and the OpenGL libraries MediaPipe loads (Linux)
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+
+      - name: Lint the setup script
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl libgl1 libegl1 libgles2
+        run: shellcheck ../scripts/setup.sh
 
-      - name: Install ExifTool (macOS)
-        if: runner.os == 'macOS'
-        run: brew install exiftool
+      - name: Set up framewise
+        run: ../scripts/setup.sh
 
-      - name: Install (macOS)
-        if: runner.os == 'macOS'
-        run: uv sync --locked
+      - name: Set up framewise again, to prove re-running is safe
+        run: ../scripts/setup.sh
 
-      - name: Install with the portable Providers and their models (Linux)
+      - name: Check the portable Providers are available (Linux)
         if: runner.os == 'Linux'
         run: |
-          uv sync --locked --extra portable
           uv run python -c "import framewise.mediapipe_faces as m; assert m.MediaPipeFaceDetection().is_available()"
           uv run python -c "import framewise.dinov2_fingerprint as d; assert d.DinoV2Fingerprint().is_available()"
-          uv run framewise models download
 
       - run: uv run ruff check
 

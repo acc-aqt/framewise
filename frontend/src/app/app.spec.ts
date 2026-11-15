@@ -1153,7 +1153,7 @@ describe('Review UI', () => {
     expect(all('[data-testid="open-write-back"]').length).toBe(1);
   });
 
-  it('names how many files the write-back screen reads, one per JPG and two per RAW+JPG pair', async () => {
+  it('names how many files the write-back screen reads, one per JPG and two per RAW+JPG Frame', async () => {
     await respond(summary, []);
     all('[data-testid="open-write-back"]')[0].click();
     await settle();

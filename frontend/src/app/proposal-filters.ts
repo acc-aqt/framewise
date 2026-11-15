@@ -1,6 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, input, model } from '@angular/core';
 import { Icon } from './icon';
-import { matchesFilter, NO_FILTER, ProposalFilter, VERDICT_LABELS, VERDICTS } from './proposal';
+import {
+  matchesFilter,
+  NO_FILTER,
+  ProposalFilter,
+  reasonLabels,
+  VERDICT_LABELS,
+  VERDICTS,
+} from './proposal';
 import { Group, Verdict } from './session-api';
 import { Tooltip } from './tooltip';
 
@@ -132,16 +139,15 @@ export class ProposalFilters {
       count: frames.filter((frame) => frame.verdict === verdict).length,
     }));
   });
-  protected readonly reasonOptions = computed(() => {
-    const options = new Map<string, ReasonOption>();
-    for (const frame of this.frames()) {
-      const counted = matchesFilter(frame, { ...this.filter(), reason: null });
-      for (const reason of frame.reasons) {
-        const count = (options.get(reason.code)?.count ?? 0) + (counted ? 1 : 0);
-        options.set(reason.code, { code: reason.code, label: reason.label, count });
-      }
-    }
-    return [...options.values()].sort((first, second) => first.label.localeCompare(second.label));
+  protected readonly reasonOptions = computed<ReasonOption[]>(() => {
+    const frames = this.frames().filter((frame) =>
+      matchesFilter(frame, { ...this.filter(), reason: null }),
+    );
+    return [...reasonLabels(this.frames())].map(([code, label]) => ({
+      code,
+      label,
+      count: frames.filter((frame) => frame.reasons.some((reason) => reason.code === code)).length,
+    }));
   });
 
   protected setVerdict(event: Event): void {

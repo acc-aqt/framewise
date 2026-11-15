@@ -19,6 +19,7 @@ import {
   matchesFilter,
   NO_FILTER,
   ProposalFilter,
+  reasonLabels,
   VERDICT_LABELS,
   winnerOf,
 } from './proposal';
@@ -168,9 +169,8 @@ export class GroupGrid {
   });
   protected readonly activeFilters = computed(() => {
     const { verdict, reason } = this.filter();
-    const reasonLabel = this.groups()
-      .flatMap((group) => group.frames.flatMap((frame) => frame.reasons))
-      .find((candidate) => candidate.code === reason)?.label;
+    const frames = this.groups().flatMap((group) => group.frames);
+    const reasonLabel = reason === null ? null : reasonLabels(frames).get(reason);
     return [verdict && VERDICT_LABELS[verdict], reasonLabel].filter(Boolean).join(' + ');
   });
   protected readonly rows = computed(() => chunk(this.tiles(), this.columns()));

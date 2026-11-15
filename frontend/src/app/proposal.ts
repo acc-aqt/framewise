@@ -20,6 +20,17 @@ export function isFiltering(filter: ProposalFilter): boolean {
   return filter.verdict !== null || filter.reason !== null;
 }
 
+/** Each Reason code found among the Frames, with its label, sorted by label. */
+export function reasonLabels(frames: Frame[]): Map<string, string> {
+  const labels = new Map<string, string>();
+  for (const frame of frames) {
+    for (const reason of frame.reasons) {
+      labels.set(reason.code, reason.label);
+    }
+  }
+  return new Map([...labels].sort(([, first], [, second]) => first.localeCompare(second)));
+}
+
 export function matchesFilter(frame: Frame, filter: ProposalFilter): boolean {
   return (
     (filter.verdict === null || frame.verdict === filter.verdict) &&

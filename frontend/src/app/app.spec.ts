@@ -1225,6 +1225,15 @@ describe('Review UI', () => {
       expect(all('[data-testid="loupe-image"]')[0].getAttribute('src')).toBe('/api/frames/2/image');
     });
 
+    it("shows the Frame's position in its Group in the loupe caption", async () => {
+      await openFirstGroup();
+      await press('e');
+      expect(text('[data-testid="loupe-position"]')).toBe('1 / 3');
+
+      await press('ArrowRight');
+      expect(text('[data-testid="loupe-position"]')).toBe('2 / 3');
+    });
+
     it('closes the loupe with Escape, then the Group', async () => {
       await openFirstGroup();
       await press('e');
@@ -1516,6 +1525,19 @@ describe('Review UI', () => {
         expect(
           all('[data-testid="loupe-side"]').map((side) => text('[data-testid="face-badge"]', side)),
         ).toEqual(['Eyes closed · Soft', 'Eyes open · Sharp']);
+      });
+
+      it("shows the position on the current Frame's side", async () => {
+        await openFirstGroup();
+        await press('ArrowRight');
+
+        await press('c');
+
+        expect(
+          all('[data-testid="loupe-side"]').map((side) =>
+            text('[data-testid="loupe-position"]', side),
+          ),
+        ).toEqual(['2 / 3', '']);
       });
 
       it('zooms both sides together', async () => {

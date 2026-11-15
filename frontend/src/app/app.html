@@ -103,6 +103,7 @@
         @if (loupeFrames().length > 0) {
           <app-loupe
             [frames]="loupeFrames()"
+            [position]="loupePosition()"
             [zoom]="zoom"
             (toggleZoom)="toggleZoom()"
             (close)="closeLoupe()"

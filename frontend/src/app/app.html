@@ -64,16 +64,18 @@
           <app-icon name="alert" [size]="14" />Could not load the analysis progress.
         </p>
       }
-      <button
-        type="button"
-        class="btn btn-primary"
-        data-testid="open-write-back"
-        [disabled]="analyzing()"
-        [appTooltip]="writeBackTooltip"
-        (click)="openWriteBack()"
-      >
-        Rating write-back…
-      </button>
+      @if (!writingBack()) {
+        <button
+          type="button"
+          class="btn btn-primary"
+          data-testid="open-write-back"
+          [disabled]="analyzing()"
+          [appTooltip]="writeBackTooltip"
+          (click)="openWriteBack()"
+        >
+          Rating write-back…
+        </button>
+      }
     </div>
   </header>
   <main>

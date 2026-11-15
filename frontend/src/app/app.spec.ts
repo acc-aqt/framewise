@@ -975,6 +975,21 @@ describe('Review UI', () => {
     expect(all('[data-testid="command-palette"]')).toEqual([]);
   });
 
+  it("hides the header's write-back button on the write-back screen until going back", async () => {
+    await respond(summary, []);
+    all('[data-testid="open-write-back"]')[0].click();
+    await settle();
+    http.expectOne('/api/write-back');
+    http.expectOne('/api/write-back/progress');
+
+    expect(all('[data-testid="open-write-back"]')).toEqual([]);
+
+    all('[data-testid="back-from-write-back"]')[0].click();
+    await settle();
+
+    expect(all('[data-testid="open-write-back"]').length).toBe(1);
+  });
+
   it('opens no command palette on the write-back screen', async () => {
     await respond(summary, []);
     all('[data-testid="open-write-back"]')[0].click();

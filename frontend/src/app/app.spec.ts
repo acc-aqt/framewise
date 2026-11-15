@@ -769,7 +769,7 @@ describe('Review UI', () => {
     expect(openFrameThumbnails()).toEqual(['/api/frames/1/thumbnail', '/api/frames/2/thumbnail']);
   });
 
-  it('opens a Group to show its Frames side by side with JPG-only badge and Camera rating', async () => {
+  it('opens a Group to show its Frames with their Camera rating but no kind badge', async () => {
     await respond(summary, [
       group(1, [frame(1, 'jpg-only')]),
       group(2, [
@@ -788,11 +788,7 @@ describe('Review UI', () => {
       '/api/frames/3/thumbnail',
       '/api/frames/4/thumbnail',
     ]);
-    expect(
-      tiles.map(
-        (tile) => tile.querySelector('[data-testid="kind-badge"]')?.textContent?.trim() ?? null,
-      ),
-    ).toEqual([null, 'JPG-only', null]);
+    expect(all('[data-testid="group-view"] [data-testid="kind-badge"]')).toEqual([]);
     expect(
       tiles.map(
         (tile) => tile.querySelector('[data-testid="camera-rating"]')?.textContent?.trim() ?? null,

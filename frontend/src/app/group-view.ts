@@ -163,7 +163,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
             <app-icon class="chevron" name="chevron-down" [size]="14" />
           </button>
           @if (!pinnedWinnerCollapsed()) {
-            <app-frame-tile class="tile" [frame]="winner" [showFaces]="true" />
+            <app-frame-tile class="tile" [frame]="winner" [showFaces]="true" [showKind]="false" />
             <ng-container *ngTemplateOutlet="frameInfo; context: { $implicit: winner }" />
           }
         </aside>
@@ -182,6 +182,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
               data-testid="frame-tile"
               [frame]="frame"
               [showFaces]="true"
+              [showKind]="false"
             />
             <ng-container *ngTemplateOutlet="frameInfo; context: { $implicit: frame }" />
             <div class="actions">
@@ -304,7 +305,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
       gap: var(--space-3);
     }
     .frame.pinned {
-      flex: 0 0 clamp(250px, 30%, 420px);
+      flex: 0 0 clamp(320px, 30%, 480px);
       overflow-y: auto;
       margin: var(--space-3) 0 var(--space-2);
       outline-color: var(--color-winner);
@@ -334,13 +335,14 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
     .frames {
       flex: 1;
       min-width: 0;
-      display: flex;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      align-content: start;
       gap: var(--space-3);
       padding: var(--space-3) 2px var(--space-2);
-      overflow-x: auto;
+      overflow-y: auto;
     }
     .frame {
-      flex: 1 0 250px;
       display: flex;
       flex-direction: column;
       gap: var(--space-2);
@@ -354,8 +356,8 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
       outline-color: var(--color-focus);
     }
     .tile {
-      flex: 1;
-      min-height: 0;
+      flex: none;
+      aspect-ratio: 3 / 2;
     }
     ul {
       margin: 0;

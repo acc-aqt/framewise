@@ -22,7 +22,7 @@ import { CameraRating, ColorLabel, Frame } from './session-api';
         [faces]="showFaces() ? frame().faces : null"
         [lazy]="true"
       />
-      @if (frame().kind === 'jpg-only') {
+      @if (showKind() && frame().kind === 'jpg-only') {
         <span class="badge kind" data-testid="kind-badge">JPG-only</span>
       }
       @if (ratingText(frame().camera_rating); as rating) {
@@ -170,6 +170,7 @@ export class FrameTile {
   /** Marks each face of the Frame on its image. */
   readonly showFaces = input(false);
   readonly showVerdict = input(true);
+  readonly showKind = input(true);
 
   protected readonly verdictLabels = VERDICT_LABELS;
   protected readonly breakdown = computed(() => scoreBreakdown(this.frame()).join('\n'));

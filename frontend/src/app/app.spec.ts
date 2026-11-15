@@ -116,6 +116,13 @@ describe('Review UI', () => {
     );
   }
 
+  /** The text a sighted photographer reads, without text meant only for assistive technology. */
+  function visibleText(element: HTMLElement): string {
+    const copy = element.cloneNode(true) as HTMLElement;
+    copy.querySelectorAll('.visually-hidden').forEach((hidden) => hidden.remove());
+    return copy.textContent!.replace(/\s+/g, ' ').trim();
+  }
+
   function all(selector: string, root?: HTMLElement): HTMLElement[] {
     return Array.from(
       (root ?? (fixture.nativeElement as HTMLElement)).querySelectorAll<HTMLElement>(selector),
@@ -178,10 +185,16 @@ describe('Review UI', () => {
     return details;
   }
 
+  it('names the Frames disclosure File details for assistive technology', async () => {
+    await respond(summary, []);
+
+    expect(text('summary', fileDetails())).toBe('File details: 3 Frames');
+  });
+
   it('shows the Frame count in the header, and opens it to the file kinds and Skipped files', async () => {
     await respond(summary, []);
 
-    expect(text('summary', fileDetails())).toBe('3 Frames');
+    expect(visibleText(fileDetails().querySelector('summary')!)).toBe('3 Frames');
     expect(fileDetails().open).toBe(false);
 
     const details = await openFileDetails();
@@ -1153,7 +1166,7 @@ describe('Review UI', () => {
     expect(all('[data-testid="open-write-back"]').length).toBe(1);
   });
 
-  it('names how many files the write-back screen reads, one per JPG and two per RAW+JPG pair', async () => {
+  it('names how many files the write-back screen reads, one per JPG and two per RAW+JPG Frame', async () => {
     await respond(summary, []);
     all('[data-testid="open-write-back"]')[0].click();
     await settle();
@@ -1523,6 +1536,51 @@ describe('Review UI', () => {
       await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
 
       expect(tooltipText()).toBe('All Groups Esc');
+    });
+
+    it('shows a tooltip when Shift+Tab or an arrow key moves focus to a button', async () => {
+      await openFirstGroup();
+      vi.useFakeTimers();
+      const back = all('[data-testid="back-to-groups"]')[0];
+
+      for (const init of [{ key: 'Tab', shiftKey: true }, { key: 'ArrowLeft' }]) {
+        back.blur();
+        document.dispatchEvent(new KeyboardEvent('keydown', { ...init, bubbles: true }));
+        back.focus();
+        await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+
+        expect(tooltipText()).toBe('All Groups Esc');
+      }
+    });
+
+    it('shows no tooltip when a click or the Review UI moves focus to a button', async () => {
+      await openFirstGroup();
+      vi.useFakeTimers();
+      const back = all('[data-testid="back-to-groups"]')[0];
+
+      back.focus();
+      await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+      expect(visibleTooltip()).toBeNull();
+
+      back.blur();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+      document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      back.focus();
+      await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+      expect(visibleTooltip()).toBeNull();
+    });
+
+    it('shows no tooltip when the Review UI moves focus some time after a Tab', async () => {
+      await openFirstGroup();
+      vi.useFakeTimers();
+      const back = all('[data-testid="back-to-groups"]')[0];
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+      await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+      back.focus();
+      await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+
+      expect(visibleTooltip()).toBeNull();
     });
 
     it('opens the next Group without the loupe after leaving one with the loupe open', async () => {

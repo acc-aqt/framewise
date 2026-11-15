@@ -127,7 +127,7 @@ export class App {
     this.summary.hasValue() ? this.summary.value().keeper_budget : null,
   );
   protected readonly keeperBudgetFailed = signal(false);
-  /** Rating write-back writes to a JPG-only Frame's file and to both files of a RAW+JPG pair. */
+  /** Rating write-back writes to a JPG-only Frame's file and to both files of a RAW+JPG Frame. */
   protected readonly sessionFileCount = computed(() => {
     if (!this.summary.hasValue()) {
       return null;

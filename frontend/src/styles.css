@@ -25,6 +25,8 @@
   --color-focus: #7aa7ff;
   --color-error: #ef6b6b;
   --color-rating: #e9c46a;
+  --color-label-red: #e5484d;
+  --color-label-yellow: #f5d90a;
 
   --color-winner-tint: rgb(240 199 94 / 0.12);
   --color-keeper-tint: rgb(111 207 151 / 0.12);
@@ -143,6 +145,15 @@ input[type='checkbox'] {
 .btn-icon {
   width: var(--control-height);
   padding: 0;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .error-message {

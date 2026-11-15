@@ -15,17 +15,18 @@ import { FrameTile } from './frame-tile';
 import { Icon } from './icon';
 import {
   isFiltering,
+  isKept,
   matchesFilter,
   NO_FILTER,
   ProposalFilter,
+  reasonLabels,
   VERDICT_LABELS,
   winnerOf,
 } from './proposal';
-import { Frame, Group, Verdict } from './session-api';
+import { Frame, Group } from './session-api';
 
 const TILE_WIDTH_PX = 220;
 const ROW_HEIGHT_PX = 200;
-const KEPT_VERDICTS: Verdict[] = ['winner', 'keeper'];
 
 interface GridTile {
   frame: Frame;
@@ -133,13 +134,13 @@ interface GridTile {
       display: inline-flex;
       align-items: center;
       gap: var(--space-1);
-      padding: 2px 6px;
+      padding: var(--space-1) var(--space-2);
       border-radius: var(--radius-sm);
       background: var(--color-overlay);
       color: var(--color-text);
       font-size: var(--text-xs);
       font-variant-numeric: tabular-nums;
-      line-height: 1.3;
+      line-height: 1;
       white-space: nowrap;
     }
   `,
@@ -168,9 +169,8 @@ export class GroupGrid {
   });
   protected readonly activeFilters = computed(() => {
     const { verdict, reason } = this.filter();
-    const reasonLabel = this.groups()
-      .flatMap((group) => group.frames.flatMap((frame) => frame.reasons))
-      .find((candidate) => candidate.code === reason)?.label;
+    const frames = this.groups().flatMap((group) => group.frames);
+    const reasonLabel = reason === null ? null : reasonLabels(frames).get(reason);
     return [verdict && VERDICT_LABELS[verdict], reasonLabel].filter(Boolean).join(' + ');
   });
   protected readonly rows = computed(() => chunk(this.tiles(), this.columns()));
@@ -202,7 +202,7 @@ export class GroupGrid {
   }
 
   protected makeup(group: Group): string {
-    const kept = group.frames.filter((frame) => KEPT_VERDICTS.includes(frame.verdict)).length;
+    const kept = group.frames.filter(isKept).length;
     return `${kept} kept · ${group.frames.length - kept} out`;
   }
 }

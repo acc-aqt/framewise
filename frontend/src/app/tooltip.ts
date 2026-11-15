@@ -12,10 +12,32 @@ export interface TooltipContent {
 
 const GAP_PX = 6;
 const EDGE_PX = 8;
+const NAVIGATION_KEYS = new Set(['Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 let nextId = 0;
 
+// Focus shows a tooltip only when a navigation key moved it in the same task, not when a
+// pointer, Escape or the Review UI itself (such as a closing popover) moved it.
+let navigating = false;
+const trackedDocuments = new WeakSet<Document>();
+
+function trackNavigation(document: Document): void {
+  if (trackedDocuments.has(document)) {
+    return;
+  }
+  trackedDocuments.add(document);
+  const track = (event: Event): void => {
+    navigating = event instanceof KeyboardEvent && NAVIGATION_KEYS.has(event.key);
+    if (navigating) {
+      setTimeout(() => (navigating = false));
+    }
+  };
+  document.addEventListener('keydown', track, true);
+  document.addEventListener('pointerdown', track, true);
+}
+
 /**
- * Shows a tooltip after a short delay when its host is hovered or the photographer tabs to it.
+ * Shows a tooltip after a short delay when its host is hovered or the photographer moves focus
+ * to it with Tab or an arrow key.
  * An explanation also describes the host to assistive technology via aria-describedby.
  */
 @Directive({
@@ -36,20 +58,12 @@ export class Tooltip implements OnDestroy {
   private readonly document = inject(DOCUMENT);
   private readonly element = this.document.createElement('div');
   private timer: ReturnType<typeof setTimeout> | undefined;
-  // Focus shows the tooltip only when the photographer moved it with Tab, not when a click
-  // or the Review UI itself (such as a closing popover) moved it.
-  private tabbing = false;
-  private readonly trackInput = (event: Event): void => {
-    this.tabbing = event instanceof KeyboardEvent && event.key === 'Tab';
-  };
-
   constructor() {
     this.element.className = 'tooltip';
     this.element.setAttribute('role', 'tooltip');
     this.element.hidden = true;
     this.document.body.appendChild(this.element);
-    this.document.addEventListener('keydown', this.trackInput, true);
-    this.document.addEventListener('pointerdown', this.trackInput, true);
+    trackNavigation(this.document);
 
     effect(() => this.render(this.content()));
   }
@@ -57,8 +71,6 @@ export class Tooltip implements OnDestroy {
   ngOnDestroy(): void {
     this.hide();
     this.element.remove();
-    this.document.removeEventListener('keydown', this.trackInput, true);
-    this.document.removeEventListener('pointerdown', this.trackInput, true);
   }
 
   protected scheduleShow(): void {
@@ -67,7 +79,7 @@ export class Tooltip implements OnDestroy {
   }
 
   protected onFocus(): void {
-    if (this.tabbing) {
+    if (navigating) {
       this.scheduleShow();
     }
   }

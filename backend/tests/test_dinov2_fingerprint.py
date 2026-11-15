@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
+from conftest import review_app
 from test_apple_vision import a_moment_later, draw_landscape, draw_still_life, similarity
 from test_groups_api import group_paths
 from test_verdicts_api import frames_by_name, reasons
@@ -16,7 +16,6 @@ from framewise.mediapipe_faces import MediaPipeEyeState, MediaPipeFaceDetection
 from framewise.models import DINOV2_SMALL, FACE_LANDMARKER, is_verified
 from framewise.providers import compose_analyzer, discover_providers, select_providers
 from framewise.review import SessionAnalysis, open_session, resolve_data_dir
-from framewise.server import create_app
 
 FACES = Path(__file__).parent / "fixtures" / "faces"
 
@@ -58,7 +57,7 @@ def test_a_session_analysed_only_with_portable_providers_gets_a_proposal(session
     analysis = SessionAnalysis(store, analyzer)
     analysis.run()
 
-    client = TestClient(create_app(store, analysis))
+    client = review_app(store, analysis)
     frames = frames_by_name(client)
 
     assert group_paths(client) == [

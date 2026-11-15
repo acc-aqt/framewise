@@ -20,8 +20,17 @@ export interface ActiveProvider {
   source: 'automatic' | 'config';
 }
 
+export interface AlternativeProvider {
+  id: string;
+  version: number;
+  /** Whether it can run on this machine. */
+  available: boolean;
+}
+
 export interface CapabilityLineup {
   active: ActiveProvider | null;
+  /** The other installed Providers of the Capability, in descending priority. */
+  alternatives: AlternativeProvider[];
 }
 
 export type ProviderLineup = Partial<Record<Capability, CapabilityLineup>>;

@@ -10,13 +10,14 @@ import {
   viewChild,
 } from '@angular/core';
 import { Icon } from './icon';
-import { ActiveProvider, Capability, ProviderLineup } from './session-api';
+import { ActiveProvider, AlternativeProvider, Capability, ProviderLineup } from './session-api';
 import { Tooltip } from './tooltip';
 
 interface CapabilityRow {
   capability: Capability;
   label: string;
   active: ActiveProvider | null;
+  alternatives: AlternativeProvider[];
   /** What it means for the photographer that no Provider serves the Capability. */
   noneMeans: string | null;
 }
@@ -91,6 +92,21 @@ const SOURCES: Record<ActiveProvider['source'], string> = {
                   }
                 }
               </dd>
+              @if (row.alternatives.length) {
+                <dd class="alternatives" data-testid="alternatives">
+                  <ul>
+                    @for (alternative of row.alternatives; track alternative.id) {
+                      <li data-testid="alternative" [class.unavailable]="!alternative.available">
+                        <code>{{ alternative.id }}</code>
+                        <span class="meta"> v{{ alternative.version }}</span>
+                        @if (!alternative.available) {
+                          <span class="meta"> · not available on this machine</span>
+                        }
+                      </li>
+                    }
+                  </ul>
+                </dd>
+              }
             </div>
           }
         </dl>
@@ -155,6 +171,14 @@ const SOURCES: Record<ActiveProvider['source'], string> = {
     .meta {
       color: var(--color-text-muted);
     }
+    .alternatives ul {
+      margin: var(--space-1) 0 0;
+      padding-left: var(--space-4);
+      color: var(--color-text-secondary);
+    }
+    .unavailable {
+      opacity: 0.55;
+    }
   `,
 })
 export class AnalysisSettings {
@@ -166,6 +190,7 @@ export class AnalysisSettings {
     CAPABILITIES.map((entry) => ({
       ...entry,
       active: this.providers()[entry.capability]?.active ?? null,
+      alternatives: this.providers()[entry.capability]?.alternatives ?? [],
     })),
   );
 

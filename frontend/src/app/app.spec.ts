@@ -21,13 +21,26 @@ const summary: SessionSummary = {
   skipped: ['100LEICA/L1000009-Pano.dng'],
   keeper_budget: 0.4,
   providers: {
-    fingerprint: { active: { id: 'apple-vision-fingerprint', version: 2, source: 'automatic' } },
-    'face-detection': { active: { id: 'mediapipe-face-detection', version: 1, source: 'config' } },
-    'eye-state': { active: null },
+    fingerprint: {
+      active: { id: 'apple-vision-fingerprint', version: 2, source: 'automatic' },
+      alternatives: [],
+    },
+    'face-detection': {
+      active: { id: 'mediapipe-face-detection', version: 1, source: 'config' },
+      alternatives: [
+        { id: 'apple-vision-face-detection', version: 3, available: true },
+        { id: 'cuda-face-detection', version: 1, available: false },
+      ],
+    },
+    'eye-state': {
+      active: null,
+      alternatives: [{ id: 'mediapipe-eye-state', version: 1, available: false }],
+    },
     'face-quality': {
       active: { id: 'apple-vision-face-quality', version: 1, source: 'automatic' },
+      alternatives: [],
     },
-    aesthetics: { active: null },
+    aesthetics: { active: null, alternatives: [] },
   },
 };
 
@@ -244,6 +257,7 @@ describe('Review UI', () => {
     const rows = () =>
       all('[data-testid="capability"]').map((row) =>
         Array.from(row.children)
+          .filter((part) => part.getAttribute('data-testid') !== 'alternatives')
           .map((part) => part.textContent?.replace(/\s+/g, ' ').trim())
           .join(' '),
       );
@@ -265,6 +279,30 @@ describe('Review UI', () => {
         'Eye state None · eyes count as unknown',
         'Face quality apple-vision-face-quality v1 · picked automatically',
         'Aesthetics None · aesthetics is left out of the score',
+      ]);
+    });
+
+    it('lists the alternatives per Capability, marking those that cannot run here', async () => {
+      await openSettings();
+
+      const alternatives = all('[data-testid="capability"]').map((row) =>
+        Array.from(row.querySelectorAll('[data-testid="alternative"]')).map((alternative) => ({
+          text: alternative.textContent?.replace(/\s+/g, ' ').trim(),
+          unavailable: alternative.classList.contains('unavailable'),
+        })),
+      );
+      expect(alternatives).toEqual([
+        [],
+        [
+          { text: 'apple-vision-face-detection v3', unavailable: false },
+          {
+            text: 'cuda-face-detection v1 · not available on this machine',
+            unavailable: true,
+          },
+        ],
+        [{ text: 'mediapipe-eye-state v1 · not available on this machine', unavailable: true }],
+        [],
+        [],
       ]);
     });
 

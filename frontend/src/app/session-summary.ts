@@ -9,6 +9,7 @@ import { SessionSummary } from './session-api';
   template: `
     <details class="file-details" data-testid="file-details">
       <summary title="File details">
+        <span class="visually-hidden">File details: </span>
         <span class="frames"
           ><b data-testid="total-frames">{{ summary().total_frames }}</b> Frames</span
         ><app-icon name="chevron-down" [size]="12" />

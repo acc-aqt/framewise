@@ -116,6 +116,13 @@ describe('Review UI', () => {
     );
   }
 
+  /** The text a sighted photographer reads, without text meant only for assistive technology. */
+  function visibleText(element: HTMLElement): string {
+    const copy = element.cloneNode(true) as HTMLElement;
+    copy.querySelectorAll('.visually-hidden').forEach((hidden) => hidden.remove());
+    return copy.textContent!.replace(/\s+/g, ' ').trim();
+  }
+
   function all(selector: string, root?: HTMLElement): HTMLElement[] {
     return Array.from(
       (root ?? (fixture.nativeElement as HTMLElement)).querySelectorAll<HTMLElement>(selector),
@@ -178,10 +185,16 @@ describe('Review UI', () => {
     return details;
   }
 
+  it('names the Frames disclosure File details for assistive technology', async () => {
+    await respond(summary, []);
+
+    expect(text('summary', fileDetails())).toBe('File details: 3 Frames');
+  });
+
   it('shows the Frame count in the header, and opens it to the file kinds and Skipped files', async () => {
     await respond(summary, []);
 
-    expect(text('summary', fileDetails())).toBe('3 Frames');
+    expect(visibleText(fileDetails().querySelector('summary')!)).toBe('3 Frames');
     expect(fileDetails().open).toBe(false);
 
     const details = await openFileDetails();

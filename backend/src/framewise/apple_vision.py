@@ -20,9 +20,9 @@ PRIORITY = 100
 FLOAT_ELEMENT_TYPE = 1
 FEATURE_PRINT_REVISION = 2
 # An eye's landmarks outline its opening, so a closed eye's outline is a flat line: open eyes
-# measure about 0.3 high for each unit wide, closed ones under 0.1. On sewts, blinks and
-# half-closed eyes measure up to 0.158, laughing squints from 0.17 and the photographer's rated
-# faces from 0.205 (#30).
+# measure about 0.3 high for each unit wide, closed ones under 0.1. On the reference benchmark,
+# blinks and half-closed eyes measure up to 0.158, laughing squints from 0.17 and the
+# photographer's rated faces from 0.205 (#30).
 EYES_CLOSED_BELOW = 0.16
 
 

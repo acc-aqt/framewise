@@ -1,6 +1,5 @@
 {
-  "name": "frontend",
-  "version": "0.0.0",
+  "name": "framewise-ui",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",

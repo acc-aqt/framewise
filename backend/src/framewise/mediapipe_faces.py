@@ -70,7 +70,7 @@ _this_thread = threading.local()
 
 
 def _landmarked_faces(jpg_path: Path) -> list[_LandmarkedFace]:
-    """The faces in the Analysis source this thread analyses. The Providers share them, so the
+    """The faces in the Analysis source this thread analyzes. The Providers share them, so the
     landmarker runs once per Frame."""
     key = (jpg_path, jpg_path.stat().st_mtime_ns)
     if getattr(_this_thread, "key", None) != key:

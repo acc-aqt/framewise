@@ -1,6 +1,6 @@
 # Writing a Provider
 
-framewise analyses each Frame's Analysis source with one Provider per Capability. You can add a Provider for any Capability from your own Python package, without changing framewise. The reasons behind this design are in [ADR-0005](adr/0005-pluggable-analysis-providers.md).
+framewise analyzes each Frame's Analysis source with one Provider per Capability. You can add a Provider for any Capability from your own Python package, without changing framewise. The reasons behind this design are in [ADR-0005](adr/0005-pluggable-analysis-providers.md).
 
 ## Capabilities
 
@@ -51,7 +51,7 @@ Besides its Capability's method, a Provider has:
 |---|---|
 | `capability` | One of the Capability names above. |
 | `id` | A stable, unique name such as `"acme-eye-state"`. Saved analyses record it, and `config.toml` chooses by it. Never change it. |
-| `version` | An integer. Bump it whenever your Provider's output may change, such as a new model or threshold. framewise then analyses the Frames your old version analysed again. |
+| `version` | An integer. Bump it whenever your Provider's output may change, such as a new model or threshold. framewise then analyzes the Frames your old version analyzed again. |
 | `priority` | An integer. By default each Capability uses its highest-priority available Provider. framewise's Apple Vision Providers use 100 and its portable ones (MediaPipe and DINOv2) 50. |
 | `is_available()` | Whether the Provider can run on this machine, for example whether its dependencies and models are present. It must never raise. A Provider whose check raises is treated as unavailable. |
 

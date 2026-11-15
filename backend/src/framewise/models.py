@@ -31,7 +31,7 @@ FACE_LANDMARKER = Model(
     url="https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
     sha256="64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff",
 )
-# DINOv2-small, quantised to 8 bits and exported to ONNX for Transformers.js. Its base model
+# DINOv2-small, quantized to 8 bits and exported to ONNX for Transformers.js. Its base model
 # card states "license: apache-2.0": https://huggingface.co/facebook/dinov2-small
 DINOV2_SMALL = Model(
     file_name="dinov2_small_quantized.onnx",

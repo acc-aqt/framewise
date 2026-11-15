@@ -203,7 +203,7 @@ def _run(
     ratings: dict[Path, int],
     clock: Callable[[], float],
 ) -> dict:
-    """A cold first pass: a fresh Session store, so every Frame is analysed."""
+    """A cold first pass: a fresh Session store, so every Frame is analyzed."""
     started = clock()
     store = open_session(session_root, data_dir)
     analysis = SessionAnalysis(store, analyzer)

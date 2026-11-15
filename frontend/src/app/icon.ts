@@ -16,7 +16,7 @@ export type IconName =
   | 'settings'
   | 'zoom';
 
-/** A decorative stroke icon (paths from Lucide, ISC licence). Give its button an aria-label. */
+/** A decorative stroke icon (paths from Lucide, ISC license). Give its button an aria-label. */
 @Component({
   selector: 'app-icon',
   changeDetection: ChangeDetectionStrategy.OnPush,

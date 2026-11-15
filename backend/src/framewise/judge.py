@@ -1,4 +1,4 @@
-"""The Judge: turns Groups of analysed Frames into a Proposal of Verdicts with Reasons.
+"""The Judge: turns Groups of analyzed Frames into a Proposal of Verdicts with Reasons.
 
 Each Frame is first assessed on its own: its signals become Scores, and each flaw check may
 find a Flaw that caps its Verdict at Unsure or Reject. A Camera rating nudges a Frame's Scores up

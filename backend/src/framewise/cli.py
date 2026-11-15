@@ -83,7 +83,7 @@ def _wake_lock_command() -> list[str] | None:
             "systemd-inhibit",
             "--what=idle",
             "--who=framewise",
-            "--why=Analysing a Session",
+            "--why=Analyzing a Session",
             "tail",
             f"--pid={pid}",
             "-f",
@@ -93,7 +93,7 @@ def _wake_lock_command() -> list[str] | None:
 
 
 def choose_folder_in_dialog() -> Path | None:
-    """Asks for a Session folder with the system's folder dialog, or None if cancelled or
+    """Asks for a Session folder with the system's folder dialog, or None if canceled or
     there is none."""
     command = _folder_dialog_command()
     if command is None:
@@ -146,7 +146,7 @@ def hard_reset(folder: Path) -> None:
         print("framewise: kept the Session store, so the reset can be retried", file=sys.stderr)
         sys.exit(1)
     print(
-        f"framewise: deleted the Session store, the next review analyses {folder.resolve()} again"
+        f"framewise: deleted the Session store, the next review analyzes {folder.resolve()} again"
     )
 
 
@@ -183,7 +183,7 @@ def main(
     review.add_argument(
         "--background",
         action="store_true",
-        help="Analyse on fewer cores at low priority, so other apps stay responsive",
+        help="Analyze on fewer cores at low priority, so other apps stay responsive",
     )
     review.add_argument(
         "--allow-sleep",
@@ -193,7 +193,7 @@ def main(
     reset = commands.add_parser(
         "reset",
         help="Undo Rating write-back and delete the Session store, "
-        "so the next review analyses every Frame again",
+        "so the next review analyzes every Frame again",
     )
     reset.add_argument("session_folder", type=Path)
     models_command = commands.add_parser("models", help="Manage the portable Providers' models")

@@ -8,7 +8,7 @@ import { AnalysisProgress } from './session-api';
   template: `
     <progress [value]="progress().frames_done" [max]="total()"></progress>
     <p>
-      Analysing: <span data-testid="frames-done">{{ progress().frames_done }}</span> Frames done,
+      Analyzing: <span data-testid="frames-done">{{ progress().frames_done }}</span> Frames done,
       <span data-testid="frames-left">{{ progress().frames_left }}</span> left,
       <span data-testid="time-remaining">{{ timeRemaining() }}</span>
     </p>

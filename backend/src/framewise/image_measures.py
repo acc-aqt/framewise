@@ -23,7 +23,7 @@ LOW_KEY_HIGHLIGHT_TONE = 200
 LOW_KEY_MIN_HIGHLIGHT_SHARE = 0.005
 # A high-key Frame is bright yet keeps its highlights; an overexposed one clips them. With faces,
 # the highlights that count are the faces': a white wall behind a person may clip, their skin
-# must not. A face's centre leaves out the hair and background at the edges of its box.
+# must not. A face's center leaves out the hair and background at the edges of its box.
 CLIPPED_TONE = 250
 HIGH_KEY_MAX_CLIPPED_SHARE = 0.01
 HIGH_KEY_MAX_CLIPPED_FACE_SHARE = 0.1
@@ -88,7 +88,7 @@ def _pixel_box(grey: Image.Image, region: Region) -> Box | None:
 
 
 def _keeps_highlights(grey: Image.Image, histogram: list[int], faces: list[Box | None]) -> bool:
-    """Whether the centre of every measurable face keeps its highlights or, without one, the whole
+    """Whether the center of every measurable face keeps its highlights or, without one, the whole
     Frame does."""
     measurable = [box for box in faces if box is not None]
     if not measurable:

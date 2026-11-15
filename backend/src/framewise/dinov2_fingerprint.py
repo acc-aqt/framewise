@@ -65,7 +65,7 @@ def _session():
     """One session for every analysis thread, made on first use, when its model is downloaded
     if it is missing. onnxruntime runs a session from several threads at once; with one thread
     of its own per run, it runs on the thread that calls it, as many at once as framewise
-    analyses Frames."""
+    analyzes Frames."""
     global _shared_session
     with _session_lock:
         if _shared_session is None:
@@ -82,7 +82,7 @@ def _session():
 
 def _pixel_values(jpg_path: Path):
     """The Frame as it is displayed, after its EXIF orientation, prepared as DINOv2 was trained:
-    its shortest edge resized to 256, its centre cropped to 224 square and normalised by
+    its shortest edge resized to 256, its center cropped to 224 square and normalized by
     ImageNet's mean and spread, channels first."""
     with Image.open(jpg_path) as image:
         image.draft("RGB", (SHORTEST_EDGE, SHORTEST_EDGE))

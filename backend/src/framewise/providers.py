@@ -38,7 +38,7 @@ class MissingCapabilityError(ProviderError):
 
 
 class ProviderConfigError(ProviderError):
-    """The Provider choices in the config cannot be honoured."""
+    """The Provider choices in the config cannot be honored."""
 
 
 class Provider(Protocol):
@@ -87,7 +87,7 @@ class AestheticsProvider(Provider, Protocol):
 
 
 class ProviderAnalyzer:
-    """Analyses a Frame's Analysis source with one Provider per Capability and the built-in
+    """Analyzes a Frame's Analysis source with one Provider per Capability and the built-in
     image maths. The face detection Provider alone decides which faces a Frame has; the eye
     state and face quality Providers and the image maths look inside its boxes."""
 

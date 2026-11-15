@@ -2,6 +2,8 @@
 
 framewise helps a photographer cull a shoot. It groups near-duplicate Frames, proposes a Verdict for each one with Reasons, and lets the photographer review the result before any rating reaches Lightroom Classic.
 
+Prose and UI text use American spelling (analyze, gray); code identifiers keep their existing names.
+
 ## Input
 
 **Session**:
@@ -48,7 +50,7 @@ Frames that are near-duplicates of each other or come from one burst. Within a G
 _Avoid_: Burst, cluster, series, stack
 
 **Verdict**:
-framewise's judgement of one Frame: Winner, Keeper, Reject or Unsure.
+framewise's judgment of one Frame: Winner, Keeper, Reject or Unsure.
 _Avoid_: Decision, flag, pick
 
 **Winner**:
@@ -94,7 +96,7 @@ The local web front end where the photographer confirms, changes or refines the 
 _Avoid_: App, dashboard, gallery
 
 **Override**:
-A change the photographer makes to a Verdict or a Group in the Review UI. An Override always beats framewise's own judgement.
+A change the photographer makes to a Verdict or a Group in the Review UI. An Override always beats framewise's own judgment.
 _Avoid_: Correction, edit
 
 **Rating write-back**:

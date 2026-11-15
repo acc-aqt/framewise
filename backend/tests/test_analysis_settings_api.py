@@ -82,3 +82,11 @@ def test_an_alternative_whose_availability_check_raises_is_listed_as_unavailable
     assert providers["fingerprint"]["alternatives"] == [
         {"id": "broken", "version": 4, "available": False}
     ]
+
+
+def test_the_session_gives_the_config_path_whether_or_not_the_file_exists(review, tmp_path):
+    config = tmp_path / "missing" / "config.toml"
+
+    session = review(config_path=config).get("/api/session").json()
+
+    assert session["config_path"] == str(config)

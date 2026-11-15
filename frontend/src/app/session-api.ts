@@ -8,6 +8,8 @@ export interface SessionSummary {
   keeper_budget: number;
   /** What serves each Capability in the running analyzer, not in the stored analyses. */
   providers: ProviderLineup;
+  /** The absolute path of the config.toml framewise reads, whether or not it exists. */
+  config_path: string;
 }
 
 export type Capability =

@@ -324,3 +324,21 @@ def test_review_shows_the_providers_of_the_running_analyzer(session_dir, isolate
         "version": 2,
         "source": "automatic",
     }
+
+
+def test_review_shows_the_config_path_in_the_data_directory_even_without_the_file(
+    session_dir, isolated_data_dir
+):
+    server = FakeServer()
+
+    main(
+        ["review", str(session_dir)],
+        serve=server,
+        open_browser=print,
+        analyzer=FakeAnalyzer(),
+        keep_awake=FakeWakeLock(),
+    )
+
+    config_path = TestClient(server.app).get("/api/session").json()["config_path"]
+    assert config_path == str(isolated_data_dir / "config.toml")
+    assert not (isolated_data_dir / "config.toml").exists()

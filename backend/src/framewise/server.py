@@ -60,6 +60,7 @@ def create_app(
     ui_dir: Path | None = None,
     lightroom_preferences: Path | None = None,
     providers: ProviderLineup | None = None,
+    config_path: Path | None = None,
 ) -> FastAPI:
     app = FastAPI(title="framewise")
     providers_json = {
@@ -112,6 +113,7 @@ def create_app(
             "skipped": summary.skipped,
             "keeper_budget": _keeper_budget(),
             "providers": providers_json,
+            "config_path": str(config_path) if config_path else None,
         }
 
     @app.get("/api/progress")

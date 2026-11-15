@@ -56,3 +56,11 @@ def test_the_session_lists_every_capability_in_the_fixed_order(review):
         "face-quality",
         "aesthetics",
     ]
+
+
+def test_the_session_gives_the_config_path_whether_or_not_the_file_exists(review, tmp_path):
+    config = tmp_path / "missing" / "config.toml"
+
+    session = review(config_path=config).get("/api/session").json()
+
+    assert session["config_path"] == str(config)

@@ -228,6 +228,7 @@ def main(
             UI_DIR,
             lightroom_preferences=LIGHTROOM_PREFERENCES,
             providers=analyzer.lineup,
+            config_path=resolve_config_path().absolute(),
         )
 
     url = f"http://{HOST}:{args.port}/"

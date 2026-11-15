@@ -15,6 +15,10 @@ import { commandById } from './shortcuts';
 import { Tooltip } from './tooltip';
 
 export type LoupeZoom = 'fit' | '100%';
+export interface LoupePosition {
+  index: number;
+  total: number;
+}
 
 @Component({
   selector: 'app-loupe',
@@ -47,6 +51,11 @@ export type LoupeZoom = 'fit' | '100%';
               {{ verdictLabels[frame.verdict] }}
             </span>
             <span class="file">{{ frame.jpg_path }}</span>
+            @if ($first && position(); as position) {
+              <span class="position" data-testid="loupe-position">
+                {{ position.index }} / {{ position.total }}
+              </span>
+            }
           </div>
         </section>
       }
@@ -126,8 +135,7 @@ export type LoupeZoom = 'fit' | '100%';
       gap: var(--space-2);
       padding: var(--space-1) var(--space-3) var(--space-1) var(--space-1);
       border-radius: var(--radius-pill);
-      background: color-mix(in srgb, var(--color-surface-1) 85%, transparent);
-      backdrop-filter: blur(8px);
+      background: var(--color-surface-1);
       pointer-events: none;
     }
     .bar {
@@ -154,6 +162,12 @@ export type LoupeZoom = 'fit' | '100%';
       color: var(--color-text-muted);
       font-family: var(--font-mono);
       font-size: var(--text-xs);
+    }
+    .position {
+      color: var(--color-text-muted);
+      font-size: var(--text-xs);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
     }
     .verdict {
       display: inline-flex;
@@ -194,6 +208,8 @@ export class Loupe {
   protected readonly closeTooltip = commandById('close');
   /** One Frame, or the current Frame and the Group's Winner to compare side by side. */
   readonly frames = input.required<Frame[]>();
+  /** The first Frame's position in its Group. */
+  readonly position = input<LoupePosition | null>(null);
   readonly zoom = input.required<LoupeZoom>();
   readonly toggleZoom = output<void>();
   readonly close = output<void>();

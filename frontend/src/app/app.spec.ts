@@ -399,6 +399,19 @@ describe('Review UI', () => {
       expect(document.activeElement).toBe(gear());
     });
 
+    it('shows no tooltip on the gear when Escape gives focus back to it', async () => {
+      await openSettings();
+      vi.useFakeTimers();
+
+      document.activeElement!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
+      await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+
+      expect(document.activeElement).toBe(gear());
+      expect(visibleTooltip()).toBeNull();
+    });
+
     it('closes on a click outside it, but not on a click inside it', async () => {
       await openSettings();
 
@@ -1289,10 +1302,11 @@ describe('Review UI', () => {
       expect(visibleTooltip()).toBeNull();
     });
 
-    it('shows a tooltip when a button gets keyboard focus', async () => {
+    it('shows a tooltip when tabbing to a button', async () => {
       await openFirstGroup();
       vi.useFakeTimers();
 
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
       all('[data-testid="back-to-groups"]')[0].focus();
       await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
 

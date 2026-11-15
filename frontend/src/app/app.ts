@@ -79,7 +79,7 @@ export class App {
   };
   // Keyed on Frames done, so the Groups are fetched again each time more Frames are analysed.
   // Without progress, the Groups are still fetched once so an analysed Session stays reviewable.
-  protected readonly groups = httpResource<Group[]>(
+  protected readonly groupsResource = httpResource<Group[]>(
     () => {
       if (this.progress.hasValue()) {
         return `/api/groups?frames_done=${this.progress.value().frames_done}`;
@@ -88,6 +88,15 @@ export class App {
     },
     { defaultValue: [] },
   );
+  // While a changed request loads, the resource falls back to no Groups, so the last loaded
+  // Groups are kept until the next ones arrive rather than blanking the grid.
+  protected readonly groups = linkedSignal<Group[] | undefined, Group[]>({
+    source: () =>
+      this.groupsResource.isLoading() || this.groupsResource.error()
+        ? undefined
+        : this.groupsResource.value(),
+    computation: (groups, previous) => groups ?? previous?.value ?? [],
+  });
   // Tracks the Frame the photographer opened rather than the Group id, which changes when a
   // Group gains an earlier Frame during analysis.
   protected readonly openedFrameId = signal<number | null>(null);
@@ -95,9 +104,9 @@ export class App {
   protected readonly writingBack = signal(false);
   protected readonly openGroup = computed(
     () =>
-      this.groups
-        .value()
-        .find((group) => group.frames.some((frame) => frame.id === this.openedFrameId())) ?? null,
+      this.groups().find((group) =>
+        group.frames.some((frame) => frame.id === this.openedFrameId()),
+      ) ?? null,
   );
   protected readonly currentFrame = computed(
     () => this.openGroup()?.frames.find((frame) => frame.id === this.openedFrameId()) ?? null,
@@ -221,7 +230,7 @@ export class App {
 
   /** The Group `by` Groups before or after the open Group, in capture order. */
   protected neighbourGroup(by: -1 | 1): Group | null {
-    const groups = this.groups.value();
+    const groups = this.groups();
     const index = groups.findIndex((group) => group === this.openGroup());
     return index === -1 ? null : (groups[index + by] ?? null);
   }
@@ -253,7 +262,7 @@ export class App {
     this.sessionChangeApi.changeKeeperBudget(share).subscribe({
       next: () => {
         this.keeperBudgetFailed.set(false);
-        this.groups.reload();
+        this.groupsResource.reload();
       },
       error: () => this.keeperBudgetFailed.set(true),
     });
@@ -261,7 +270,7 @@ export class App {
 
   protected onSessionReset(): void {
     this.summary.reload();
-    this.groups.reload();
+    this.groupsResource.reload();
   }
 
   protected closeGroup(): void {
@@ -306,12 +315,7 @@ export class App {
         return this.save(this.overrideApi.clear(frame.id));
       case 'step':
         return this.openedFrameId.set(
-          stepFrom(
-            this.groups.value(),
-            frame.id,
-            shortcut.by,
-            shortcut.withinGroup || this.comparing(),
-          ),
+          stepFrom(this.groups(), frame.id, shortcut.by, shortcut.withinGroup || this.comparing()),
         );
       case 'loupe':
         return this.openLoupe();
@@ -342,7 +346,7 @@ export class App {
     request.subscribe({
       next: () => {
         this.overrideFailed.set(false);
-        this.groups.reload();
+        this.groupsResource.reload();
       },
       error: () => this.overrideFailed.set(true),
     });

@@ -23,7 +23,7 @@
           <span class="divider" aria-hidden="true"></span>
           <app-keeper-budget
             [share]="keeperBudget()!"
-            [groups]="groups.value()"
+            [groups]="groups()"
             (changeShare)="changeKeeperBudget($event)"
           />
         }
@@ -79,7 +79,7 @@
     </div>
   </header>
   <main>
-    @if (groups.error()) {
+    @if (groupsResource.error()) {
       <p class="error">Could not load the Groups.</p>
     } @else if (writingBack()) {
       <app-write-back
@@ -117,9 +117,9 @@
         }
       }
     } @else {
-      <app-proposal-filters [groups]="groups.value()" [(filter)]="filter" />
+      <app-proposal-filters [groups]="groups()" [(filter)]="filter" />
       <app-group-grid
-        [groups]="groups.value()"
+        [groups]="groups()"
         [filter]="filter()"
         (open)="openedFrameId.set($event.id)"
         (clearFilters)="clearFilters()"

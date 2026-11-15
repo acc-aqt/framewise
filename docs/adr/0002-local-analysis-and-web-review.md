@@ -24,8 +24,8 @@ framewise runs on the photographer's MacBook Pro (M2 Pro, 10 cores, 16 GB). The 
 5. **The Review UI is a local web app.**
    - The backend is Python 3.13 with FastAPI. The Python version is managed with `uv`, separately from any system Python.
    - The backend is bound to `127.0.0.1` and serves the pages and the images.
-   - `framewise review <session-folder>` analyses the Session, starts the server and opens the browser.
-   - The Review UI opens immediately and fills in as Frames are analysed. The front end is built with **Angular**, using standalone components, signals and the CDK. Angular was picked because the photographer wants to build skills in it for other projects, not because it's the lightest option. The Review UI is the only place ratings get changed. Rating write-back (ADR-0001) is a separate, explicit step that shows a dry-run diff first.
+   - `framewise review <session-folder>` analyzes the Session, starts the server and opens the browser.
+   - The Review UI opens immediately and fills in as Frames are analyzed. The front end is built with **Angular**, using standalone components, signals and the CDK. Angular was picked because the photographer wants to build skills in it for other projects, not because it's the lightest option. The Review UI is the only place ratings get changed. Rating write-back (ADR-0001) is a separate, explicit step that shows a dry-run diff first.
 
 ## Consequences
 

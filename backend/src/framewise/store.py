@@ -83,7 +83,7 @@ class Frame:
 
 @dataclass(frozen=True)
 class Override:
-    """The photographer's Override of one Frame. A field left None keeps framewise's judgement.
+    """The photographer's Override of one Frame. A field left None keeps framewise's judgment.
 
     Keyed by the Frame's JPG path, so it survives re-analysis and Groups being recomputed."""
 

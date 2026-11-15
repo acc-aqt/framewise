@@ -121,7 +121,7 @@ _this_thread = threading.local()
 
 
 def _vision_image(jpg_path: Path) -> _VisionImage:
-    """The Vision handler of the Analysis source this thread analyses. The Providers share it,
+    """The Vision handler of the Analysis source this thread analyzes. The Providers share it,
     so Vision reads the image once, and the eye state and face quality Providers reuse the face
     detection Provider's own observations, landmarks and all, for the boxes it found."""
     key = (jpg_path, jpg_path.stat().st_mtime_ns)
@@ -139,7 +139,7 @@ def _vision_image(jpg_path: Path) -> _VisionImage:
 def _perform(image: _VisionImage, requests: list) -> None:
     succeeded, error = image.handler.performRequests_error_(requests, None)
     if not succeeded:
-        raise RuntimeError(f"Apple Vision could not analyse {image.key[0]}: {error}")
+        raise RuntimeError(f"Apple Vision could not analyze {image.key[0]}: {error}")
 
 
 def _perform_on_faces(image: _VisionImage, request, faces: list) -> list:

@@ -111,7 +111,7 @@ const SOURCES: Record<ActiveProvider['source'], string> = {
           <code class="path" data-testid="config-path">{{ configPath() }}</code>
           <pre data-testid="config-example">{{ configExample() }}</pre>
           <p data-testid="config-applies">
-            A change applies on the next <code>framewise review</code>, which re-analyses only the
+            A change applies on the next <code>framewise review</code>, which re-analyzes only the
             Frames it affects.
           </p>
         </footer>

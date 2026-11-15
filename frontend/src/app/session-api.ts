@@ -68,7 +68,7 @@ export interface Signals {
 
 export type ColorLabel = 'red' | 'yellow' | 'green' | 'blue' | 'purple';
 
-/** The photographer's Override of a Frame. A field left null keeps framewise's judgement. */
+/** The photographer's Override of a Frame. A field left null keeps framewise's judgment. */
 export interface Override {
   verdict: Verdict | null;
   stars: number | null;

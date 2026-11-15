@@ -46,7 +46,7 @@ def session_database_path(root: Path, data_dir: Path) -> Path:
 
 
 def hard_reset_session(folder: Path, data_dir: Path, exiftool: ExifTool) -> WriteBackResult | None:
-    """Undoes Rating write-back, then deletes the Session store, so the next review analyses
+    """Undoes Rating write-back, then deletes the Session store, so the next review analyzes
     every Frame again. Keeps the store if a file fails to restore, so the reset can be retried.
     None if the folder has no Session store."""
     root = folder.resolve()
@@ -102,7 +102,7 @@ class _FrameResult:
 
 
 class SessionAnalysis:
-    """Makes thumbnails and analyses a Session's Frames in parallel, saving each Frame as it
+    """Makes thumbnails and analyzes a Session's Frames in parallel, saving each Frame as it
     finishes so the Review UI can show Groups before the whole Session is done."""
 
     def __init__(
@@ -138,13 +138,13 @@ class SessionAnalysis:
                     self._save(future.result())
                 except Exception as error:
                     print(
-                        f"framewise: warning: could not analyse {item.jpg_path}: {error}",
+                        f"framewise: warning: could not analyze {item.jpg_path}: {error}",
                         file=sys.stderr,
                     )
                 self._count_done(item)
 
     def groups(self, group_overrides: Mapping[str, str] | None = None) -> list[list[AnalyzedFrame]]:
-        """The Groups of the Frames analysed so far by the current Providers."""
+        """The Groups of the Frames analyzed so far by the current Providers."""
         return group_frames(
             self._store.analyzed_frames(self._analyzer.signature),
             self._analyzer.similarity,

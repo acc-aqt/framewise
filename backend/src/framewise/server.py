@@ -331,7 +331,7 @@ def _group_of(jpg_path: str, groups: list[list[str]]) -> list[str] | None:
 
 
 def _grouped(frame: Frame, groups: list[list[str]]) -> list[str]:
-    """The Group of a Frame, which must be analysed already to be in one."""
+    """The Group of a Frame, which must be analyzed already to be in one."""
     group = _group_of(frame.jpg_path, groups)
     if group is None:
         raise HTTPException(status_code=422, detail="The Frame is not in a Group yet")

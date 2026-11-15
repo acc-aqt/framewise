@@ -15,17 +15,17 @@ import { FrameTile } from './frame-tile';
 import { Icon } from './icon';
 import {
   isFiltering,
+  isKept,
   matchesFilter,
   NO_FILTER,
   ProposalFilter,
   VERDICT_LABELS,
   winnerOf,
 } from './proposal';
-import { Frame, Group, Verdict } from './session-api';
+import { Frame, Group } from './session-api';
 
 const TILE_WIDTH_PX = 220;
 const ROW_HEIGHT_PX = 200;
-const KEPT_VERDICTS: Verdict[] = ['winner', 'keeper'];
 
 interface GridTile {
   frame: Frame;
@@ -202,7 +202,7 @@ export class GroupGrid {
   }
 
   protected makeup(group: Group): string {
-    const kept = group.frames.filter((frame) => KEPT_VERDICTS.includes(frame.verdict)).length;
+    const kept = group.frames.filter(isKept).length;
     return `${kept} kept · ${group.frames.length - kept} out`;
   }
 }

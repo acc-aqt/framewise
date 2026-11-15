@@ -6,6 +6,7 @@ import {
   linkedSignal,
   output,
 } from '@angular/core';
+import { isKept } from './proposal';
 import { Group } from './session-api';
 import { Tooltip, TooltipContent } from './tooltip';
 
@@ -81,11 +82,7 @@ export class KeeperBudget {
   protected readonly keeperCount = computed(
     () => this.frames().filter((frame) => frame.verdict === 'keeper').length,
   );
-  protected readonly keptCount = computed(
-    () =>
-      this.frames().filter((frame) => frame.verdict === 'winner' || frame.verdict === 'keeper')
-        .length,
-  );
+  protected readonly keptCount = computed(() => this.frames().filter(isKept).length);
 
   protected valueOf(event: Event): number {
     return Number((event.target as HTMLInputElement).value);

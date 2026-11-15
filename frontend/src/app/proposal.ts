@@ -27,6 +27,11 @@ export function matchesFilter(frame: Frame, filter: ProposalFilter): boolean {
   );
 }
 
+/** A Frame is kept when it is its Group's Winner or a Keeper. */
+export function isKept(frame: Frame): boolean {
+  return frame.verdict === 'winner' || frame.verdict === 'keeper';
+}
+
 export function findWinner(group: Group): Frame | undefined {
   return group.frames.find((frame) => frame.verdict === 'winner');
 }

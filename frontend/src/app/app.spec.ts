@@ -283,6 +283,18 @@ describe('Review UI', () => {
       ]);
     });
 
+    it('lists the Capabilities in the order the Session API sends them', async () => {
+      const { fingerprint, aesthetics } = summary.providers;
+      await respond({ ...summary, providers: { aesthetics, fingerprint } }, []);
+      gear().click();
+      await settle();
+
+      expect(rows()).toEqual([
+        'Aesthetics None · aesthetics is left out of the score',
+        'Fingerprint (grouping) apple-vision-fingerprint v2 · picked automatically',
+      ]);
+    });
+
     it('lists the alternatives per Capability, marking those that cannot run here', async () => {
       await openSettings();
 
@@ -321,12 +333,52 @@ describe('Review UI', () => {
       expect(text('[data-testid="config-path"]')).toBe(
         '/Users/me/Library/Application Support/framewise/config.toml',
       );
-      expect(all('[data-testid="config-example"]')[0].textContent).toBe(
-        '[providers]\nfingerprint = "apple-vision-fingerprint"',
-      );
       expect(text('[data-testid="config-applies"]')).toBe(
         'A change applies on the next framewise review, which re-analyses only the Frames it affects.',
       );
+    });
+
+    describe('example [providers] entry', () => {
+      const example = () => all('[data-testid="config-example"]')[0].textContent;
+
+      async function openSettingsWith(providers: SessionSummary['providers']): Promise<void> {
+        await respond({ ...summary, providers }, []);
+        gear().click();
+        await settle();
+      }
+
+      it('switches to the first available alternative of a Capability', async () => {
+        await openSettings();
+
+        expect(example()).toBe('[providers]\nface-detection = "apple-vision-face-detection"');
+      });
+
+      it('prefers an available Fingerprint alternative', async () => {
+        await openSettingsWith({
+          ...summary.providers,
+          fingerprint: {
+            active: { id: 'apple-vision-fingerprint', version: 2, source: 'automatic' },
+            alternatives: [
+              { id: 'cuda-fingerprint', version: 1, available: false },
+              { id: 'mediapipe-fingerprint', version: 1, available: true },
+            ],
+          },
+        });
+
+        expect(example()).toBe('[providers]\nfingerprint = "mediapipe-fingerprint"');
+      });
+
+      it('names the Fingerprint Provider in use when no alternative is available', async () => {
+        await openSettingsWith({
+          fingerprint: {
+            active: { id: 'apple-vision-fingerprint', version: 2, source: 'automatic' },
+            alternatives: [{ id: 'cuda-fingerprint', version: 1, available: false }],
+          },
+          'eye-state': { active: null, alternatives: [] },
+        });
+
+        expect(example()).toBe('[providers]\nfingerprint = "apple-vision-fingerprint"');
+      });
     });
 
     it('closes only the popover on Escape and gives focus back to the gear', async () => {

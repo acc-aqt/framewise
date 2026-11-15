@@ -10,11 +10,11 @@ import {
   viewChild,
 } from '@angular/core';
 import { Icon } from './icon';
-import { ActiveProvider, AlternativeProvider, Capability, ProviderLineup } from './session-api';
+import { ActiveProvider, AlternativeProvider, ProviderLineup } from './session-api';
 import { Tooltip } from './tooltip';
 
 interface CapabilityRow {
-  capability: Capability;
+  capability: string;
   label: string;
   active: ActiveProvider | null;
   alternatives: AlternativeProvider[];
@@ -22,29 +22,21 @@ interface CapabilityRow {
   noneMeans: string | null;
 }
 
-const CAPABILITIES: { capability: Capability; label: string; noneMeans: string | null }[] = [
+const CAPABILITY_TEXTS: Record<string, { label: string; noneMeans: string | null }> = {
   // Fingerprint is mandatory, so framewise refuses to start without its Provider.
-  { capability: 'fingerprint', label: 'Fingerprint (grouping)', noneMeans: null },
-  { capability: 'face-detection', label: 'Face detection', noneMeans: 'no faces are detected' },
-  { capability: 'eye-state', label: 'Eye state', noneMeans: 'eyes count as unknown' },
-  {
-    capability: 'face-quality',
-    label: 'Face quality',
-    noneMeans: 'face quality is left out of the score',
-  },
-  {
-    capability: 'aesthetics',
-    label: 'Aesthetics',
-    noneMeans: 'aesthetics is left out of the score',
-  },
-];
+  fingerprint: { label: 'Fingerprint (grouping)', noneMeans: null },
+  'face-detection': { label: 'Face detection', noneMeans: 'no faces are detected' },
+  'eye-state': { label: 'Eye state', noneMeans: 'eyes count as unknown' },
+  'face-quality': { label: 'Face quality', noneMeans: 'face quality is left out of the score' },
+  aesthetics: { label: 'Aesthetics', noneMeans: 'aesthetics is left out of the score' },
+};
 
 const SOURCES: Record<ActiveProvider['source'], string> = {
   automatic: 'picked automatically',
   config: 'chosen in config.toml',
 };
 
-/** A gear that opens a read-only popover of the Providers the running analyzer uses. */
+/** A gear that opens a read-only popover of the Providers that new analyses use. */
 @Component({
   selector: 'app-analysis-settings',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -222,17 +214,31 @@ export class AnalysisSettings {
   protected readonly open = signal(false);
   protected readonly sources = SOURCES;
   protected readonly rows = computed<CapabilityRow[]>(() =>
-    CAPABILITIES.map((entry) => ({
-      ...entry,
-      active: this.providers()[entry.capability]?.active ?? null,
-      alternatives: this.providers()[entry.capability]?.alternatives ?? [],
+    Object.entries(this.providers()).map(([capability, { active, alternatives }]) => ({
+      capability,
+      label: CAPABILITY_TEXTS[capability]?.label ?? capability,
+      noneMeans: CAPABILITY_TEXTS[capability]?.noneMeans ?? null,
+      active,
+      alternatives,
     })),
   );
 
-  /** Uses the Provider in use for the mandatory Fingerprint, so the example is a real id. */
+  /** Switches to an available alternative, so copying the example changes something. */
   protected readonly configExample = computed(() => {
-    const id = this.providers().fingerprint?.active?.id ?? '<provider-id>';
-    return `[providers]\nfingerprint = "${id}"`;
+    const [capability, id] = this.exampleChoice();
+    return `[providers]\n${capability} = "${id}"`;
+  });
+
+  private readonly exampleChoice = computed((): [string, string] => {
+    const providers = this.providers();
+    const capabilities = ['fingerprint', ...Object.keys(providers)];
+    for (const capability of capabilities) {
+      const alternative = providers[capability]?.alternatives.find((other) => other.available);
+      if (alternative) {
+        return [capability, alternative.id];
+      }
+    }
+    return ['fingerprint', providers['fingerprint']?.active?.id ?? '<provider-id>'];
   });
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;

@@ -15,7 +15,7 @@ const EDGE_PX = 8;
 let nextId = 0;
 
 /**
- * Shows a tooltip after a short delay when its host is hovered or gets keyboard focus.
+ * Shows a tooltip after a short delay when its host is hovered or the photographer tabs to it.
  * An explanation also describes the host to assistive technology via aria-describedby.
  */
 @Directive({
@@ -25,7 +25,7 @@ let nextId = 0;
     '(focus)': 'onFocus()',
     '(mouseleave)': 'hide()',
     '(blur)': 'hide()',
-    '(pointerdown)': 'onPointerDown()',
+    '(pointerdown)': 'hide()',
     '(document:keydown.escape)': 'hide()',
   },
 })
@@ -36,14 +36,20 @@ export class Tooltip implements OnDestroy {
   private readonly document = inject(DOCUMENT);
   private readonly element = this.document.createElement('div');
   private timer: ReturnType<typeof setTimeout> | undefined;
-  // A click focuses the host too, which shouldn't show the tooltip the click just hid.
-  private pointerDown = false;
+  // Focus shows the tooltip only when the photographer moved it with Tab, not when a click
+  // or the Review UI itself (such as a closing popover) moved it.
+  private tabbing = false;
+  private readonly trackInput = (event: Event): void => {
+    this.tabbing = event instanceof KeyboardEvent && event.key === 'Tab';
+  };
 
   constructor() {
     this.element.className = 'tooltip';
     this.element.setAttribute('role', 'tooltip');
     this.element.hidden = true;
     this.document.body.appendChild(this.element);
+    this.document.addEventListener('keydown', this.trackInput, true);
+    this.document.addEventListener('pointerdown', this.trackInput, true);
 
     effect(() => this.render(this.content()));
   }
@@ -51,6 +57,8 @@ export class Tooltip implements OnDestroy {
   ngOnDestroy(): void {
     this.hide();
     this.element.remove();
+    this.document.removeEventListener('keydown', this.trackInput, true);
+    this.document.removeEventListener('pointerdown', this.trackInput, true);
   }
 
   protected scheduleShow(): void {
@@ -59,15 +67,9 @@ export class Tooltip implements OnDestroy {
   }
 
   protected onFocus(): void {
-    if (!this.pointerDown) {
+    if (this.tabbing) {
       this.scheduleShow();
     }
-    this.pointerDown = false;
-  }
-
-  protected onPointerDown(): void {
-    this.pointerDown = true;
-    this.hide();
   }
 
   protected hide(): void {

@@ -240,8 +240,7 @@ def main(
         print(f"framewise: Review UI at {url}")
     if not (UI_DIR / "index.html").is_file():
         print(
-            f"framewise: warning: no Review UI build in {UI_DIR}, "
-            "run `npx ng build` in frontend/ first",
+            f"framewise: warning: no Review UI build in {UI_DIR}, run scripts/setup.sh first",
             file=sys.stderr,
         )
     serve(app, HOST, args.port, lambda: open_browser(url))

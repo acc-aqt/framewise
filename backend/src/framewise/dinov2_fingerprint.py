@@ -35,11 +35,11 @@ class DinoV2Fingerprint:
     priority = PRIORITY
     # Calibrated on sewts against Apple Vision's Groups: near_duplicate 0.82 matches them best
     # (pairwise same-Group F1 0.93, 33 Groups to Apple's 30), with 0.80 to 0.83 close behind.
-    # Any burst threshold up to 0.76 gives the same Groups there; 0.7 leaves a margin.
+    # Any burst threshold from 0.4 to 0.76 gives the same Groups there; 0.7 sits inside that.
     similarity = SimilarityThresholds(burst=0.7, near_duplicate=0.82)
 
     def is_available(self) -> bool:
-        return onnxruntime is not None and _runs_on_this_os()
+        return onnxruntime is not None and _onnxruntime_supports_this_os()
 
     def fingerprint(self, jpg_path: Path) -> list[float]:
         """DINOv2's class token: the embedding it learns to describe the whole image."""
@@ -47,7 +47,7 @@ class DinoV2Fingerprint:
         return hidden_states[0, 0].tolist()
 
 
-def _runs_on_this_os() -> bool:
+def _onnxruntime_supports_this_os() -> bool:
     if sys.platform != "darwin":
         return True
     try:

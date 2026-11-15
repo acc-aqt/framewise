@@ -9,6 +9,7 @@ from test_apple_vision import a_moment_later, draw_landscape, draw_still_life, s
 from test_groups_api import group_paths
 from test_verdicts_api import frames_by_name, reasons
 
+from framewise import dinov2_fingerprint
 from framewise.apple_vision import PRIORITY
 from framewise.dinov2_fingerprint import DinoV2Fingerprint
 from framewise.mediapipe_faces import MediaPipeEyeState, MediaPipeFaceDetection
@@ -19,7 +20,7 @@ from framewise.server import create_app
 
 FACES = Path(__file__).parent / "fixtures" / "faces"
 
-pytestmark = pytest.mark.skipif(
+needs_portable_models = pytest.mark.skipif(
     not (
         DinoV2Fingerprint().is_available()
         and MediaPipeFaceDetection().is_available()
@@ -29,6 +30,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@needs_portable_models
 def test_near_identical_frames_are_near_duplicates_and_unrelated_frames_are_not(tmp_path):
     provider = DinoV2Fingerprint()
     landscape = draw_landscape(tmp_path / "landscape.jpg")
@@ -43,6 +45,7 @@ def test_near_identical_frames_are_near_duplicates_and_unrelated_frames_are_not(
     assert near_identical >= provider.similarity.near_duplicate > unrelated
 
 
+@needs_portable_models
 def test_a_session_analysed_only_with_portable_providers_gets_a_proposal(session_dir, data_dir):
     landscape = draw_landscape(session_dir / "DSCF0001.JPG")
     a_moment_later(landscape, session_dir / "DSCF0002.JPG")
@@ -71,6 +74,7 @@ def test_a_session_analysed_only_with_portable_providers_gets_a_proposal(session
 
 @pytest.mark.parametrize(("macos", "available"), [("13.6.1", False), ("14.0", True), ("", False)])
 def test_on_macos_the_provider_needs_macos_14(monkeypatch, macos, available):
+    monkeypatch.setattr(dinov2_fingerprint, "onnxruntime", object())
     monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setattr(platform, "mac_ver", lambda: (macos, ("", "", ""), ""))
 

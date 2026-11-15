@@ -56,7 +56,7 @@ const FOCUS_LABELS: Record<Face['focus'], string> = {
       border-radius: var(--radius-sm);
       background: var(--color-overlay);
       color: var(--color-keeper);
-      font-size: 10px;
+      font-size: var(--text-xs);
       font-weight: 500;
       line-height: 1.4;
       white-space: nowrap;

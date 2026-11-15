@@ -1068,6 +1068,18 @@ describe('Review UI', () => {
     expect(all('[data-testid="open-write-back"]').length).toBe(1);
   });
 
+  it('names how many files the write-back screen reads, one per JPG and two per RAW+JPG pair', async () => {
+    await respond(summary, []);
+    all('[data-testid="open-write-back"]')[0].click();
+    await settle();
+    http.expectOne('/api/write-back');
+    http.expectOne('/api/write-back/progress');
+
+    expect(text('[data-testid="write-back-loading"]')).toBe(
+      'Reading the current rating of 5 files…',
+    );
+  });
+
   it('opens no command palette on the write-back screen', async () => {
     await respond(summary, []);
     all('[data-testid="open-write-back"]')[0].click();

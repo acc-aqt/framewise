@@ -118,15 +118,63 @@ describe('Rating write-back', () => {
     await showDryRun();
 
     const rows = all('[data-testid="write-back-file"]').map((row) =>
-      Array.from(row.querySelectorAll('td')).map((cell) => cell.textContent?.trim()),
+      Array.from(row.querySelectorAll('td')).map((cell) =>
+        cell.textContent?.replace(/\s+/g, ' ').trim(),
+      ),
     );
     expect(rows).toEqual([
-      ['DSCF0001.JPG', 'DSCF0001.JPG', 'Winner', '1★', '3★'],
-      ['DSCF0001.RAF', 'DSCF0001.xmp', 'Winner', 'No rating', '3★'],
-      ['DSCF0002.JPG', 'DSCF0002.JPG', 'Reject', 'No rating', '0★ Rot'],
-      ['DSCF0003.JPG', 'DSCF0003.JPG', 'Keeper', '2★', '2★'],
+      ['DSCF0001.JPG', 'Winner', '1★', '3★'],
+      ['DSCF0001.RAF → DSCF0001.xmp', 'Winner', 'No rating', '3★'],
+      ['DSCF0002.JPG', 'Reject', 'No rating', '0★ Rot'],
+      ['DSCF0003.JPG', 'Keeper', '2★', '2★'],
     ]);
     expect(text('[data-testid="write-back-count"]')).toBe('3 of 4 files change.');
+  });
+
+  it('names where a file is written only when that differs from the file', async () => {
+    await showDryRun();
+
+    const targets = all('[data-testid="write-back-file"]').map((row) =>
+      text('[data-testid="write-back-target"]', row),
+    );
+    expect(targets).toEqual(['', '→ DSCF0001.xmp', '', '']);
+    expect(all('th').map((header) => header.textContent?.trim())).not.toContain('Written to');
+  });
+
+  it('shows each color label as a swatch of its color next to its Lightroom name', async () => {
+    await showDryRun({
+      ...dryRun,
+      files: [
+        file(
+          'DSCF0004.JPG',
+          'DSCF0004.JPG',
+          'reject',
+          { stars: 1, label: 'Gelb' },
+          { stars: 0, label: 'Rot' },
+        ),
+        file(
+          'DSCF0005.JPG',
+          'DSCF0005.JPG',
+          'unsure',
+          { stars: null, label: null },
+          { stars: 2, label: 'Gelb' },
+        ),
+      ],
+    });
+
+    const labels = all('[data-testid="write-back-file"]').map((row) =>
+      Array.from(row.querySelectorAll<HTMLElement>('[data-testid="color-label"]')).map((label) => ({
+        name: label.textContent?.trim(),
+        swatch: label.querySelector('[data-testid="color-swatch"]')?.getAttribute('data-color'),
+      })),
+    );
+    expect(labels).toEqual([
+      [
+        { name: 'Gelb', swatch: 'yellow' },
+        { name: 'Rot', swatch: 'red' },
+      ],
+      [{ name: 'Gelb', swatch: 'yellow' }],
+    ]);
   });
 
   it('says when the English label names are used', async () => {
@@ -213,6 +261,18 @@ describe('Rating write-back', () => {
     expect(all('[data-testid="write-back-loading"]')).toEqual([]);
   });
 
+  it('names how many files it is reading when the count is known', async () => {
+    fixture.componentRef.setInput('fileCount', 1243);
+    flushProgress();
+    await settle();
+
+    expect(text('[data-testid="write-back-loading"]')).toBe(
+      'Reading the current rating of 1243 files…',
+    );
+
+    await showDryRun();
+  });
+
   it('shows how many files are written while writing', async () => {
     await showDryRun();
 
@@ -243,6 +303,15 @@ describe('Rating write-back', () => {
     expect(
       element().querySelector<HTMLButtonElement>('[data-testid="session-reset"]')!.disabled,
     ).toBe(true);
+  });
+
+  it('offers Reset Session at the end of the actions, after Write ratings and Undo', async () => {
+    await showDryRun({ ...dryRun, can_undo: true });
+
+    const actions = Array.from(
+      element().querySelectorAll<HTMLButtonElement>('[data-testid="write-back-actions"] button'),
+    ).map((action) => action.textContent?.trim());
+    expect(actions).toEqual(['Write ratings…', 'Undo write-back', 'Reset Session…']);
   });
 
   it('resets the Session only after the photographer confirms', async () => {

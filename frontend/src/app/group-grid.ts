@@ -13,7 +13,16 @@ import {
 } from '@angular/core';
 import { FrameTile } from './frame-tile';
 import { Icon } from './icon';
-import { isFiltering, matchesFilter, NO_FILTER, ProposalFilter, winnerOf } from './proposal';
+import {
+  isFiltering,
+  isKept,
+  matchesFilter,
+  NO_FILTER,
+  ProposalFilter,
+  reasonLabels,
+  VERDICT_LABELS,
+  winnerOf,
+} from './proposal';
 import { Frame, Group } from './session-api';
 
 const TILE_WIDTH_PX = 220;
@@ -29,6 +38,12 @@ interface GridTile {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [ScrollingModule, FrameTile, Icon],
   template: `
+    <div class="no-matches" data-testid="no-matches" aria-live="polite">
+      @if (filtering() && tiles().length === 0) {
+        <p data-testid="no-matches-message">No Frames match {{ activeFilters() }}.</p>
+        <button type="button" class="btn" (click)="clearFilters.emit()">Clear filters</button>
+      }
+    </div>
     <cdk-virtual-scroll-viewport [itemSize]="rowHeight" class="viewport">
       <div
         *cdkVirtualFor="let row of rows()"
@@ -41,14 +56,19 @@ interface GridTile {
             type="button"
             class="group"
             data-testid="group-tile"
-            [attr.aria-label]="'Open Group of ' + frameCount(tile.group)"
+            [attr.aria-label]="tileName(tile)"
             (click)="open.emit(tile.frame)"
           >
-            <app-frame-tile class="cover" [frame]="tile.frame">
-              <span class="count" data-testid="frame-count">
+            <app-frame-tile class="cover" [frame]="tile.frame" [showVerdict]="filtering()">
+              <span tile-mark class="count" data-testid="frame-count">
                 <app-icon name="layers" [size]="12" />
                 {{ frameCount(tile.group) }}
               </span>
+              @if (!filtering() && tile.group.frames.length > 1) {
+                <span tile-caption class="makeup" data-testid="group-makeup">
+                  {{ makeup(tile.group) }}
+                </span>
+              }
             </app-frame-tile>
           </button>
         }
@@ -57,11 +77,25 @@ interface GridTile {
   `,
   styles: `
     :host {
-      display: block;
+      display: flex;
+      flex-direction: column;
       height: 100%;
     }
+    .no-matches {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-3);
+      color: var(--color-text-secondary);
+    }
+    .no-matches:not(:empty) {
+      padding: var(--space-6) 0;
+    }
+    .no-matches p {
+      margin: 0;
+    }
     .viewport {
-      height: 100%;
+      flex: 1;
     }
     .row {
       display: grid;
@@ -91,20 +125,22 @@ interface GridTile {
     .group:hover .cover {
       border-color: var(--color-border-strong);
     }
+    .makeup {
+      flex: none;
+      font-variant-numeric: tabular-nums;
+    }
     .count {
-      position: absolute;
-      right: 6px;
-      bottom: 6px;
+      margin-left: auto;
       display: inline-flex;
       align-items: center;
       gap: var(--space-1);
-      padding: 2px 6px;
+      padding: var(--space-1) var(--space-2);
       border-radius: var(--radius-sm);
       background: var(--color-overlay);
       color: var(--color-text);
       font-size: var(--text-xs);
       font-variant-numeric: tabular-nums;
-      line-height: 1.3;
+      line-height: 1;
       white-space: nowrap;
     }
   `,
@@ -114,9 +150,11 @@ export class GroupGrid {
   readonly filter = input<ProposalFilter>(NO_FILTER);
   /** Emits the Frame shown on the clicked tile. */
   readonly open = output<Frame>();
+  readonly clearFilters = output<void>();
 
   protected readonly rowHeight = ROW_HEIGHT_PX;
   protected readonly columns = signal(4);
+  protected readonly filtering = computed(() => isFiltering(this.filter()));
   // Each Group's Winner stands for it, but a filter lists every matching Frame on its own tile.
   protected readonly tiles = computed<GridTile[]>(() => {
     const filter = this.filter();
@@ -128,6 +166,12 @@ export class GroupGrid {
         .filter((frame) => matchesFilter(frame, filter))
         .map((frame) => ({ frame, group })),
     );
+  });
+  protected readonly activeFilters = computed(() => {
+    const { verdict, reason } = this.filter();
+    const frames = this.groups().flatMap((group) => group.frames);
+    const reasonLabel = reason === null ? null : reasonLabels(frames).get(reason);
+    return [verdict && VERDICT_LABELS[verdict], reasonLabel].filter(Boolean).join(' + ');
   });
   protected readonly rows = computed(() => chunk(this.tiles(), this.columns()));
 
@@ -147,7 +191,19 @@ export class GroupGrid {
   }
 
   protected frameCount(group: Group): string {
+    if (this.filtering()) {
+      return `in Group of ${group.frames.length}`;
+    }
     return group.frames.length === 1 ? '1 Frame' : `${group.frames.length} Frames`;
+  }
+
+  protected tileName({ frame, group }: GridTile): string {
+    return `${frame.jpg_path}, ${VERDICT_LABELS[frame.verdict]}, Group of ${group.frames.length}`;
+  }
+
+  protected makeup(group: Group): string {
+    const kept = group.frames.filter(isKept).length;
+    return `${kept} kept · ${group.frames.length - kept} out`;
   }
 }
 

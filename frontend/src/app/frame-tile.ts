@@ -4,12 +4,10 @@ import { Icon } from './icon';
 import { scoreBreakdown, VERDICT_LABELS } from './proposal';
 import { CameraRating, ColorLabel, Frame } from './session-api';
 
-const KIND_BADGES: Record<Frame['kind'], string> = {
-  'jpg-only': 'JPG-only',
-  'raw+jpg': 'RAW+JPG',
-};
-
-/** A Frame's thumbnail with its marks; projected content is laid over the image. */
+/**
+ * A Frame's thumbnail with its marks; projected content is laid over the image.
+ * `[tile-mark]` content ends the row of marks and `[tile-caption]` content ends the caption.
+ */
 @Component({
   selector: 'app-frame-tile',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -24,33 +22,41 @@ const KIND_BADGES: Record<Frame['kind'], string> = {
         [faces]="showFaces() ? frame().faces : null"
         [lazy]="true"
       />
-      <span class="badge kind" data-testid="kind-badge">{{ kindBadges[frame().kind] }}</span>
+      @if (showKind() && frame().kind === 'jpg-only') {
+        <span class="badge kind" data-testid="kind-badge">JPG-only</span>
+      }
       @if (ratingText(frame().camera_rating); as rating) {
         <span class="badge rating" data-testid="camera-rating">{{ rating }}</span>
       }
       <span class="marks">
-        <span
-          [class]="'badge verdict ' + frame().verdict"
-          data-testid="verdict-badge"
-          [attr.title]="verdictSource()"
-        >
-          @if (frame().verdict === 'winner') {
-            <app-icon name="crown" [size]="12" />
-          } @else {
-            <span class="dot"></span>
-          }
-          {{ verdictLabels[frame().verdict] }}
-        </span>
+        @if (showVerdict()) {
+          <span
+            [class]="'badge verdict ' + frame().verdict"
+            data-testid="verdict-badge"
+            [attr.title]="verdictSource()"
+          >
+            @if (frame().verdict === 'winner') {
+              <app-icon name="crown" [size]="12" />
+            } @else {
+              <span class="dot"></span>
+            }
+            {{ verdictLabels[frame().verdict] }}
+          </span>
+        }
         @if (frame().verdict_overridden) {
           <span class="badge override" data-testid="override-mark">Override</span>
         }
         @if (overrideRating(); as rating) {
           <span class="badge override-rating" data-testid="override-rating">{{ rating }}</span>
         }
+        <ng-content select="[tile-mark]" />
       </span>
       <ng-content />
     </div>
-    <span class="caption">{{ frame().jpg_path }}</span>
+    <span class="caption">
+      <span class="file">{{ frame().jpg_path }}</span>
+      <ng-content select="[tile-caption]" />
+    </span>
   `,
   styles: `
     :host {
@@ -78,11 +84,11 @@ const KIND_BADGES: Record<Frame['kind'], string> = {
       display: inline-flex;
       align-items: center;
       gap: var(--space-1);
-      padding: 2px 6px;
+      padding: var(--space-1) var(--space-2);
       border-radius: var(--radius-sm);
       background: var(--color-overlay);
       font-size: var(--text-xs);
-      line-height: 1.3;
+      line-height: 1;
       white-space: nowrap;
     }
     .kind,
@@ -94,7 +100,7 @@ const KIND_BADGES: Record<Frame['kind'], string> = {
       top: 6px;
       left: 6px;
       color: var(--color-text-secondary);
-      font-size: 10px;
+      font-size: var(--text-xs);
       font-weight: 600;
       letter-spacing: 0.04em;
     }
@@ -105,8 +111,11 @@ const KIND_BADGES: Record<Frame['kind'], string> = {
     }
     .marks {
       left: 6px;
+      right: 6px;
       bottom: 6px;
       display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
       gap: var(--space-1);
     }
     .verdict {
@@ -120,7 +129,7 @@ const KIND_BADGES: Record<Frame['kind'], string> = {
     }
     .override {
       border: 1px solid var(--color-override);
-      padding: 1px 5px;
+      padding: calc(var(--space-1) - 1px) calc(var(--space-2) - 1px);
       color: var(--color-override);
     }
     .override-rating {
@@ -139,11 +148,18 @@ const KIND_BADGES: Record<Frame['kind'], string> = {
       color: var(--color-unsure);
     }
     .caption {
-      padding: 6px 8px 7px;
-      font-family: var(--font-mono);
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-2);
+      padding: var(--space-2);
       font-size: var(--text-xs);
       color: var(--color-text-muted);
       white-space: nowrap;
+    }
+    .file {
+      flex: 1;
+      min-width: 0;
+      font-family: var(--font-mono);
       overflow: hidden;
       text-overflow: ellipsis;
     }
@@ -153,8 +169,9 @@ export class FrameTile {
   readonly frame = input.required<Frame>();
   /** Marks each face of the Frame on its image. */
   readonly showFaces = input(false);
+  readonly showVerdict = input(true);
+  readonly showKind = input(true);
 
-  protected readonly kindBadges = KIND_BADGES;
   protected readonly verdictLabels = VERDICT_LABELS;
   protected readonly breakdown = computed(() => scoreBreakdown(this.frame()).join('\n'));
 

@@ -52,13 +52,13 @@ const FOCUS_LABELS: Record<Face['focus'], string> = {
       left: 50%;
       transform: translateX(-50%);
       margin-top: var(--space-1);
-      padding: 1px 5px;
+      padding: var(--space-1) var(--space-2);
       border-radius: var(--radius-sm);
       background: var(--color-overlay);
       color: var(--color-keeper);
-      font-size: 10px;
+      font-size: var(--text-xs);
       font-weight: 500;
-      line-height: 1.4;
+      line-height: 1;
       white-space: nowrap;
     }
     .flagged .label {

@@ -8,7 +8,8 @@
   --color-surface: var(--color-surface-2);
   --color-border: #2c2c2c;
   --color-border-strong: #3a3a3a;
-  --color-overlay: rgb(0 0 0 / 0.62);
+  --color-control-border: #6b6b6b;
+  --color-overlay: rgb(0 0 0 / 0.82);
   --color-loupe: #0b0b0b;
 
   --color-text: #ececec;
@@ -18,16 +19,18 @@
 
   --color-winner: #f0c75e;
   --color-keeper: #6fcf97;
-  --color-reject: #ef6b6b;
+  --color-reject: #ff8a80;
   --color-unsure: #f2a65a;
   --color-override: #7aa7ff;
   --color-focus: #7aa7ff;
   --color-error: #ef6b6b;
   --color-rating: #e9c46a;
+  --color-label-red: #e5484d;
+  --color-label-yellow: #f5d90a;
 
   --color-winner-tint: rgb(240 199 94 / 0.12);
   --color-keeper-tint: rgb(111 207 151 / 0.12);
-  --color-reject-tint: rgb(239 107 107 / 0.12);
+  --color-reject-tint: rgb(255 138 128 / 0.12);
   --color-unsure-tint: rgb(242 166 90 / 0.12);
   --color-error-tint: rgb(239 107 107 / 0.1);
   --color-error-border: rgb(239 107 107 / 0.35);
@@ -46,11 +49,11 @@
 
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
-  --text-xs: 11px;
-  --text-sm: 12px;
-  --text-md: 13px;
-  --text-lg: 15px;
-  --text-xl: 18px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 17px;
+  --text-xl: 20px;
 
   --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow-2: 0 12px 32px rgb(0 0 0 / 0.55);
@@ -94,7 +97,7 @@ input[type='checkbox'] {
   gap: 6px;
   height: var(--control-height);
   padding: 0 var(--space-3);
-  border: 1px solid var(--color-border-strong);
+  border: 1px solid var(--color-control-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-2);
   color: var(--color-text);
@@ -144,12 +147,21 @@ input[type='checkbox'] {
   padding: 0;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .error-message {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   margin: 0;
-  padding: 6px 10px;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-error-border);
   border-radius: var(--radius-md);
   background: var(--color-error-tint);
@@ -175,7 +187,7 @@ input[type='checkbox'] {
   border-radius: var(--radius-sm);
   color: var(--color-text-secondary);
   font-family: var(--font-sans);
-  font-size: 10px;
+  font-size: var(--text-xs);
   line-height: 1.6;
   text-align: center;
 }

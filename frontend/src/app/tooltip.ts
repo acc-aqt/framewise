@@ -12,10 +12,32 @@ export interface TooltipContent {
 
 const GAP_PX = 6;
 const EDGE_PX = 8;
+const NAVIGATION_KEYS = new Set(['Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 let nextId = 0;
 
+// Focus shows a tooltip only when a navigation key moved it in the same task, not when a
+// pointer, Escape or the Review UI itself (such as a closing popover) moved it.
+let navigating = false;
+const trackedDocuments = new WeakSet<Document>();
+
+function trackNavigation(document: Document): void {
+  if (trackedDocuments.has(document)) {
+    return;
+  }
+  trackedDocuments.add(document);
+  const track = (event: Event): void => {
+    navigating = event instanceof KeyboardEvent && NAVIGATION_KEYS.has(event.key);
+    if (navigating) {
+      setTimeout(() => (navigating = false));
+    }
+  };
+  document.addEventListener('keydown', track, true);
+  document.addEventListener('pointerdown', track, true);
+}
+
 /**
- * Shows a tooltip after a short delay when its host is hovered or gets keyboard focus.
+ * Shows a tooltip after a short delay when its host is hovered or the photographer moves focus
+ * to it with Tab or an arrow key.
  * An explanation also describes the host to assistive technology via aria-describedby.
  */
 @Directive({
@@ -25,7 +47,7 @@ let nextId = 0;
     '(focus)': 'onFocus()',
     '(mouseleave)': 'hide()',
     '(blur)': 'hide()',
-    '(pointerdown)': 'onPointerDown()',
+    '(pointerdown)': 'hide()',
     '(document:keydown.escape)': 'hide()',
   },
 })
@@ -36,14 +58,12 @@ export class Tooltip implements OnDestroy {
   private readonly document = inject(DOCUMENT);
   private readonly element = this.document.createElement('div');
   private timer: ReturnType<typeof setTimeout> | undefined;
-  // A click focuses the host too, which shouldn't show the tooltip the click just hid.
-  private pointerDown = false;
-
   constructor() {
     this.element.className = 'tooltip';
     this.element.setAttribute('role', 'tooltip');
     this.element.hidden = true;
     this.document.body.appendChild(this.element);
+    trackNavigation(this.document);
 
     effect(() => this.render(this.content()));
   }
@@ -59,15 +79,9 @@ export class Tooltip implements OnDestroy {
   }
 
   protected onFocus(): void {
-    if (!this.pointerDown) {
+    if (navigating) {
       this.scheduleShow();
     }
-    this.pointerDown = false;
-  }
-
-  protected onPointerDown(): void {
-    this.pointerDown = true;
-    this.hide();
   }
 
   protected hide(): void {

@@ -116,6 +116,13 @@ describe('Review UI', () => {
     );
   }
 
+  /** The text a sighted photographer reads, without text meant only for assistive technology. */
+  function visibleText(element: HTMLElement): string {
+    const copy = element.cloneNode(true) as HTMLElement;
+    copy.querySelectorAll('.visually-hidden').forEach((hidden) => hidden.remove());
+    return copy.textContent!.replace(/\s+/g, ' ').trim();
+  }
+
   function all(selector: string, root?: HTMLElement): HTMLElement[] {
     return Array.from(
       (root ?? (fixture.nativeElement as HTMLElement)).querySelectorAll<HTMLElement>(selector),
@@ -167,14 +174,55 @@ describe('Review UI', () => {
     await fixture.whenStable();
   }
 
-  it('shows the Session summary counts', async () => {
+  function fileDetails(): HTMLDetailsElement {
+    return all('header details[data-testid="file-details"]')[0] as HTMLDetailsElement;
+  }
+
+  async function openFileDetails(): Promise<HTMLDetailsElement> {
+    const details = fileDetails();
+    details.querySelector('summary')!.click();
+    await settle();
+    return details;
+  }
+
+  it('names the Frames disclosure File details for assistive technology', async () => {
     await respond(summary, []);
 
-    expect(text('[data-testid="total-frames"]')).toBe('3');
-    expect(text('[data-testid="jpg-only-count"]')).toBe('1');
-    expect(text('[data-testid="raw-jpg-count"]')).toBe('2');
-    expect(text('[data-testid="skipped-count"]')).toBe('1');
-    expect(text('[data-testid="skipped-files"]')).toContain('100LEICA/L1000009-Pano.dng');
+    expect(text('summary', fileDetails())).toBe('File details: 3 Frames');
+  });
+
+  it('shows the Frame count in the header, and opens it to the file kinds and Skipped files', async () => {
+    await respond(summary, []);
+
+    expect(visibleText(fileDetails().querySelector('summary')!)).toBe('3 Frames');
+    expect(fileDetails().open).toBe(false);
+
+    const details = await openFileDetails();
+
+    expect(details.open).toBe(true);
+    expect(text('[data-testid="raw-jpg-count"]', details)).toBe('2');
+    expect(text('[data-testid="jpg-only-count"]', details)).toBe('1');
+    expect(text('[data-testid="skipped-count"]', details)).toBe('1');
+    expect(text('[data-testid="skipped-files"]', details)).toContain('100LEICA/L1000009-Pano.dng');
+  });
+
+  it('keeps the file kind counts out of the header row', async () => {
+    await respond(summary, []);
+
+    for (const id of ['raw-jpg-count', 'jpg-only-count', 'skipped-count']) {
+      const counts = all(`[data-testid="${id}"]`);
+      expect(counts.length).toBe(1);
+      expect(fileDetails().contains(counts[0])).toBe(true);
+    }
+  });
+
+  it('opens the Frame count to the file kinds even when nothing was skipped', async () => {
+    await respond({ ...summary, skipped: [] }, []);
+
+    const details = await openFileDetails();
+
+    expect(text('[data-testid="skipped-count"]', details)).toBe('0');
+    expect(all('[data-testid="skipped-files"]')).toEqual([]);
   });
 
   describe('without a Session', () => {
@@ -399,6 +447,19 @@ describe('Review UI', () => {
       expect(document.activeElement).toBe(gear());
     });
 
+    it('shows no tooltip on the gear when Escape gives focus back to it', async () => {
+      await openSettings();
+      vi.useFakeTimers();
+
+      document.activeElement!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
+      await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+
+      expect(document.activeElement).toBe(gear());
+      expect(visibleTooltip()).toBeNull();
+    });
+
     it('closes on a click outside it, but not on a click inside it', async () => {
       await openSettings();
 
@@ -530,7 +591,7 @@ describe('Review UI', () => {
     ).toEqual(['2 Frames', '1 Frame']);
   });
 
-  it('covers each Group with its Winner and shows its Verdict', async () => {
+  it('covers each Group with its Winner, leaving off the Verdict every tile shares', async () => {
     await respond(summary, [
       group(1, [frame(1, 'jpg-only'), frame(2, 'jpg-only', { verdict: 'winner' })]),
     ]);
@@ -538,7 +599,47 @@ describe('Review UI', () => {
     const [tile] = all('[data-testid="group-tile"]');
 
     expect(tile.querySelector('img')?.getAttribute('src')).toBe('/api/frames/2/thumbnail');
-    expect(text('[data-testid="verdict-badge"]', tile)).toBe('Winner');
+    expect(tile.querySelector('[data-testid="verdict-badge"]')).toBeNull();
+  });
+
+  it("shows each Group's kept and out Frames on its tile's caption, except for a single Frame", async () => {
+    await respond(summary, [
+      group(1, [
+        frame(1, 'raw+jpg', { verdict: 'winner' }),
+        frame(2, 'raw+jpg', { verdict: 'keeper' }),
+        frame(3, 'raw+jpg', { verdict: 'reject' }),
+        frame(4, 'raw+jpg', { verdict: 'unsure' }),
+        frame(5, 'raw+jpg', { verdict: 'reject' }),
+      ]),
+      group(6, [frame(6, 'raw+jpg', { verdict: 'winner' })]),
+    ]);
+
+    expect(
+      all('[data-testid="group-tile"]').map((tile) => text('[data-testid="group-makeup"]', tile)),
+    ).toEqual(['2 kept · 3 out', '']);
+  });
+
+  it('marks only JPG-only Frames with their kind on the grid', async () => {
+    await respond(summary, [
+      group(1, [frame(1, 'raw+jpg', { verdict: 'winner' })]),
+      group(2, [frame(2, 'jpg-only', { verdict: 'winner' })]),
+    ]);
+
+    expect(
+      all('[data-testid="group-tile"]').map((tile) => text('[data-testid="kind-badge"]', tile)),
+    ).toEqual(['', 'JPG-only']);
+  });
+
+  it("names each tile after its Frame's file, Verdict and Group size", async () => {
+    await respond(summary, [
+      group(1, [frame(1, 'jpg-only'), frame(2, 'jpg-only', { verdict: 'winner' })]),
+      group(3, [frame(3, 'jpg-only', { verdict: 'unsure' })]),
+    ]);
+
+    expect(accessibleNames('[data-testid="group-tile"]').map(({ label }) => label)).toEqual([
+      'DSCF0002.JPG, Winner, Group of 2',
+      'DSCF0003.JPG, Unsure, Group of 1',
+    ]);
   });
 
   it('shows the score breakdown when hovering a tile', async () => {
@@ -618,6 +719,29 @@ describe('Review UI', () => {
     expect(coverThumbnails()).toEqual(['/api/frames/2/thumbnail', '/api/frames/3/thumbnail']);
   });
 
+  it("shows each filtered Frame's Verdict and the size of the Group it is in", async () => {
+    await respond(summary, [
+      group(1, [
+        frame(1, 'jpg-only', { verdict: 'winner' }),
+        frame(2, 'jpg-only', { verdict: 'reject' }),
+        frame(3, 'jpg-only', { verdict: 'keeper' }),
+      ]),
+      group(4, [frame(4, 'jpg-only', { verdict: 'reject' })]),
+    ]);
+    await choose(all('[data-testid="verdict-filter"]')[0] as HTMLSelectElement, 'reject');
+
+    const tiles = all('[data-testid="group-tile"]');
+    expect(tiles.map((tile) => text('[data-testid="verdict-badge"]', tile))).toEqual([
+      'Reject',
+      'Reject',
+    ]);
+    expect(tiles.map((tile) => text('[data-testid="frame-count"]', tile))).toEqual([
+      'in Group of 3',
+      'in Group of 1',
+    ]);
+    expect(all('[data-testid="group-makeup"]')).toEqual([]);
+  });
+
   it('filters the Frames by Reason', async () => {
     const blur = reason('motion-blur', 'Motion blur');
     await respond(summary, [
@@ -643,6 +767,95 @@ describe('Review UI', () => {
     expect(coverThumbnails()).toEqual(['/api/frames/2/thumbnail', '/api/frames/4/thumbnail']);
   });
 
+  describe('faceted filters', () => {
+    const duplicate = reason('weaker-duplicate', 'Weaker duplicate');
+    const sharpest = reason('sharpest', 'Sharpest');
+
+    beforeEach(async () => {
+      await respond(summary, [
+        group(1, [
+          frame(1, 'jpg-only', { verdict: 'winner', reasons: [sharpest] }),
+          frame(2, 'jpg-only', { verdict: 'reject', reasons: [duplicate] }),
+          frame(3, 'jpg-only', { verdict: 'unsure', reasons: [duplicate] }),
+        ]),
+        group(4, [frame(4, 'jpg-only', { verdict: 'winner', reasons: [sharpest] })]),
+      ]);
+    });
+
+    function options(testId: string): { label: string; disabled: boolean }[] {
+      const select = all(`[data-testid="${testId}"]`)[0] as HTMLSelectElement;
+      return Array.from(select.options).map((option) => ({
+        label: option.textContent?.trim() ?? '',
+        disabled: option.disabled,
+      }));
+    }
+
+    it('counts each Reason over the Frames with the chosen Verdict', async () => {
+      await choose(all('[data-testid="verdict-filter"]')[0] as HTMLSelectElement, 'winner');
+
+      expect(options('reason-filter')).toEqual([
+        { label: 'All Reasons', disabled: false },
+        { label: 'Sharpest (2)', disabled: false },
+        { label: 'Weaker duplicate (0)', disabled: true },
+      ]);
+    });
+
+    it('counts each Verdict over the Frames with the chosen Reason', async () => {
+      await choose(
+        all('[data-testid="reason-filter"]')[0] as HTMLSelectElement,
+        'weaker-duplicate',
+      );
+
+      expect(options('verdict-filter')).toEqual([
+        { label: 'All Verdicts', disabled: false },
+        { label: 'Winner (0)', disabled: true },
+        { label: 'Keeper (0)', disabled: true },
+        { label: 'Reject (1)', disabled: false },
+        { label: 'Unsure (1)', disabled: false },
+      ]);
+    });
+
+    it('keeps the chosen options enabled when they count no Frames', async () => {
+      await choose(all('[data-testid="verdict-filter"]')[0] as HTMLSelectElement, 'winner');
+      await choose(
+        all('[data-testid="reason-filter"]')[0] as HTMLSelectElement,
+        'weaker-duplicate',
+      );
+
+      expect(options('verdict-filter')[1]).toEqual({ label: 'Winner (0)', disabled: false });
+      expect(options('reason-filter')[2]).toEqual({
+        label: 'Weaker duplicate (0)',
+        disabled: false,
+      });
+    });
+
+    it('says politely when no Frames match, and clears the filters', async () => {
+      await choose(all('[data-testid="verdict-filter"]')[0] as HTMLSelectElement, 'winner');
+      await choose(
+        all('[data-testid="reason-filter"]')[0] as HTMLSelectElement,
+        'weaker-duplicate',
+      );
+
+      const empty = all('[data-testid="no-matches"]')[0];
+      expect(empty.getAttribute('aria-live')).toBe('polite');
+      expect(text('[data-testid="no-matches-message"]', empty)).toBe(
+        'No Frames match Winner + Weaker duplicate.',
+      );
+      expect(coverThumbnails()).toEqual([]);
+
+      const clear = all('button', empty).find(
+        (button) => button.textContent?.trim() === 'Clear filters',
+      );
+      clear!.click();
+      await fixture.whenStable();
+
+      expect(all('[data-testid="no-matches-message"]')).toEqual([]);
+      expect(coverThumbnails()).toEqual(['/api/frames/1/thumbnail', '/api/frames/4/thumbnail']);
+      expect((all('[data-testid="verdict-filter"]')[0] as HTMLSelectElement).value).toBe('');
+      expect((all('[data-testid="reason-filter"]')[0] as HTMLSelectElement).value).toBe('');
+    });
+  });
+
   it('opens the whole Group of a filtered Frame', async () => {
     await respond(summary, [
       group(1, [
@@ -658,7 +871,7 @@ describe('Review UI', () => {
     expect(openFrameThumbnails()).toEqual(['/api/frames/1/thumbnail', '/api/frames/2/thumbnail']);
   });
 
-  it('opens a Group to show its Frames side by side with kind badge and Camera rating', async () => {
+  it('opens a Group to show its Frames with their Camera rating but no kind badge', async () => {
     await respond(summary, [
       group(1, [frame(1, 'jpg-only')]),
       group(2, [
@@ -677,9 +890,7 @@ describe('Review UI', () => {
       '/api/frames/3/thumbnail',
       '/api/frames/4/thumbnail',
     ]);
-    expect(
-      tiles.map((tile) => tile.querySelector('[data-testid="kind-badge"]')?.textContent?.trim()),
-    ).toEqual(['RAW+JPG', 'JPG-only', 'RAW+JPG']);
+    expect(all('[data-testid="group-view"] [data-testid="kind-badge"]')).toEqual([]);
     expect(
       tiles.map(
         (tile) => tile.querySelector('[data-testid="camera-rating"]')?.textContent?.trim() ?? null,
@@ -938,6 +1149,33 @@ describe('Review UI', () => {
     http.expectOne('/api/write-back/progress');
     expect(all('[data-testid="write-back"]').length).toBe(1);
     expect(all('[data-testid="command-palette"]')).toEqual([]);
+  });
+
+  it("hides the header's write-back button on the write-back screen until going back", async () => {
+    await respond(summary, []);
+    all('[data-testid="open-write-back"]')[0].click();
+    await settle();
+    http.expectOne('/api/write-back');
+    http.expectOne('/api/write-back/progress');
+
+    expect(all('[data-testid="open-write-back"]')).toEqual([]);
+
+    all('[data-testid="back-from-write-back"]')[0].click();
+    await settle();
+
+    expect(all('[data-testid="open-write-back"]').length).toBe(1);
+  });
+
+  it('names how many files the write-back screen reads, one per JPG and two per RAW+JPG Frame', async () => {
+    await respond(summary, []);
+    all('[data-testid="open-write-back"]')[0].click();
+    await settle();
+    http.expectOne('/api/write-back');
+    http.expectOne('/api/write-back/progress');
+
+    expect(text('[data-testid="write-back-loading"]')).toBe(
+      'Reading the current rating of 5 files…',
+    );
   });
 
   it('opens no command palette on the write-back screen', async () => {
@@ -1225,6 +1463,15 @@ describe('Review UI', () => {
       expect(all('[data-testid="loupe-image"]')[0].getAttribute('src')).toBe('/api/frames/2/image');
     });
 
+    it("shows the Frame's position in its Group in the loupe caption", async () => {
+      await openFirstGroup();
+      await press('e');
+      expect(text('[data-testid="loupe-position"]')).toBe('1 / 3');
+
+      await press('ArrowRight');
+      expect(text('[data-testid="loupe-position"]')).toBe('2 / 3');
+    });
+
     it('closes the loupe with Escape, then the Group', async () => {
       await openFirstGroup();
       await press('e');
@@ -1280,14 +1527,60 @@ describe('Review UI', () => {
       expect(visibleTooltip()).toBeNull();
     });
 
-    it('shows a tooltip when a button gets keyboard focus', async () => {
+    it('shows a tooltip when tabbing to a button', async () => {
       await openFirstGroup();
       vi.useFakeTimers();
 
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
       all('[data-testid="back-to-groups"]')[0].focus();
       await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
 
       expect(tooltipText()).toBe('All Groups Esc');
+    });
+
+    it('shows a tooltip when Shift+Tab or an arrow key moves focus to a button', async () => {
+      await openFirstGroup();
+      vi.useFakeTimers();
+      const back = all('[data-testid="back-to-groups"]')[0];
+
+      for (const init of [{ key: 'Tab', shiftKey: true }, { key: 'ArrowLeft' }]) {
+        back.blur();
+        document.dispatchEvent(new KeyboardEvent('keydown', { ...init, bubbles: true }));
+        back.focus();
+        await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+
+        expect(tooltipText()).toBe('All Groups Esc');
+      }
+    });
+
+    it('shows no tooltip when a click or the Review UI moves focus to a button', async () => {
+      await openFirstGroup();
+      vi.useFakeTimers();
+      const back = all('[data-testid="back-to-groups"]')[0];
+
+      back.focus();
+      await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+      expect(visibleTooltip()).toBeNull();
+
+      back.blur();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+      document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      back.focus();
+      await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+      expect(visibleTooltip()).toBeNull();
+    });
+
+    it('shows no tooltip when the Review UI moves focus some time after a Tab', async () => {
+      await openFirstGroup();
+      vi.useFakeTimers();
+      const back = all('[data-testid="back-to-groups"]')[0];
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+      await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+      back.focus();
+      await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+
+      expect(visibleTooltip()).toBeNull();
     });
 
     it('opens the next Group without the loupe after leaving one with the loupe open', async () => {
@@ -1516,6 +1809,19 @@ describe('Review UI', () => {
         expect(
           all('[data-testid="loupe-side"]').map((side) => text('[data-testid="face-badge"]', side)),
         ).toEqual(['Eyes closed · Soft', 'Eyes open · Sharp']);
+      });
+
+      it("shows the position on the current Frame's side", async () => {
+        await openFirstGroup();
+        await press('ArrowRight');
+
+        await press('c');
+
+        expect(
+          all('[data-testid="loupe-side"]').map((side) =>
+            text('[data-testid="loupe-position"]', side),
+          ),
+        ).toEqual(['2 / 3', '']);
       });
 
       it('zooms both sides together', async () => {

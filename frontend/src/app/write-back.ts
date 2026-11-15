@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { HttpClient, httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -5,6 +6,7 @@ import {
   computed,
   effect,
   inject,
+  input,
   output,
   signal,
 } from '@angular/core';
@@ -12,6 +14,7 @@ import { firstValueFrom } from 'rxjs';
 import { Icon } from './icon';
 import { VERDICT_LABELS } from './proposal';
 import {
+  ColorLabel,
   WriteBackDryRun,
   WriteBackFile,
   WriteBackProgress,
@@ -32,7 +35,7 @@ interface Outcome {
   selector: 'app-write-back',
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { 'data-testid': 'write-back' },
-  imports: [Icon, Tooltip],
+  imports: [Icon, NgTemplateOutlet, Tooltip],
   template: `
     <div class="toolbar">
       <button
@@ -58,7 +61,7 @@ interface Outcome {
     } @else if (dryRun.isLoading()) {
       <div class="working" role="status" data-testid="write-back-loading">
         <progress></progress>
-        <p>Reading the current rating of every file…</p>
+        <p>Reading the current rating of {{ filesToRead() }}…</p>
       </div>
     }
     @if (dryRun.error()) {
@@ -86,7 +89,7 @@ interface Outcome {
           }
         </div>
       }
-      <div class="actions">
+      <div class="actions" data-testid="write-back-actions">
         <p class="count" data-testid="write-back-count">
           {{ changing().length }} of {{ dryRun.value().files.length }} files change.
         </p>
@@ -142,7 +145,11 @@ interface Outcome {
           </button>
         }
         @if (confirming() === 'reset') {
-          <div class="confirmation" role="alertdialog" data-testid="session-reset-confirmation">
+          <div
+            class="confirmation reset"
+            role="alertdialog"
+            data-testid="session-reset-confirmation"
+          >
             <p>
               Reset the Session? Ratings framewise wrote are restored in the files, and all
               Overrides, fixed Groups and the Keeper budget are cleared. The analysis is kept.
@@ -171,7 +178,7 @@ interface Outcome {
         } @else {
           <button
             type="button"
-            class="btn btn-ghost"
+            class="btn btn-ghost reset"
             data-testid="session-reset"
             [disabled]="working()"
             [appTooltip]="resetTooltip"
@@ -186,7 +193,6 @@ interface Outcome {
           <thead>
             <tr>
               <th>File</th>
-              <th>Written to</th>
               <th>Verdict</th>
               <th>Now</th>
               <th>After</th>
@@ -195,19 +201,40 @@ interface Outcome {
           <tbody>
             @for (file of dryRun.value().files; track file.path) {
               <tr data-testid="write-back-file" [class.unchanged]="!changes(file)">
-                <td class="path">{{ file.path }}</td>
-                <td class="path">{{ file.written_to }}</td>
+                <td class="file">
+                  <span class="path">{{ file.path }}</span>
+                  @if (file.written_to !== file.path) {
+                    <span class="path target" data-testid="write-back-target">
+                      → {{ file.written_to }}
+                    </span>
+                  }
+                </td>
                 <td>
                   <span [class]="'verdict ' + file.verdict">{{ verdictLabels[file.verdict] }}</span>
                 </td>
-                <td class="rating old">{{ describe(file.old) }}</td>
-                <td class="rating new">{{ describe(file.new) }}</td>
+                <td class="rating old">
+                  <ng-container *ngTemplateOutlet="rating; context: { $implicit: file.old }" />
+                </td>
+                <td class="rating new">
+                  <ng-container *ngTemplateOutlet="rating; context: { $implicit: file.new }" />
+                </td>
               </tr>
             }
           </tbody>
         </table>
       </div>
     }
+    <ng-template #rating let-rating>
+      {{ stars(rating) }}
+      @if (rating.label; as label) {
+        <span class="label" data-testid="color-label">
+          @if (labelColor(label); as color) {
+            <span class="swatch" data-testid="color-swatch" [attr.data-color]="color"></span>
+          }
+          {{ label }}
+        </span>
+      }
+    </ng-template>
   `,
   styles: `
     :host {
@@ -288,6 +315,9 @@ interface Outcome {
     .count {
       color: var(--color-text-secondary);
     }
+    .reset {
+      margin-left: auto;
+    }
     .working {
       display: flex;
       flex-direction: column;
@@ -338,6 +368,12 @@ interface Outcome {
       text-align: left;
       white-space: nowrap;
     }
+    @media (width < 600px) {
+      th,
+      td {
+        padding-inline: var(--space-2);
+      }
+    }
     tbody tr:last-child td {
       border-bottom: none;
     }
@@ -352,11 +388,21 @@ interface Outcome {
       letter-spacing: 0.06em;
       text-transform: uppercase;
     }
+    .file {
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
     .path {
       font-family: var(--font-mono);
       font-size: var(--text-sm);
     }
+    .target {
+      display: block;
+      color: var(--color-text-muted);
+      font-size: var(--text-xs);
+    }
     .rating {
+      white-space: normal;
       font-variant-numeric: tabular-nums;
     }
     .rating.old {
@@ -365,6 +411,25 @@ interface Outcome {
     .rating.new {
       color: var(--color-rating);
       font-weight: 600;
+    }
+    .label {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-1);
+      margin-left: var(--space-1);
+      color: var(--color-text);
+    }
+    .swatch {
+      flex: none;
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+    }
+    .swatch[data-color='red'] {
+      background: var(--color-label-red);
+    }
+    .swatch[data-color='yellow'] {
+      background: var(--color-label-yellow);
     }
     .verdict {
       display: inline-flex;
@@ -390,13 +455,16 @@ interface Outcome {
       background: var(--color-unsure);
     }
     .unchanged td,
-    .unchanged .rating.new {
+    .unchanged .rating.new,
+    .unchanged .label {
       color: var(--color-text-muted);
       font-weight: normal;
     }
   `,
 })
 export class WriteBackView {
+  /** How many files the Session holds, when the Session summary is known. */
+  readonly fileCount = input<number | null>(null);
   readonly back = output<void>();
   /** The Session was reset, so its Groups, Overrides and Keeper budget have changed. */
   readonly sessionReset = output<void>();
@@ -425,6 +493,10 @@ export class WriteBackView {
       return 'reading the current ratings…';
     }
     return `${progress.files_done} of ${files(progress.files_total)}`;
+  });
+  protected readonly filesToRead = computed(() => {
+    const count = this.fileCount();
+    return count === null ? 'every file' : files(count);
   });
   protected readonly outcome = signal<Outcome | null>(null);
   protected readonly changing = computed(() =>
@@ -461,9 +533,20 @@ export class WriteBackView {
     return file.old.stars !== file.new.stars || file.old.label !== file.new.label;
   }
 
-  protected describe(rating: WriteBackRating): string {
-    const stars = rating.stars === null ? 'No rating' : `${rating.stars}★`;
-    return rating.label === null ? stars : `${stars} ${rating.label}`;
+  protected stars(rating: WriteBackRating): string {
+    return rating.stars === null ? 'No rating' : `${rating.stars}★`;
+  }
+
+  /** The color a Lightroom label name stands for in the dry run's label set. */
+  protected labelColor(label: string): ColorLabel | null {
+    const labelSet = this.dryRun.hasValue() ? this.dryRun.value().label_set : null;
+    if (labelSet?.red === label) {
+      return 'red';
+    }
+    if (labelSet?.yellow === label) {
+      return 'yellow';
+    }
+    return null;
   }
 
   protected async apply(): Promise<void> {

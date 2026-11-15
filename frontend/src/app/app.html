@@ -64,23 +64,29 @@
           <app-icon name="alert" [size]="14" />Could not load the analysis progress.
         </p>
       }
-      <button
-        type="button"
-        class="btn btn-primary"
-        data-testid="open-write-back"
-        [disabled]="analyzing()"
-        [appTooltip]="writeBackTooltip"
-        (click)="openWriteBack()"
-      >
-        Rating write-back…
-      </button>
+      @if (!writingBack()) {
+        <button
+          type="button"
+          class="btn btn-primary"
+          data-testid="open-write-back"
+          [disabled]="analyzing()"
+          [appTooltip]="writeBackTooltip"
+          (click)="openWriteBack()"
+        >
+          Rating write-back…
+        </button>
+      }
     </div>
   </header>
   <main>
     @if (groups.error()) {
       <p class="error">Could not load the Groups.</p>
     } @else if (writingBack()) {
-      <app-write-back (back)="writingBack.set(false)" (sessionReset)="onSessionReset()" />
+      <app-write-back
+        [fileCount]="sessionFileCount()"
+        (back)="writingBack.set(false)"
+        (sessionReset)="onSessionReset()"
+      />
     } @else if (openGroup(); as group) {
       @if (overrideFailed()) {
         <p class="error" data-testid="override-error">Could not save the Override.</p>
@@ -103,6 +109,7 @@
         @if (loupeFrames().length > 0) {
           <app-loupe
             [frames]="loupeFrames()"
+            [position]="loupePosition()"
             [zoom]="zoom"
             (toggleZoom)="toggleZoom()"
             (close)="closeLoupe()"
@@ -115,6 +122,7 @@
         [groups]="groups.value()"
         [filter]="filter()"
         (open)="openedFrameId.set($event.id)"
+        (clearFilters)="clearFilters()"
       />
     }
   </main>

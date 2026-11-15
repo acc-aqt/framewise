@@ -114,11 +114,27 @@ export class App {
     const winner = this.comparing() ? findWinner(group) : undefined;
     return winner === undefined ? [frame] : [frame, winner];
   });
+  /** Where the current Frame sits in its Group, counting from 1. */
+  protected readonly loupePosition = computed(() => {
+    const frame = this.currentFrame();
+    const group = this.openGroup();
+    return frame === null || group === null
+      ? null
+      : { index: group.frames.indexOf(frame) + 1, total: group.frames.length };
+  });
   protected readonly overrideFailed = signal(false);
   protected readonly keeperBudget = linkedSignal(() =>
     this.summary.hasValue() ? this.summary.value().keeper_budget : null,
   );
   protected readonly keeperBudgetFailed = signal(false);
+  /** Rating write-back writes to a JPG-only Frame's file and to both files of a RAW+JPG Frame. */
+  protected readonly sessionFileCount = computed(() => {
+    if (!this.summary.hasValue()) {
+      return null;
+    }
+    const { jpg_only_count, raw_jpg_count } = this.summary.value();
+    return jpg_only_count + 2 * raw_jpg_count;
+  });
   protected readonly paletteOpen = signal(false);
   protected readonly paletteAvailable = computed(() => !this.noSession() && !this.writingBack());
   protected readonly commands = COMMANDS;
@@ -188,6 +204,10 @@ export class App {
     if (frame !== null) {
       this.run(command.shortcut, frame);
     }
+  }
+
+  protected clearFilters(): void {
+    this.filter.set(NO_FILTER);
   }
 
   protected openWriteBack(): void {

@@ -51,6 +51,12 @@ h1 {
   background: var(--color-border-strong);
 }
 
+@media (max-width: 900px) {
+  .divider {
+    display: none;
+  }
+}
+
 .root {
   display: flex;
   align-items: center;

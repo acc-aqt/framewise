@@ -1,0 +1,14 @@
+{
+  "folder": "/path/to/Session-folder",
+  "output": "~/Desktop/framewise-demo/framewise-demo.mp4",
+  "analysisSeconds": 5,
+  "merges": [
+    { "open": "IMG_0001.JPG", "direction": "next" },
+    { "open": "IMG_0001.JPG", "direction": "next" }
+  ],
+  "winner": "IMG_0005.JPG",
+  "title": "framewise",
+  "subtitle": "Cull a whole shoot in minutes",
+  "endTitle": "github.com/acc-aqt/framewise",
+  "endSubtitle": "Free, open source, runs locally"
+}

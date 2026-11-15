@@ -1,0 +1,3 @@
+#!/bin/sh
+# Stands in for the Finder folder dialog during the demo recording: answers with the Session folder.
+printf "%s\n" "$FRAMEWISE_DEMO_FOLDER"

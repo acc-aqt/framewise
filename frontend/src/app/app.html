@@ -39,6 +39,12 @@
       </p>
     }
     <div class="status">
+      @if (summary.hasValue()) {
+        <app-analysis-settings
+          [providers]="summary.value().providers"
+          [configPath]="summary.value().config_path"
+        />
+      }
       @if (paletteAvailable()) {
         <button
           type="button"

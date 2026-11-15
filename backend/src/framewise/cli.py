@@ -222,7 +222,14 @@ def main(
         analysis = SessionAnalysis(store, analyzer, background=args.background)
         analyze_in_background(analysis, nullcontext if args.allow_sleep else keep_awake)
         print(f"framewise: {len(store.frames())} Frames in {store.root}")
-        return create_app(store, analysis, UI_DIR, lightroom_preferences=LIGHTROOM_PREFERENCES)
+        return create_app(
+            store,
+            analysis,
+            UI_DIR,
+            lightroom_preferences=LIGHTROOM_PREFERENCES,
+            provider_lineup=analyzer.provider_lineup,
+            config_path=resolve_config_path().absolute(),
+        )
 
     url = f"http://{HOST}:{args.port}/"
     if args.session_folder is None:

@@ -124,6 +124,7 @@ class FakeAnalyzer:
         self.analyzed: list[Path] = []
         self.signature = {"fingerprint": "fake-fingerprint@1"}
         self.similarity = SimilarityThresholds(burst=0.8, near_duplicate=0.9)
+        self.provider_lineup = {}
         self.in_flight = 0
         self.peak_in_flight = 0
         self.at_background_priority: list[bool] = []
@@ -213,6 +214,14 @@ def analyzer():
     fake.release_all()
 
 
+def review_app(store, analysis: SessionAnalysis, *args, **app_options) -> TestClient:
+    """The Review UI, with a stand-in Provider lineup and config path for the tests that are
+    not about them."""
+    app_options.setdefault("provider_lineup", {})
+    app_options.setdefault("config_path", Path("config.toml"))
+    return TestClient(create_app(store, analysis, *args, **app_options))
+
+
 @pytest.fixture
 def review(session_dir: Path, data_dir: Path, analyzer: FakeAnalyzer):
     """Opens the Review UI after analysis has finished."""
@@ -221,7 +230,7 @@ def review(session_dir: Path, data_dir: Path, analyzer: FakeAnalyzer):
         store = open_session(session_dir, data_dir)
         analysis = SessionAnalysis(store, analyzer)
         analysis.run()
-        return TestClient(create_app(store, analysis, **app_options))
+        return review_app(store, analysis, **app_options)
 
     return start
 
@@ -234,6 +243,6 @@ def live_review(session_dir: Path, data_dir: Path, analyzer: FakeAnalyzer, clock
         store = open_session(session_dir, data_dir)
         analysis = SessionAnalysis(store, analyzer, background=background, clock=clock)
         threading.Thread(target=analysis.run, daemon=True).start()
-        return TestClient(create_app(store, analysis, **app_options))
+        return review_app(store, analysis, **app_options)
 
     return start

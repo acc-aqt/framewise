@@ -6,7 +6,32 @@ export interface SessionSummary {
   skipped: string[];
   /** The share of the Session's Frames the photographer roughly wants to keep, from 0 to 1. */
   keeper_budget: number;
+  /** What serves each Capability in new analyses, not in the stored ones. */
+  providers: ProviderLineup;
+  /** The absolute path of the config.toml framewise reads, whether or not it exists. */
+  config_path: string;
 }
+
+export interface ActiveProvider {
+  id: string;
+  version: number;
+  source: 'automatic' | 'config';
+}
+
+export interface AlternativeProvider {
+  id: string;
+  version: number;
+  available: boolean;
+}
+
+export interface CapabilityLineup {
+  active: ActiveProvider | null;
+  /** The other installed Providers of the Capability, in descending priority. */
+  alternatives: AlternativeProvider[];
+}
+
+/** Keyed by Capability, in the order to show them. */
+export type ProviderLineup = Record<string, CapabilityLineup>;
 
 export interface CameraRating {
   stars: number | null;

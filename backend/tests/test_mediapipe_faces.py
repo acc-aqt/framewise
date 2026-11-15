@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
+from conftest import review_app
 from test_apple_vision import (
     FIXTURE_FACE_BOX,
     draw_landscape,
@@ -20,7 +20,6 @@ from framewise.mediapipe_faces import MediaPipeEyeState, MediaPipeFaceDetection
 from framewise.models import FACE_LANDMARKER, is_verified
 from framewise.providers import compose_analyzer, discover_providers, select_providers
 from framewise.review import SessionAnalysis, open_session, resolve_data_dir
-from framewise.server import create_app
 
 pytestmark = pytest.mark.skipif(
     not (
@@ -96,7 +95,7 @@ def test_a_closed_eyes_frame_gets_the_eyes_closed_reason_from_mediapipe(session_
     )
     analysis.run()
 
-    frames = frames_by_name(TestClient(create_app(store, analysis)))
+    frames = frames_by_name(review_app(store, analysis))
 
     assert reasons(frames["DSCF0001.JPG"]) == ["Eyes closed"]
 

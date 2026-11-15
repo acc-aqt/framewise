@@ -13,6 +13,7 @@ export type IconName =
   | 'merge-previous'
   | 'reset'
   | 'scissors'
+  | 'settings'
   | 'zoom';
 
 /** A decorative stroke icon (paths from Lucide, ISC licence). Give its button an aria-label. */
@@ -90,6 +91,12 @@ export type IconName =
           <svg:path d="M20 4 8.12 15.88" />
           <svg:circle cx="6" cy="18" r="3" />
           <svg:path d="M14.8 14.8 20 20" />
+        }
+        @case ('settings') {
+          <svg:path
+            d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"
+          />
+          <svg:circle cx="12" cy="12" r="3" />
         }
         @case ('zoom') {
           <svg:circle cx="11" cy="11" r="8" />

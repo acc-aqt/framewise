@@ -52,7 +52,7 @@ Besides its Capability's method, a Provider has:
 | `capability` | One of the Capability names above. |
 | `id` | A stable, unique name such as `"acme-eye-state"`. Saved analyses record it, and `config.toml` chooses by it. Never change it. |
 | `version` | An integer. Bump it whenever your Provider's output may change, such as a new model or threshold. framewise then analyses the Frames your old version analysed again. |
-| `priority` | An integer. By default each Capability uses its highest-priority available Provider. framewise's Apple Vision Providers use 100 and its MediaPipe ones 50. |
+| `priority` | An integer. By default each Capability uses its highest-priority available Provider. framewise's Apple Vision Providers use 100 and its portable ones (MediaPipe and DINOv2) 50. |
 | `is_available()` | Whether the Provider can run on this machine, for example whether its dependencies and models are present. It must never raise. A Provider whose check raises is treated as unavailable. |
 
 framewise may call a Provider from several threads at once, one Frame per thread.

@@ -14,6 +14,7 @@ import { firstValueFrom } from 'rxjs';
 import { Icon } from './icon';
 import { VERDICT_LABELS } from './proposal';
 import {
+  ColorLabel,
   WriteBackDryRun,
   WriteBackFile,
   WriteBackProgress,
@@ -23,8 +24,6 @@ import {
 import { Tooltip, TooltipContent } from './tooltip';
 
 const PROGRESS_POLL_INTERVAL_MS = 500;
-
-type LabelColor = 'red' | 'yellow';
 
 interface Outcome {
   ok: boolean;
@@ -419,10 +418,10 @@ interface Outcome {
       border-radius: 2px;
     }
     .swatch[data-color='red'] {
-      background: #e5484d;
+      background: var(--color-label-red);
     }
     .swatch[data-color='yellow'] {
-      background: #f5d90a;
+      background: var(--color-label-yellow);
     }
     .verdict {
       display: inline-flex;
@@ -531,7 +530,7 @@ export class WriteBackView {
   }
 
   /** The color a Lightroom label name stands for in the dry run's label set. */
-  protected labelColor(label: string): LabelColor | null {
+  protected labelColor(label: string): ColorLabel | null {
     const labelSet = this.dryRun.hasValue() ? this.dryRun.value().label_set : null;
     if (labelSet?.red === label) {
       return 'red';

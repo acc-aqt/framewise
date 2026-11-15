@@ -50,7 +50,7 @@ import { Tooltip, TooltipContent } from './tooltip';
       color: var(--color-text-secondary);
     }
     input {
-      width: 120px;
+      width: 88px;
       margin: 0;
     }
     output {

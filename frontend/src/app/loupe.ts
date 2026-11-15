@@ -173,10 +173,11 @@ export interface LoupePosition {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 2px var(--space-2);
+      padding: var(--space-1) var(--space-2);
       border-radius: var(--radius-pill);
       font-size: var(--text-sm);
       font-weight: 600;
+      line-height: 1;
       white-space: nowrap;
     }
     .dot {

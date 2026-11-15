@@ -134,13 +134,13 @@ interface GridTile {
       display: inline-flex;
       align-items: center;
       gap: var(--space-1);
-      padding: 2px 6px;
+      padding: var(--space-1) var(--space-2);
       border-radius: var(--radius-sm);
       background: var(--color-overlay);
       color: var(--color-text);
       font-size: var(--text-xs);
       font-variant-numeric: tabular-nums;
-      line-height: 1.3;
+      line-height: 1;
       white-space: nowrap;
     }
   `,

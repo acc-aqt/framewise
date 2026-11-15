@@ -20,6 +20,15 @@ const summary: SessionSummary = {
   raw_jpg_count: 2,
   skipped: ['100LEICA/L1000009-Pano.dng'],
   keeper_budget: 0.4,
+  providers: {
+    fingerprint: { active: { id: 'apple-vision-fingerprint', version: 2, source: 'automatic' } },
+    'face-detection': { active: { id: 'mediapipe-face-detection', version: 1, source: 'config' } },
+    'eye-state': { active: null },
+    'face-quality': {
+      active: { id: 'apple-vision-face-quality', version: 1, source: 'automatic' },
+    },
+    aesthetics: { active: null },
+  },
 };
 
 describe('Review UI', () => {
@@ -226,6 +235,88 @@ describe('Review UI', () => {
       await choose('boom', { status: 500, statusText: 'Server Error' });
 
       expect(text('[data-testid="choose-session-error"]')).toBe('Could not open the Session.');
+    });
+  });
+
+  describe('Analysis settings', () => {
+    const gear = () => all('[data-testid="open-analysis-settings"]')[0];
+    const popover = () => all('[data-testid="analysis-settings"]')[0];
+    const rows = () =>
+      all('[data-testid="capability"]').map((row) =>
+        Array.from(row.children)
+          .map((part) => part.textContent?.replace(/\s+/g, ' ').trim())
+          .join(' '),
+      );
+
+    async function openSettings(): Promise<void> {
+      await respond(summary, []);
+      gear().click();
+      await settle();
+    }
+
+    it('shows the Provider in use per Capability, with its version and source', async () => {
+      await openSettings();
+
+      expect(gear().getAttribute('aria-label')).toBe('Analysis settings');
+      expect(popover().getAttribute('role')).toBe('dialog');
+      expect(rows()).toEqual([
+        'Fingerprint (grouping) apple-vision-fingerprint v2 · picked automatically',
+        'Face detection mediapipe-face-detection v1 · chosen in config.toml',
+        'Eye state None · eyes count as unknown',
+        'Face quality apple-vision-face-quality v1 · picked automatically',
+        'Aesthetics None · aesthetics is left out of the score',
+      ]);
+    });
+
+    it("says which signals come from framewise's built-in image maths", async () => {
+      await openSettings();
+
+      expect(text('[data-testid="built-in-image-maths"]')).toBe(
+        "Sharpness, motion blur, exposure and low and high key come from framewise's built-in image maths.",
+      );
+    });
+
+    it('closes only the popover on Escape and gives focus back to the gear', async () => {
+      await respond(summary, [group(1, [frame(1, 'jpg-only')])]);
+      all('[data-testid="group-tile"]')[0].click();
+      await fixture.whenStable();
+      gear().click();
+      await settle();
+      expect(popover().contains(document.activeElement)).toBe(true);
+
+      document.activeElement!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
+      await settle();
+
+      expect(popover()).toBeUndefined();
+      expect(all('[data-testid="group-view"]').length).toBe(1);
+      expect(document.activeElement).toBe(gear());
+    });
+
+    it('closes on a click outside it, but not on a click inside it', async () => {
+      await openSettings();
+
+      popover().click();
+      await settle();
+      expect(popover()).toBeDefined();
+
+      document.body.click();
+      await settle();
+      expect(popover()).toBeUndefined();
+      expect(document.activeElement).toBe(gear());
+    });
+
+    it('is not offered on the session picker', async () => {
+      const notFound = { status: 404, statusText: 'Not Found' };
+      http.expectOne('/api/session').flush({ detail: 'No Session open' }, notFound);
+      http.expectOne('/api/progress').flush({ detail: 'Not Found' }, notFound);
+      await settle();
+      http.expectOne('/api/groups').flush({ detail: 'Not Found' }, notFound);
+      await settle();
+
+      expect(all('[data-testid="choose-session"]').length).toBe(1);
+      expect(gear()).toBeUndefined();
     });
   });
 

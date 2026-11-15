@@ -6,7 +6,25 @@ export interface SessionSummary {
   skipped: string[];
   /** The share of the Session's Frames the photographer roughly wants to keep, from 0 to 1. */
   keeper_budget: number;
+  /** What serves each Capability in the running analyzer, not in the stored analyses. */
+  providers: ProviderLineup;
 }
+
+export type Capability =
+  'fingerprint' | 'face-detection' | 'eye-state' | 'face-quality' | 'aesthetics';
+
+export interface ActiveProvider {
+  /** The id written in config.toml. */
+  id: string;
+  version: number;
+  source: 'automatic' | 'config';
+}
+
+export interface CapabilityLineup {
+  active: ActiveProvider | null;
+}
+
+export type ProviderLineup = Partial<Record<Capability, CapabilityLineup>>;
 
 export interface CameraRating {
   stars: number | null;

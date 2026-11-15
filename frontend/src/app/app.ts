@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { Observable } from 'rxjs';
 import { AnalysisProgressView } from './analysis-progress';
+import { AnalysisSettings } from './analysis-settings';
 import { GroupGrid } from './group-grid';
 import { GroupView } from './group-view';
 import { Icon } from './icon';
@@ -44,6 +45,7 @@ export const POLL_INTERVAL_MS = 1000;
   host: { '(document:keydown)': 'onKeydown($event)' },
   imports: [
     AnalysisProgressView,
+    AnalysisSettings,
     CommandPalette,
     GroupGrid,
     GroupView,

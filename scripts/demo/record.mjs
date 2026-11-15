@@ -1,15 +1,16 @@
 // Records the demo video's raw takes. Usage:
 //   node record.mjs open   picker → open the Session → analysis, then snapshots the store
 //   node record.mjs work   merges → compare and Make Winner → Rating write-back
+// Either takes `--config <file>` to record a separate demo from another config.
 // `work` starts from the snapshot each time, so it can be retaken without analysing again;
 // `work --rehearse` stops before writing any ratings.
-import { copyFileSync, existsSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  DEMO_DIR,
   Director,
   Recorder,
   launchPage,
+  loadDemo,
   requireFile,
   sessionStorePath,
   sleep,
@@ -17,8 +18,7 @@ import {
   startReview,
 } from './lib.mjs';
 
-const config = JSON.parse(readFileSync(join(DEMO_DIR, 'demo.config.json'), 'utf8'));
-const OUT = join(DEMO_DIR, 'out');
+const { config, OUT } = loadDemo();
 const SNAPSHOT = join(OUT, 'analysed.sqlite');
 const store = () => sessionStorePath(config.folder);
 const REHEARSE = process.argv.includes('--rehearse');
@@ -26,7 +26,7 @@ const REHEARSE = process.argv.includes('--rehearse');
 const takes = { open: recordOpen, work: recordWork };
 const take = takes[process.argv[2]];
 if (!take) {
-  console.error('usage: node record.mjs open|work');
+  console.error('usage: node record.mjs open|work [--config <file>]');
   process.exit(1);
 }
 await take();

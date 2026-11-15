@@ -4,10 +4,9 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
-import { DEMO_DIR, PORT, VIEWPORT, requireFile } from './lib.mjs';
+import { PORT, VIEWPORT, loadDemo, requireFile } from './lib.mjs';
 
-const config = JSON.parse(readFileSync(join(DEMO_DIR, 'demo.config.json'), 'utf8'));
-const OUT = join(DEMO_DIR, 'out');
+const { config, OUT } = loadDemo();
 const BUILD = join(OUT, 'render');
 const WIDTH = 1440;
 const HEIGHT = 900;

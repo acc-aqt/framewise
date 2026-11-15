@@ -1,8 +1,8 @@
 import { spawn, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, rmSync, writeFileSync, existsSync, realpathSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
@@ -10,6 +10,24 @@ export const DEMO_DIR = dirname(fileURLToPath(import.meta.url));
 export const BACKEND_DIR = join(DEMO_DIR, '..', '..', 'backend');
 export const PORT = 8765;
 export const VIEWPORT = { width: 1440, height: 820 };
+
+/**
+ * The demo's config and the folder its takes go to. `--config <file>` records a separate demo
+ * from another config, with its takes in out/<config name>.
+ */
+export function loadDemo() {
+  const flag = process.argv.indexOf('--config');
+  if (flag === -1) {
+    return { config: readConfig('demo.config.json'), OUT: join(DEMO_DIR, 'out') };
+  }
+  const file = process.argv[flag + 1];
+  const name = basename(file).replace(/(\.config)?\.json$/, '');
+  return { config: readConfig(file), OUT: join(DEMO_DIR, 'out', name) };
+}
+
+function readConfig(file) {
+  return JSON.parse(readFileSync(resolve(DEMO_DIR, file), 'utf8'));
+}
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export { sleep };

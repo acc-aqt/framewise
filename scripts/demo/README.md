@@ -24,3 +24,5 @@ ffmpeg -i ~/Desktop/framewise-demo/framewise-demo.mp4 -vf "fps=10,scale=960:-1:f
 - `work` really writes ratings into the files, then undoes the write-back once the take is
   recorded.
 - Raw takes and the snapshot live in `out/`, which is not committed.
+- A separate demo from another shoot: write e.g. `sewts.config.json` and pass `--config
+  sewts.config.json` to `record.mjs` and `render.mjs`; its takes go to `out/sewts/`.

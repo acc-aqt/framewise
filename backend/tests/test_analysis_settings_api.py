@@ -5,7 +5,7 @@ from framewise.providers import resolve_analyzer
 
 def session_providers(review, providers, config_path=None) -> dict:
     analyzer = resolve_analyzer(config_path, providers=providers)
-    return review(providers=analyzer.lineup).get("/api/session").json()["providers"]
+    return review(provider_lineup=analyzer.provider_lineup).get("/api/session").json()["providers"]
 
 
 def test_the_session_names_the_provider_picked_automatically_for_a_capability(review):
@@ -90,3 +90,9 @@ def test_the_session_gives_the_config_path_whether_or_not_the_file_exists(review
     session = review(config_path=config).get("/api/session").json()
 
     assert session["config_path"] == str(config)
+
+
+def test_a_provider_whose_availability_check_raises_is_warned_about_once(review, capsys):
+    session_providers(review, [FakeFingerprint(id="fallback"), BrokenFingerprint(id="broken")])
+
+    assert capsys.readouterr().err.count("skipped the Provider broken") == 1

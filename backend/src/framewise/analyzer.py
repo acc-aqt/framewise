@@ -27,7 +27,6 @@ class AlternativeProvider:
     id: str
     version: int
     available: bool
-    """Whether it can run on this machine."""
 
 
 @dataclass(frozen=True)
@@ -39,7 +38,7 @@ class CapabilityLineup:
 
 
 ProviderLineup = Mapping[str, CapabilityLineup]
-"""What serves each Capability in the running analyzer, by Capability in the fixed order."""
+"""What serves each Capability in new analyses, keyed by Capability in the order to show them."""
 
 
 @dataclass(frozen=True)
@@ -95,7 +94,7 @@ class FrameAnalyzer(Protocol):
     signature: ProviderSignature
     """Saved with each analysis, so a re-run re-analyses the Frames whose Providers changed."""
     similarity: SimilarityThresholds
-    lineup: ProviderLineup
+    provider_lineup: ProviderLineup
     """Shown in the Review UI, so the photographer can see how new analyses are made."""
 
     def analyze(self, jpg_path: Path) -> FrameSignals: ...

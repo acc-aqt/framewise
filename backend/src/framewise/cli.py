@@ -227,7 +227,7 @@ def main(
             analysis,
             UI_DIR,
             lightroom_preferences=LIGHTROOM_PREFERENCES,
-            providers=analyzer.lineup,
+            provider_lineup=analyzer.provider_lineup,
             config_path=resolve_config_path().absolute(),
         )
 

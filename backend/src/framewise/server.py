@@ -59,13 +59,12 @@ def create_app(
     analysis: SessionAnalysis,
     ui_dir: Path | None = None,
     lightroom_preferences: Path | None = None,
-    providers: ProviderLineup | None = None,
-    config_path: Path | None = None,
+    *,
+    provider_lineup: ProviderLineup,
+    config_path: Path,
 ) -> FastAPI:
     app = FastAPI(title="framewise")
-    providers_json = {
-        capability: asdict(lineup) for capability, lineup in (providers or {}).items()
-    }
+    providers_json = {capability: asdict(lineup) for capability, lineup in provider_lineup.items()}
     write_back = RatingWriteBack(store, ExifTool())
 
     def _groups() -> list[list[AnalyzedFrame]]:
@@ -113,7 +112,7 @@ def create_app(
             "skipped": summary.skipped,
             "keeper_budget": _keeper_budget(),
             "providers": providers_json,
-            "config_path": str(config_path) if config_path else None,
+            "config_path": str(config_path),
         }
 
     @app.get("/api/progress")

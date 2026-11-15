@@ -1525,6 +1525,51 @@ describe('Review UI', () => {
       expect(tooltipText()).toBe('All Groups Esc');
     });
 
+    it('shows a tooltip when Shift+Tab or an arrow key moves focus to a button', async () => {
+      await openFirstGroup();
+      vi.useFakeTimers();
+      const back = all('[data-testid="back-to-groups"]')[0];
+
+      for (const init of [{ key: 'Tab', shiftKey: true }, { key: 'ArrowLeft' }]) {
+        back.blur();
+        document.dispatchEvent(new KeyboardEvent('keydown', { ...init, bubbles: true }));
+        back.focus();
+        await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+
+        expect(tooltipText()).toBe('All Groups Esc');
+      }
+    });
+
+    it('shows no tooltip when a click or the Review UI moves focus to a button', async () => {
+      await openFirstGroup();
+      vi.useFakeTimers();
+      const back = all('[data-testid="back-to-groups"]')[0];
+
+      back.focus();
+      await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+      expect(visibleTooltip()).toBeNull();
+
+      back.blur();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+      document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      back.focus();
+      await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+      expect(visibleTooltip()).toBeNull();
+    });
+
+    it('shows no tooltip when the Review UI moves focus some time after a Tab', async () => {
+      await openFirstGroup();
+      vi.useFakeTimers();
+      const back = all('[data-testid="back-to-groups"]')[0];
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+      await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+      back.focus();
+      await vi.advanceTimersByTimeAsync(TOOLTIP_DELAY_MS);
+
+      expect(visibleTooltip()).toBeNull();
+    });
+
     it('opens the next Group without the loupe after leaving one with the loupe open', async () => {
       await openFirstGroup();
       await press('e');

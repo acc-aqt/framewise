@@ -127,6 +127,14 @@ export class App {
     this.summary.hasValue() ? this.summary.value().keeper_budget : null,
   );
   protected readonly keeperBudgetFailed = signal(false);
+  /** Rating write-back writes to a JPG-only Frame's file and to both files of a RAW+JPG pair. */
+  protected readonly sessionFileCount = computed(() => {
+    if (!this.summary.hasValue()) {
+      return null;
+    }
+    const { jpg_only_count, raw_jpg_count } = this.summary.value();
+    return jpg_only_count + 2 * raw_jpg_count;
+  });
   protected readonly paletteOpen = signal(false);
   protected readonly paletteAvailable = computed(() => !this.noSession() && !this.writingBack());
   protected readonly commands = COMMANDS;

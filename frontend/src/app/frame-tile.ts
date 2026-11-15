@@ -22,7 +22,7 @@ import { CameraRating, ColorLabel, Frame } from './session-api';
         [faces]="showFaces() ? frame().faces : null"
         [lazy]="true"
       />
-      @if (frame().kind === 'jpg-only') {
+      @if (showKind() && frame().kind === 'jpg-only') {
         <span class="badge kind" data-testid="kind-badge">JPG-only</span>
       }
       @if (ratingText(frame().camera_rating); as rating) {
@@ -84,11 +84,11 @@ import { CameraRating, ColorLabel, Frame } from './session-api';
       display: inline-flex;
       align-items: center;
       gap: var(--space-1);
-      padding: 2px 6px;
+      padding: var(--space-1) var(--space-2);
       border-radius: var(--radius-sm);
       background: var(--color-overlay);
       font-size: var(--text-xs);
-      line-height: 1.3;
+      line-height: 1;
       white-space: nowrap;
     }
     .kind,
@@ -100,7 +100,7 @@ import { CameraRating, ColorLabel, Frame } from './session-api';
       top: 6px;
       left: 6px;
       color: var(--color-text-secondary);
-      font-size: 10px;
+      font-size: var(--text-xs);
       font-weight: 600;
       letter-spacing: 0.04em;
     }
@@ -129,7 +129,7 @@ import { CameraRating, ColorLabel, Frame } from './session-api';
     }
     .override {
       border: 1px solid var(--color-override);
-      padding: 1px 5px;
+      padding: calc(var(--space-1) - 1px) calc(var(--space-2) - 1px);
       color: var(--color-override);
     }
     .override-rating {
@@ -151,7 +151,7 @@ import { CameraRating, ColorLabel, Frame } from './session-api';
       display: flex;
       align-items: baseline;
       gap: var(--space-2);
-      padding: 6px 8px 7px;
+      padding: var(--space-2);
       font-size: var(--text-xs);
       color: var(--color-text-muted);
       white-space: nowrap;
@@ -170,6 +170,7 @@ export class FrameTile {
   /** Marks each face of the Frame on its image. */
   readonly showFaces = input(false);
   readonly showVerdict = input(true);
+  readonly showKind = input(true);
 
   protected readonly verdictLabels = VERDICT_LABELS;
   protected readonly breakdown = computed(() => scoreBreakdown(this.frame()).join('\n'));

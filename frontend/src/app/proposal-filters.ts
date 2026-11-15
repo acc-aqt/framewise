@@ -71,7 +71,7 @@ interface ReasonOption {
     select {
       height: var(--control-height);
       padding: 0 calc(var(--space-2) + 14px + var(--space-2)) 0 var(--space-3);
-      border: 1px solid var(--color-border);
+      border: 1px solid var(--color-control-border);
       border-radius: var(--radius-md);
       background: var(--color-surface-1);
       color: var(--color-text-secondary);
@@ -85,14 +85,13 @@ interface ReasonOption {
         color var(--duration-fast) var(--ease-out);
     }
     select:hover {
-      border-color: var(--color-border-strong);
+      border-color: var(--color-text-muted);
     }
     select:focus-visible {
       outline: 2px solid var(--color-focus);
       outline-offset: 2px;
     }
     .active select {
-      border-color: var(--color-border-strong);
       background: var(--color-surface-3);
       color: var(--color-text);
       font-weight: 600;

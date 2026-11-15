@@ -167,14 +167,49 @@ describe('Review UI', () => {
     await fixture.whenStable();
   }
 
-  it('shows the Session summary counts', async () => {
+  function fileDetails(): HTMLDetailsElement {
+    return all('header details[data-testid="file-details"]')[0] as HTMLDetailsElement;
+  }
+
+  async function openFileDetails(): Promise<HTMLDetailsElement> {
+    const details = fileDetails();
+    details.querySelector('summary')!.click();
+    await settle();
+    return details;
+  }
+
+  it('shows the Frame count in the header, and opens it to the file kinds and Skipped files', async () => {
     await respond(summary, []);
 
-    expect(text('[data-testid="total-frames"]')).toBe('3');
-    expect(text('[data-testid="jpg-only-count"]')).toBe('1');
-    expect(text('[data-testid="raw-jpg-count"]')).toBe('2');
-    expect(text('[data-testid="skipped-count"]')).toBe('1');
-    expect(text('[data-testid="skipped-files"]')).toContain('100LEICA/L1000009-Pano.dng');
+    expect(text('summary', fileDetails())).toBe('3 Frames');
+    expect(fileDetails().open).toBe(false);
+
+    const details = await openFileDetails();
+
+    expect(details.open).toBe(true);
+    expect(text('[data-testid="raw-jpg-count"]', details)).toBe('2');
+    expect(text('[data-testid="jpg-only-count"]', details)).toBe('1');
+    expect(text('[data-testid="skipped-count"]', details)).toBe('1');
+    expect(text('[data-testid="skipped-files"]', details)).toContain('100LEICA/L1000009-Pano.dng');
+  });
+
+  it('keeps the file kind counts out of the header row', async () => {
+    await respond(summary, []);
+
+    for (const id of ['raw-jpg-count', 'jpg-only-count', 'skipped-count']) {
+      const counts = all(`[data-testid="${id}"]`);
+      expect(counts.length).toBe(1);
+      expect(fileDetails().contains(counts[0])).toBe(true);
+    }
+  });
+
+  it('opens the Frame count to the file kinds even when nothing was skipped', async () => {
+    await respond({ ...summary, skipped: [] }, []);
+
+    const details = await openFileDetails();
+
+    expect(text('[data-testid="skipped-count"]', details)).toBe('0');
+    expect(all('[data-testid="skipped-files"]')).toEqual([]);
   });
 
   describe('without a Session', () => {

@@ -3,7 +3,7 @@ name = "framewise"
 version = "0.1.0"
 description = "Cull a photo Session: scan Frames and review them locally."
 authors = [
-    { name = "alexander-carrels", email = "alexander.carrels@outlook.com" }
+    { name = "alexander-carrels" }
 ]
 license = "MIT"
 requires-python = ">=3.13"

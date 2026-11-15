@@ -8,7 +8,16 @@ from importlib.metadata import EntryPoint, entry_points
 from pathlib import Path
 from typing import Protocol
 
-from framewise.analyzer import Face, FrameSignals, ProviderSignature, SimilarityThresholds
+from framewise.analyzer import (
+    ActiveProvider,
+    AlternativeProvider,
+    CapabilityLineup,
+    Face,
+    FrameSignals,
+    ProviderLineup,
+    ProviderSignature,
+    SimilarityThresholds,
+)
 from framewise.image_measures import Region, measure_image
 
 FINGERPRINT = "fingerprint"
@@ -89,12 +98,15 @@ class ProviderAnalyzer:
         eye_state: EyeStateProvider | None = None,
         face_quality: FaceQualityProvider | None = None,
         aesthetics: AestheticsProvider | None = None,
+        *,
+        provider_lineup: ProviderLineup,
     ):
         self.fingerprint = fingerprint
         self.face_detection = face_detection
         self.eye_state = eye_state
         self.face_quality = face_quality
         self.aesthetics = aesthetics
+        self.provider_lineup = provider_lineup
 
     @property
     def similarity(self) -> SimilarityThresholds:
@@ -161,8 +173,7 @@ def resolve_analyzer(
     """The analyzer made of the installed Providers, framewise's own included, with the
     Providers chosen in the config file at config_path, if there is one. overrides, such as
     those given on the command line, win over the config file's."""
-    if providers is None:
-        providers = discover_providers()
+    installed = _check_availability(discover_providers() if providers is None else providers)
     overrides = dict(overrides or {})
     configured = read_provider_overrides(config_path) if config_path else {}
     still_configured = {
@@ -171,10 +182,10 @@ def resolve_analyzer(
         if capability not in overrides
     }
     try:
-        select_providers(providers, still_configured)
+        _select(installed, still_configured)
     except ProviderConfigError as error:
         raise ProviderConfigError(f"{config_path}: {error}") from error
-    return compose_analyzer(providers, still_configured | overrides)
+    return _compose(installed, still_configured | overrides)
 
 
 def read_provider_overrides(config_path: Path) -> dict[str, str]:
@@ -216,10 +227,31 @@ def discover_providers(found: Iterable[EntryPoint] | None = None) -> list[Provid
     return providers
 
 
+_Installed = list[tuple[Provider, bool]]
+"""Each installed Provider with whether it is available, checked once so that a check that
+raises warns only once."""
+
+
 def compose_analyzer(
     providers: Iterable[Provider], overrides: Mapping[str, str] | None = None
 ) -> ProviderAnalyzer:
-    chosen = select_providers(providers, overrides)
+    return _compose(_check_availability(providers), overrides or {})
+
+
+def select_providers(
+    providers: Iterable[Provider], overrides: Mapping[str, str] | None = None
+) -> dict[str, Provider]:
+    """The Provider that overrides names for a Capability, else the highest-priority available
+    one."""
+    return _select(_check_availability(providers), overrides or {})
+
+
+def _check_availability(providers: Iterable[Provider]) -> _Installed:
+    return [(provider, _is_available(provider)) for provider in providers]
+
+
+def _compose(installed: _Installed, overrides: Mapping[str, str]) -> ProviderAnalyzer:
+    chosen = _select(installed, overrides)
     if FINGERPRINT not in chosen:
         raise MissingCapabilityError(
             f"no available Provider for the {FINGERPRINT} Capability, which framewise needs "
@@ -231,35 +263,69 @@ def compose_analyzer(
         eye_state=chosen.get(EYE_STATE),
         face_quality=chosen.get(FACE_QUALITY),
         aesthetics=chosen.get(AESTHETICS),
+        provider_lineup=_describe_provider_lineup(installed, chosen, overrides),
     )
 
 
-def select_providers(
-    providers: Iterable[Provider], overrides: Mapping[str, str] | None = None
-) -> dict[str, Provider]:
-    """The Provider that overrides names for a Capability, else the highest-priority available
-    one."""
-    providers = list(providers)
+def _describe_provider_lineup(
+    installed: _Installed, chosen: Mapping[str, Provider], overrides: Mapping[str, str]
+) -> ProviderLineup:
+    lineup = {}
+    for capability in CAPABILITIES:
+        active = chosen.get(capability)
+        lineup[capability] = CapabilityLineup(
+            active=_active_provider(active, configured=capability in overrides),
+            alternatives=_alternatives(installed, capability, active),
+        )
+    return lineup
+
+
+def _alternatives(
+    installed: _Installed, capability: str, active: Provider | None
+) -> tuple[AlternativeProvider, ...]:
+    others = [
+        (provider, available)
+        for provider, available in installed
+        if provider.capability == capability and provider is not active
+    ]
+    others.sort(key=lambda pair: pair[0].priority, reverse=True)
+    return tuple(
+        AlternativeProvider(id=provider.id, version=provider.version, available=available)
+        for provider, available in others
+    )
+
+
+def _active_provider(provider: Provider | None, configured: bool) -> ActiveProvider | None:
+    if provider is None:
+        return None
+    return ActiveProvider(
+        id=provider.id,
+        version=provider.version,
+        source="config" if configured else "automatic",
+    )
+
+
+def _select(installed: _Installed, overrides: Mapping[str, str]) -> dict[str, Provider]:
     chosen: dict[str, Provider] = {}
-    for provider in providers:
-        if not _is_available(provider):
+    for provider, available in installed:
+        if not available:
             continue
         current = chosen.get(provider.capability)
         if current is None or provider.priority > current.priority:
             chosen[provider.capability] = provider
-    for capability, provider_id in (overrides or {}).items():
-        chosen[capability] = _overriding_provider(providers, capability, provider_id)
+    for capability, provider_id in overrides.items():
+        chosen[capability] = _overriding_provider(installed, capability, provider_id)
     return chosen
 
 
-def _overriding_provider(providers: list[Provider], capability: str, provider_id: str) -> Provider:
+def _overriding_provider(installed: _Installed, capability: str, provider_id: str) -> Provider:
     if capability not in CAPABILITIES:
         raise ProviderConfigError(
             f'unknown Capability "{capability}", expected one of {", ".join(CAPABILITIES)}'
         )
-    for provider in providers:
+    for provider, available in installed:
         if provider.capability == capability and provider.id == provider_id:
-            if not _is_available(provider):
+            if not available:
                 raise ProviderConfigError(
                     f'the {capability} Provider "{provider_id}" is not available on this machine'
                 )

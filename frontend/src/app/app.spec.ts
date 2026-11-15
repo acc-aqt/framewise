@@ -20,6 +20,29 @@ const summary: SessionSummary = {
   raw_jpg_count: 2,
   skipped: ['100LEICA/L1000009-Pano.dng'],
   keeper_budget: 0.4,
+  providers: {
+    fingerprint: {
+      active: { id: 'apple-vision-fingerprint', version: 2, source: 'automatic' },
+      alternatives: [],
+    },
+    'face-detection': {
+      active: { id: 'mediapipe-face-detection', version: 1, source: 'config' },
+      alternatives: [
+        { id: 'apple-vision-face-detection', version: 3, available: true },
+        { id: 'cuda-face-detection', version: 1, available: false },
+      ],
+    },
+    'eye-state': {
+      active: null,
+      alternatives: [{ id: 'mediapipe-eye-state', version: 1, available: false }],
+    },
+    'face-quality': {
+      active: { id: 'apple-vision-face-quality', version: 1, source: 'automatic' },
+      alternatives: [],
+    },
+    aesthetics: { active: null, alternatives: [] },
+  },
+  config_path: '/Users/me/Library/Application Support/framewise/config.toml',
 };
 
 describe('Review UI', () => {
@@ -226,6 +249,179 @@ describe('Review UI', () => {
       await choose('boom', { status: 500, statusText: 'Server Error' });
 
       expect(text('[data-testid="choose-session-error"]')).toBe('Could not open the Session.');
+    });
+  });
+
+  describe('Analysis settings', () => {
+    const gear = () => all('[data-testid="open-analysis-settings"]')[0];
+    const popover = () => all('[data-testid="analysis-settings"]')[0];
+    const rows = () =>
+      all('[data-testid="capability"]').map((row) =>
+        Array.from(row.children)
+          .filter((part) => part.getAttribute('data-testid') !== 'alternatives')
+          .map((part) => part.textContent?.replace(/\s+/g, ' ').trim())
+          .join(' '),
+      );
+
+    async function openSettings(): Promise<void> {
+      await respond(summary, []);
+      gear().click();
+      await settle();
+    }
+
+    it('shows the Provider in use per Capability, with its version and source', async () => {
+      await openSettings();
+
+      expect(gear().getAttribute('aria-label')).toBe('Analysis settings');
+      expect(popover().getAttribute('role')).toBe('dialog');
+      expect(rows()).toEqual([
+        'Fingerprint (grouping) apple-vision-fingerprint v2 · picked automatically',
+        'Face detection mediapipe-face-detection v1 · chosen in config.toml',
+        'Eye state None · eyes count as unknown',
+        'Face quality apple-vision-face-quality v1 · picked automatically',
+        'Aesthetics None · aesthetics is left out of the score',
+      ]);
+    });
+
+    it('lists the Capabilities in the order the Session API sends them', async () => {
+      const { fingerprint, aesthetics } = summary.providers;
+      await respond({ ...summary, providers: { aesthetics, fingerprint } }, []);
+      gear().click();
+      await settle();
+
+      expect(rows()).toEqual([
+        'Aesthetics None · aesthetics is left out of the score',
+        'Fingerprint (grouping) apple-vision-fingerprint v2 · picked automatically',
+      ]);
+    });
+
+    it('lists the alternatives per Capability, marking those that cannot run here', async () => {
+      await openSettings();
+
+      const alternatives = all('[data-testid="capability"]').map((row) =>
+        Array.from(row.querySelectorAll('[data-testid="alternative"]')).map((alternative) => ({
+          text: alternative.textContent?.replace(/\s+/g, ' ').trim(),
+          unavailable: alternative.classList.contains('unavailable'),
+        })),
+      );
+      expect(alternatives).toEqual([
+        [],
+        [
+          { text: 'apple-vision-face-detection v3', unavailable: false },
+          {
+            text: 'cuda-face-detection v1 · not available on this machine',
+            unavailable: true,
+          },
+        ],
+        [{ text: 'mediapipe-eye-state v1 · not available on this machine', unavailable: true }],
+        [],
+        [],
+      ]);
+    });
+
+    it("says which signals come from framewise's built-in image maths", async () => {
+      await openSettings();
+
+      expect(text('[data-testid="built-in-image-maths"]')).toBe(
+        "Sharpness, motion blur, exposure and low and high key come from framewise's built-in image maths.",
+      );
+    });
+
+    it('ends with where to switch a Provider and when the change applies', async () => {
+      await openSettings();
+
+      expect(text('[data-testid="config-path"]')).toBe(
+        '/Users/me/Library/Application Support/framewise/config.toml',
+      );
+      expect(text('[data-testid="config-applies"]')).toBe(
+        'A change applies on the next framewise review, which re-analyses only the Frames it affects.',
+      );
+    });
+
+    describe('example [providers] entry', () => {
+      const example = () => all('[data-testid="config-example"]')[0].textContent;
+
+      async function openSettingsWith(providers: SessionSummary['providers']): Promise<void> {
+        await respond({ ...summary, providers }, []);
+        gear().click();
+        await settle();
+      }
+
+      it('switches to the first available alternative of a Capability', async () => {
+        await openSettings();
+
+        expect(example()).toBe('[providers]\nface-detection = "apple-vision-face-detection"');
+      });
+
+      it('prefers an available Fingerprint alternative', async () => {
+        await openSettingsWith({
+          ...summary.providers,
+          fingerprint: {
+            active: { id: 'apple-vision-fingerprint', version: 2, source: 'automatic' },
+            alternatives: [
+              { id: 'cuda-fingerprint', version: 1, available: false },
+              { id: 'mediapipe-fingerprint', version: 1, available: true },
+            ],
+          },
+        });
+
+        expect(example()).toBe('[providers]\nfingerprint = "mediapipe-fingerprint"');
+      });
+
+      it('names the Fingerprint Provider in use when no alternative is available', async () => {
+        await openSettingsWith({
+          fingerprint: {
+            active: { id: 'apple-vision-fingerprint', version: 2, source: 'automatic' },
+            alternatives: [{ id: 'cuda-fingerprint', version: 1, available: false }],
+          },
+          'eye-state': { active: null, alternatives: [] },
+        });
+
+        expect(example()).toBe('[providers]\nfingerprint = "apple-vision-fingerprint"');
+      });
+    });
+
+    it('closes only the popover on Escape and gives focus back to the gear', async () => {
+      await respond(summary, [group(1, [frame(1, 'jpg-only')])]);
+      all('[data-testid="group-tile"]')[0].click();
+      await fixture.whenStable();
+      gear().click();
+      await settle();
+      expect(popover().contains(document.activeElement)).toBe(true);
+
+      document.activeElement!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
+      await settle();
+
+      expect(popover()).toBeUndefined();
+      expect(all('[data-testid="group-view"]').length).toBe(1);
+      expect(document.activeElement).toBe(gear());
+    });
+
+    it('closes on a click outside it, but not on a click inside it', async () => {
+      await openSettings();
+
+      popover().click();
+      await settle();
+      expect(popover()).toBeDefined();
+
+      document.body.click();
+      await settle();
+      expect(popover()).toBeUndefined();
+      expect(document.activeElement).toBe(gear());
+    });
+
+    it('is not offered on the session picker', async () => {
+      const notFound = { status: 404, statusText: 'Not Found' };
+      http.expectOne('/api/session').flush({ detail: 'No Session open' }, notFound);
+      http.expectOne('/api/progress').flush({ detail: 'Not Found' }, notFound);
+      await settle();
+      http.expectOne('/api/groups').flush({ detail: 'Not Found' }, notFound);
+      await settle();
+
+      expect(all('[data-testid="choose-session"]').length).toBe(1);
+      expect(gear()).toBeUndefined();
     });
   });
 

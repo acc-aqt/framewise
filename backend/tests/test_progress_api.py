@@ -3,11 +3,10 @@ import sys
 import threading
 
 import pytest
-from conftest import BACKGROUND_PRIORITY_PLATFORMS, clean_signals, make_jpg, wait_until
+from conftest import BACKGROUND_PRIORITY_PLATFORMS, clean_signals, make_jpg, review_app, wait_until
 from fastapi.testclient import TestClient
 
 from framewise.review import SessionAnalysis, open_session
-from framewise.server import create_app
 
 
 def progress(client) -> dict:
@@ -100,7 +99,7 @@ def test_time_remaining_ignores_frames_that_only_needed_a_thumbnail(
 
     analysis = SessionAnalysis(store, analyzer, clock=clock)
     threading.Thread(target=analysis.run, daemon=True).start()
-    client = TestClient(create_app(store, analysis))
+    client = review_app(store, analysis)
     wait_until(lambda: progress(client)["frames_done"] == 3 and analyzer.in_flight == 1)
     assert progress(client)["seconds_remaining"] is None
 
@@ -166,7 +165,7 @@ def test_progress_counts_frames_analysed_before_as_done_before_the_run_starts(
     review()
 
     store = open_session(session_dir, data_dir)
-    client = TestClient(create_app(store, SessionAnalysis(store, analyzer)))
+    client = review_app(store, SessionAnalysis(store, analyzer))
 
     assert progress(client)["frames_left"] == 0
 

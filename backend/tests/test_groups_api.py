@@ -3,13 +3,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
-from conftest import make_jpg, make_raw
-from fastapi.testclient import TestClient
+from conftest import make_jpg, make_raw, review_app
 
 from framewise.analyzer import SimilarityThresholds
 from framewise.providers import compose_analyzer
 from framewise.review import SessionAnalysis, open_session
-from framewise.server import create_app
 
 START = datetime(2026, 6, 20, 14, 30, 0)
 BEACH = [1.0, 0.0, 0.0]
@@ -181,4 +179,4 @@ def test_frames_are_grouped_by_the_fingerprint_providers_own_thresholds(
     analysis = SessionAnalysis(store, compose_analyzer([fingerprint]))
     analysis.run()
 
-    assert group_paths(TestClient(create_app(store, analysis))) == expected
+    assert group_paths(review_app(store, analysis)) == expected

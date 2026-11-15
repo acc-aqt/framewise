@@ -114,6 +114,14 @@ export class App {
     const winner = this.comparing() ? findWinner(group) : undefined;
     return winner === undefined ? [frame] : [frame, winner];
   });
+  /** Where the current Frame sits in its Group, counting from 1. */
+  protected readonly loupePosition = computed(() => {
+    const frame = this.currentFrame();
+    const group = this.openGroup();
+    return frame === null || group === null
+      ? null
+      : { index: group.frames.indexOf(frame) + 1, total: group.frames.length };
+  });
   protected readonly overrideFailed = signal(false);
   protected readonly keeperBudget = linkedSignal(() =>
     this.summary.hasValue() ? this.summary.value().keeper_budget : null,

@@ -79,6 +79,10 @@ _Avoid_: Quota, target, limit
 A rating the photographer gave a Frame in Lightroom during a past cull. framewise uses these only to measure how often it agrees with the photographer.
 _Avoid_: Ground truth, label
 
+**Reference benchmark**:
+The photographer's own Session with Reference ratings, which `framewise-benchmark` measures agreement on and framewise's thresholds are calibrated against. Its photos are private and not in the repo.
+_Avoid_: sewts
+
 ## Review
 
 **Proposal**:

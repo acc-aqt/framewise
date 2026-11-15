@@ -1,5 +1,5 @@
-"""The sewts benchmark: how often the Proposal agrees with the photographer's Reference ratings in
-Lightroom Classic, and how long a cold first pass over a Session takes.
+"""The reference benchmark: how often the Proposal agrees with the photographer's Reference
+ratings in Lightroom Classic, and how long a cold first pass over a Session takes.
 
 Run by hand, not in CI. It reads a copy of the Lightroom Classic catalog, never the catalog
 itself, and keeps its Session store in a temporary folder, so it writes nothing outside the

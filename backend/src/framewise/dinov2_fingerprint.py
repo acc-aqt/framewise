@@ -33,8 +33,9 @@ class DinoV2Fingerprint:
     id = "dinov2-small-fingerprint"
     version = 1
     priority = PRIORITY
-    # Calibrated on sewts against Apple Vision's Groups: near_duplicate 0.82 matches them best
-    # (pairwise same-Group F1 0.93, 33 Groups to Apple's 30), with 0.80 to 0.83 close behind.
+    # Calibrated on the reference benchmark against Apple Vision's Groups: near_duplicate 0.82
+    # matches them best (pairwise same-Group F1 0.93, 33 Groups to Apple's 30), with 0.80 to 0.83
+    # close behind.
     # Any burst threshold from 0.4 to 0.76 gives the same Groups there; 0.7 sits inside that.
     similarity = SimilarityThresholds(burst=0.7, near_duplicate=0.82)
 

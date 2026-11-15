@@ -1,4 +1,4 @@
-from test_providers import FakeFingerprint, FakeProvider
+from test_providers import BrokenFingerprint, FakeFingerprint, FakeProvider
 
 from framewise.providers import resolve_analyzer
 
@@ -55,4 +55,30 @@ def test_the_session_lists_every_capability_in_the_fixed_order(review):
         "eye-state",
         "face-quality",
         "aesthetics",
+    ]
+
+
+def test_the_session_lists_the_alternatives_in_descending_priority(review):
+    providers = session_providers(
+        review,
+        [
+            FakeFingerprint(id="low", priority=1, version=2),
+            FakeFingerprint(id="top", priority=9),
+            FakeFingerprint(id="elsewhere", priority=5, available=False),
+        ],
+    )
+
+    assert providers["fingerprint"]["alternatives"] == [
+        {"id": "elsewhere", "version": 1, "available": False},
+        {"id": "low", "version": 2, "available": True},
+    ]
+
+
+def test_an_alternative_whose_availability_check_raises_is_listed_as_unavailable(review):
+    providers = session_providers(
+        review, [FakeFingerprint(id="fallback"), BrokenFingerprint(id="broken", version=4)]
+    )
+
+    assert providers["fingerprint"]["alternatives"] == [
+        {"id": "broken", "version": 4, "available": False}
     ]

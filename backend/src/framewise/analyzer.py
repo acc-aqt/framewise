@@ -23,9 +23,19 @@ class ActiveProvider:
 
 
 @dataclass(frozen=True)
+class AlternativeProvider:
+    id: str
+    version: int
+    available: bool
+    """Whether it can run on this machine."""
+
+
+@dataclass(frozen=True)
 class CapabilityLineup:
     active: ActiveProvider | None
     """None where no Provider serves the Capability."""
+    alternatives: tuple[AlternativeProvider, ...] = ()
+    """The other installed Providers of the Capability, in descending priority."""
 
 
 ProviderLineup = Mapping[str, CapabilityLineup]

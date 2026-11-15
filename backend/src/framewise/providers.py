@@ -10,6 +10,7 @@ from typing import Protocol
 
 from framewise.analyzer import (
     ActiveProvider,
+    AlternativeProvider,
     CapabilityLineup,
     Face,
     FrameSignals,
@@ -229,6 +230,7 @@ def discover_providers(found: Iterable[EntryPoint] | None = None) -> list[Provid
 def compose_analyzer(
     providers: Iterable[Provider], overrides: Mapping[str, str] | None = None
 ) -> ProviderAnalyzer:
+    providers = list(providers)
     overrides = dict(overrides or {})
     chosen = select_providers(providers, overrides)
     if FINGERPRINT not in chosen:
@@ -242,17 +244,31 @@ def compose_analyzer(
         eye_state=chosen.get(EYE_STATE),
         face_quality=chosen.get(FACE_QUALITY),
         aesthetics=chosen.get(AESTHETICS),
-        lineup=describe_lineup(chosen, overrides),
+        lineup=describe_lineup(providers, chosen, overrides),
     )
 
 
-def describe_lineup(chosen: Mapping[str, Provider], overrides: Mapping[str, str]) -> ProviderLineup:
+def describe_lineup(
+    providers: Iterable[Provider], chosen: Mapping[str, Provider], overrides: Mapping[str, str]
+) -> ProviderLineup:
+    providers = list(providers)
     return {
         capability: CapabilityLineup(
-            active=_active_provider(chosen.get(capability), capability in overrides)
+            active=_active_provider(chosen.get(capability), capability in overrides),
+            alternatives=_alternatives(providers, capability, chosen.get(capability)),
         )
         for capability in CAPABILITIES
     }
+
+
+def _alternatives(
+    providers: list[Provider], capability: str, active: Provider | None
+) -> tuple[AlternativeProvider, ...]:
+    others = [p for p in providers if p.capability == capability and p is not active]
+    return tuple(
+        AlternativeProvider(id=p.id, version=p.version, available=_is_available(p))
+        for p in sorted(others, key=lambda p: p.priority, reverse=True)
+    )
 
 
 def _active_provider(provider: Provider | None, configured: bool) -> ActiveProvider | None:

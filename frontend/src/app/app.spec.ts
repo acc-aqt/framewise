@@ -754,6 +754,95 @@ describe('Review UI', () => {
     expect(coverThumbnails()).toEqual(['/api/frames/2/thumbnail', '/api/frames/4/thumbnail']);
   });
 
+  describe('faceted filters', () => {
+    const duplicate = reason('weaker-duplicate', 'Weaker duplicate');
+    const sharpest = reason('sharpest', 'Sharpest');
+
+    beforeEach(async () => {
+      await respond(summary, [
+        group(1, [
+          frame(1, 'jpg-only', { verdict: 'winner', reasons: [sharpest] }),
+          frame(2, 'jpg-only', { verdict: 'reject', reasons: [duplicate] }),
+          frame(3, 'jpg-only', { verdict: 'unsure', reasons: [duplicate] }),
+        ]),
+        group(4, [frame(4, 'jpg-only', { verdict: 'winner', reasons: [sharpest] })]),
+      ]);
+    });
+
+    function options(testId: string): { label: string; disabled: boolean }[] {
+      const select = all(`[data-testid="${testId}"]`)[0] as HTMLSelectElement;
+      return Array.from(select.options).map((option) => ({
+        label: option.textContent?.trim() ?? '',
+        disabled: option.disabled,
+      }));
+    }
+
+    it('counts each Reason over the Frames with the chosen Verdict', async () => {
+      await choose(all('[data-testid="verdict-filter"]')[0] as HTMLSelectElement, 'winner');
+
+      expect(options('reason-filter')).toEqual([
+        { label: 'All Reasons', disabled: false },
+        { label: 'Sharpest (2)', disabled: false },
+        { label: 'Weaker duplicate (0)', disabled: true },
+      ]);
+    });
+
+    it('counts each Verdict over the Frames with the chosen Reason', async () => {
+      await choose(
+        all('[data-testid="reason-filter"]')[0] as HTMLSelectElement,
+        'weaker-duplicate',
+      );
+
+      expect(options('verdict-filter')).toEqual([
+        { label: 'All Verdicts', disabled: false },
+        { label: 'Winner (0)', disabled: true },
+        { label: 'Keeper (0)', disabled: true },
+        { label: 'Reject (1)', disabled: false },
+        { label: 'Unsure (1)', disabled: false },
+      ]);
+    });
+
+    it('keeps the chosen options enabled when they count no Frames', async () => {
+      await choose(all('[data-testid="verdict-filter"]')[0] as HTMLSelectElement, 'winner');
+      await choose(
+        all('[data-testid="reason-filter"]')[0] as HTMLSelectElement,
+        'weaker-duplicate',
+      );
+
+      expect(options('verdict-filter')[1]).toEqual({ label: 'Winner (0)', disabled: false });
+      expect(options('reason-filter')[2]).toEqual({
+        label: 'Weaker duplicate (0)',
+        disabled: false,
+      });
+    });
+
+    it('says politely when no Frames match, and clears the filters', async () => {
+      await choose(all('[data-testid="verdict-filter"]')[0] as HTMLSelectElement, 'winner');
+      await choose(
+        all('[data-testid="reason-filter"]')[0] as HTMLSelectElement,
+        'weaker-duplicate',
+      );
+
+      const empty = all('[data-testid="no-matches"]')[0];
+      expect(empty.getAttribute('aria-live')).toBe('polite');
+      expect(text('[data-testid="no-matches-message"]', empty)).toBe(
+        'No Frames match Winner + Weaker duplicate.',
+      );
+      expect(coverThumbnails()).toEqual([]);
+
+      const clear = all('button', empty).find(
+        (button) => button.textContent?.trim() === 'Clear filters',
+      );
+      clear!.click();
+      await fixture.whenStable();
+
+      expect(all('[data-testid="no-matches-message"]')).toEqual([]);
+      expect(coverThumbnails()).toEqual(['/api/frames/1/thumbnail', '/api/frames/4/thumbnail']);
+      expect((all('[data-testid="verdict-filter"]')[0] as HTMLSelectElement).value).toBe('');
+      expect((all('[data-testid="reason-filter"]')[0] as HTMLSelectElement).value).toBe('');
+    });
+  });
+
   it('opens the whole Group of a filtered Frame', async () => {
     await respond(summary, [
       group(1, [

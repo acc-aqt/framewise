@@ -37,6 +37,12 @@ interface GridTile {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [ScrollingModule, FrameTile, Icon],
   template: `
+    <div class="no-matches" data-testid="no-matches" aria-live="polite">
+      @if (filtering() && tiles().length === 0) {
+        <p data-testid="no-matches-message">No Frames match {{ activeFilters() }}.</p>
+        <button type="button" class="btn" (click)="clearFilters.emit()">Clear filters</button>
+      }
+    </div>
     <cdk-virtual-scroll-viewport [itemSize]="rowHeight" class="viewport">
       <div
         *cdkVirtualFor="let row of rows()"
@@ -70,11 +76,25 @@ interface GridTile {
   `,
   styles: `
     :host {
-      display: block;
+      display: flex;
+      flex-direction: column;
       height: 100%;
     }
+    .no-matches {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-3);
+      color: var(--color-text-secondary);
+    }
+    .no-matches:not(:empty) {
+      padding: var(--space-6) 0;
+    }
+    .no-matches p {
+      margin: 0;
+    }
     .viewport {
-      height: 100%;
+      flex: 1;
     }
     .row {
       display: grid;
@@ -129,6 +149,7 @@ export class GroupGrid {
   readonly filter = input<ProposalFilter>(NO_FILTER);
   /** Emits the Frame shown on the clicked tile. */
   readonly open = output<Frame>();
+  readonly clearFilters = output<void>();
 
   protected readonly rowHeight = ROW_HEIGHT_PX;
   protected readonly columns = signal(4);
@@ -144,6 +165,13 @@ export class GroupGrid {
         .filter((frame) => matchesFilter(frame, filter))
         .map((frame) => ({ frame, group })),
     );
+  });
+  protected readonly activeFilters = computed(() => {
+    const { verdict, reason } = this.filter();
+    const reasonLabel = this.groups()
+      .flatMap((group) => group.frames.flatMap((frame) => frame.reasons))
+      .find((candidate) => candidate.code === reason)?.label;
+    return [verdict && VERDICT_LABELS[verdict], reasonLabel].filter(Boolean).join(' + ');
   });
   protected readonly rows = computed(() => chunk(this.tiles(), this.columns()));
 

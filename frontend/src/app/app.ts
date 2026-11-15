@@ -206,6 +206,10 @@ export class App {
     }
   }
 
+  protected clearFilters(): void {
+    this.filter.set(NO_FILTER);
+  }
+
   protected openWriteBack(): void {
     this.closeGroup();
     this.writingBack.set(true);

@@ -14,6 +14,8 @@ Cull a photo shoot on your own machine: framewise groups bursts and near-duplica
 
 Everything runs locally; no photo leaves the machine. Terms such as Frame, Group and Verdict are defined in the [Glossary](GLOSSARY.md).
 
+Built with AI coding agents; design, calibration and review by me.
+
 ## Install
 
 The repo has two parts:

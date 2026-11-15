@@ -24,8 +24,12 @@ class FakeServer:
         self.progress_when_ready = self.progress()
         on_ready()
 
+    def client(self) -> TestClient:
+        """A client for the Review UI at the address framewise serves it on."""
+        return TestClient(self.app, base_url=f"http://{self.host}:{self.port}")
+
     def progress(self) -> dict:
-        return TestClient(self.app).get("/api/progress").json()
+        return self.client().get("/api/progress").json()
 
 
 class FakeWakeLock:
@@ -60,7 +64,7 @@ def test_review_scans_the_folder_serves_on_localhost_and_opens_the_browser(
 
     assert (server.host, server.port) == ("127.0.0.1", 9123)
     assert opened == ["http://127.0.0.1:9123/"]
-    assert TestClient(server.app).get("/api/session").json()["total_frames"] == 1
+    assert server.client().get("/api/session").json()["total_frames"] == 1
     assert len(list(isolated_data_dir.glob("*.sqlite"))) == 1
 
 
@@ -185,7 +189,7 @@ def test_review_without_a_folder_opens_the_review_ui_with_no_session(isolated_da
     )
 
     assert opened == ["http://127.0.0.1:8765/"]
-    assert TestClient(server.app).get("/api/session").status_code == 404
+    assert server.client().get("/api/session").status_code == 404
     assert list(isolated_data_dir.glob("*.sqlite")) == []
 
 
@@ -202,7 +206,7 @@ def test_review_without_a_folder_opens_the_session_chosen_in_the_review_ui(
         keep_awake=FakeWakeLock(),
         choose_folder=lambda: session_dir,
     )
-    client = TestClient(server.app)
+    client = server.client()
 
     assert client.post("/api/session/choose").json() == {"opened": True}
     assert client.get("/api/session").json()["total_frames"] == 1
@@ -222,7 +226,7 @@ def test_review_without_a_folder_stays_without_a_session_when_the_dialog_is_canc
         keep_awake=FakeWakeLock(),
         choose_folder=lambda: None,
     )
-    client = TestClient(server.app)
+    client = server.client()
 
     assert client.post("/api/session/choose").json() == {"opened": False}
     assert client.get("/api/session").status_code == 404
@@ -318,7 +322,7 @@ def test_review_shows_the_providers_of_the_running_analyzer(session_dir, isolate
         keep_awake=FakeWakeLock(),
     )
 
-    providers = TestClient(server.app).get("/api/session").json()["providers"]
+    providers = server.client().get("/api/session").json()["providers"]
     assert providers["fingerprint"]["active"] == {
         "id": "fake-fingerprint",
         "version": 2,
@@ -339,6 +343,95 @@ def test_review_shows_the_config_path_in_the_data_directory_even_without_the_fil
         keep_awake=FakeWakeLock(),
     )
 
-    config_path = TestClient(server.app).get("/api/session").json()["config_path"]
+    config_path = server.client().get("/api/session").json()["config_path"]
     assert config_path == str(isolated_data_dir / "config.toml")
     assert not (isolated_data_dir / "config.toml").exists()
+
+
+def serve_review(session_dir) -> FakeServer:
+    make_jpg(session_dir / "DSCF0001.JPG")
+    server = FakeServer()
+    main(
+        ["review", str(session_dir)],
+        serve=server,
+        open_browser=print,
+        analyzer=FakeAnalyzer(),
+        keep_awake=FakeWakeLock(),
+    )
+    wait_until(lambda: server.progress()["frames_left"] == 0)
+    return server
+
+
+def test_review_refuses_requests_for_a_host_other_than_this_machine(session_dir, isolated_data_dir):
+    client = serve_review(session_dir).client()
+
+    for host in ("attacker.example:8765", "attacker.example", "192.168.1.20:8765"):
+        assert client.get("/api/session", headers={"host": host}).status_code == 403
+        assert client.get("/api/frames/1/image", headers={"host": host}).status_code == 403
+    assert client.get("/api/session", headers={"host": "localhost:8765"}).status_code == 200
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"sec-fetch-site": "cross-site", "origin": "https://attacker.example"},
+        {"sec-fetch-site": "same-site", "origin": "http://localhost:3000"},
+        {"origin": "https://attacker.example"},
+        {"origin": "null"},
+    ],
+)
+def test_review_refuses_changes_sent_by_other_sites(session_dir, isolated_data_dir, headers):
+    client = serve_review(session_dir).client()
+    client.patch("/api/frames/1/override", json={"stars": 4})
+
+    for path in ("/api/session/reset", "/api/write-back", "/api/write-back/undo"):
+        assert client.post(path, headers=headers).status_code == 403
+    assert (
+        client.patch("/api/session", json={"keeper_budget": 0.1}, headers=headers).status_code
+        == 403
+    )
+
+    [group] = client.get("/api/groups").json()
+    assert group["frames"][0]["override"]["stars"] == 4
+
+
+def test_review_accepts_changes_from_its_own_review_ui(session_dir, isolated_data_dir):
+    client = serve_review(session_dir).client()
+    own_ui = {"sec-fetch-site": "same-origin", "origin": "http://127.0.0.1:8765"}
+
+    response = client.patch("/api/frames/1/override", json={"stars": 4}, headers=own_ui)
+
+    assert response.status_code == 200
+    assert client.post("/api/session/reset", headers=own_ui).status_code == 200
+
+
+def test_review_lets_other_sites_open_the_review_ui_but_not_fetch_from_it(
+    session_dir, isolated_data_dir
+):
+    client = serve_review(session_dir).client()
+    embedded = {"sec-fetch-site": "cross-site", "sec-fetch-mode": "no-cors"}
+    link = {"sec-fetch-site": "cross-site", "sec-fetch-mode": "navigate"}
+
+    assert client.get("/api/frames/1/image", headers=embedded).status_code == 403
+    assert client.get("/api/write-back", headers=embedded).status_code == 403
+    assert client.get("/", headers=link).status_code != 403
+
+
+def test_review_without_a_folder_refuses_another_site_opening_the_folder_dialog(
+    isolated_data_dir,
+):
+    server = FakeServer()
+    dialogs = []
+    main(
+        ["review"],
+        serve=server,
+        open_browser=print,
+        analyzer=FakeAnalyzer(),
+        keep_awake=FakeWakeLock(),
+        choose_folder=lambda: dialogs.append(True),
+    )
+
+    response = server.client().post("/api/session/choose", headers={"sec-fetch-site": "cross-site"})
+
+    assert response.status_code == 403
+    assert dialogs == []

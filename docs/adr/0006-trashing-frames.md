@@ -18,17 +18,19 @@ Lightroom Classic imports a RAW and its JPG as two separate photos (ADR-0001), a
 4. **There is no undo inside framewise.** To bring a Frame back, the photographer restores its files from the Trash and runs `framewise review` again. The scan finds the Frame again, and its Overrides and Group Override come back, because those are kept for vanished Frames (ADR-0003, ADR-0004). Trashing removes only the Frame's row, thumbnail and analysis from the Session store.
 5. **Rating write-back keeps the originals of trashed files.** Undo write-back skips files that are not in the Session folder, so the undo still works once they are restored.
 6. **Trash is allowed while analysis runs.** A Frame trashed during its analysis is skipped without a warning.
-7. **The Review UI offers Trash in three places:**
+7. **The Review UI offers Trash in four places:**
    - `⌫` or `Delete` on the current Frame, as in Lightroom Classic;
    - "Trash Group" in the open Group and in the command palette;
-   - "Trash N selected" next to "Split off N selected".
+   - "Trash N selected" next to "Split off N selected";
+   - "Trash N Groups" for the Groups selected in All Groups, also as `⌫` or `Delete` and as "Trash N selected Groups" in the command palette. Selecting Groups is only possible while no filter is active, and there is no Select all.
 
-   Afterwards it shows the next Frame left in the Group, else the previous one, else the next Group's first Frame. If none of those is left, it returns to All Groups.
+   Afterwards an open Group shows the next Frame left in the Group, else the previous one, else the next Group's first Frame. If none of those is left, it returns to All Groups. A Trash from All Groups stays in All Groups at the same scroll position.
 
 ## Considered Options
 
 - **Deleting files permanently.** Rejected: one wrong key would lose photos for good.
 - **Hiding Frames from the Session without touching the files.** Rejected: Reject already covers "don't keep this". The photographer asked to get rid of the files.
+- **Selecting in a filtered grid.** Rejected: a filter lists single Frames from across the Session, so selecting there amounts to the deferred Session-wide "Trash all Rejects" below.
 - **A "Trash all Rejects" action.** Deferred: a Session-wide bulk trash is the riskiest action framewise could offer. Selecting the Rejects of a Group and trashing them covers the burst cleanup for now.
 
 ## Consequences

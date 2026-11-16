@@ -22,6 +22,7 @@ export type Shortcut =
   | { kind: 'makeWinner' }
   | { kind: 'trash' }
   | { kind: 'trashGroup' }
+  | { kind: 'trashGroups' }
   | { kind: 'writeBack' };
 
 /** What the Review UI is showing, which decides the commands that apply. */
@@ -33,6 +34,8 @@ export interface CommandContext {
   canSplitHere: boolean;
   /** Whether the current Frame is not already its Group's Winner. */
   canMakeWinner: boolean;
+  /** How many Groups are selected in All Groups. */
+  selectedGroupCount: number;
   writeBackAvailable: boolean;
 }
 
@@ -40,6 +43,8 @@ export interface CommandContext {
 export interface Command {
   id: string;
   label: string;
+  /** The label once the context is known, such as one counting what the command acts on. */
+  contextLabel?: (context: CommandContext) => string;
   /** The key as the photographer sees it, e.g. "P" or "⌥→". */
   key?: string;
   /** The `KeyboardEvent.key` that runs the command, matched case-insensitively. */
@@ -172,6 +177,16 @@ export const COMMANDS: readonly Command[] = [
   },
   frameCommand('trash', 'Trash Frame', '⌫', 'Backspace', { kind: 'trash' }),
   paletteCommand('trash-group', 'Trash Group', { kind: 'trashGroup' }, whenFrameOpen),
+  {
+    id: 'trash-groups',
+    label: 'Trash selected Groups',
+    contextLabel: ({ selectedGroupCount: count }) =>
+      count === 0
+        ? 'Trash selected Groups'
+        : `Trash ${count} selected ${count === 1 ? 'Group' : 'Groups'}`,
+    shortcut: { kind: 'trashGroups' },
+    appliesTo: (context) => context.selectedGroupCount > 0,
+  },
   paletteCommand(
     'write-back',
     'Rating write-back',
@@ -186,6 +201,10 @@ export function commandById(id: string): Command {
     throw new Error(`Unknown command: ${id}`);
   }
   return command;
+}
+
+export function commandLabel(command: Command, context: CommandContext): string {
+  return command.contextLabel?.(context) ?? command.label;
 }
 
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent);

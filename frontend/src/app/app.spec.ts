@@ -1680,7 +1680,8 @@ describe('Review UI', () => {
         expect(rows()).toContain('Make Winner W');
         expect(rows()).toContain('Trash Frame ⌫');
         expect(rows()).toContain('Trash Group');
-        expect(rows().length).toBe(31);
+        expect(rows()).toContain('Trash selected Groups');
+        expect(rows().length).toBe(32);
       });
 
       it('opens from the header button', async () => {
@@ -2505,6 +2506,352 @@ describe('Review UI', () => {
         'Could not move DSCF0001.JPG to the Trash: No Trash on the volume',
       );
       expect(currentFrameThumbnail()).toBe('/api/frames/1/thumbnail');
+    });
+
+    describe('selected Groups in All Groups', () => {
+      const allGroups = (): Group[] => [
+        group(1, [
+          frame(1, 'jpg-only', { verdict: 'winner' }),
+          frame(2, 'raw+jpg'),
+          frame(3, 'jpg-only'),
+        ]),
+        group(4, [frame(4, 'jpg-only', { verdict: 'winner' })]),
+        group(5, [frame(5, 'raw+jpg', { verdict: 'winner' }), frame(6, 'raw+jpg')]),
+        group(7, [frame(7, 'jpg-only', { verdict: 'winner' })]),
+      ];
+
+      const tiles = () => all('[data-testid="group-tile"]');
+      const checkboxes = () => all('[data-testid="select-group"]') as HTMLInputElement[];
+      const selectedTiles = () =>
+        checkboxes()
+          .map((checkbox, index) => (checkbox.checked ? index : -1))
+          .filter((index) => index !== -1);
+      const trashGroups = () => all('[data-testid="trash-groups"]')[0];
+
+      async function showAllGroups(): Promise<void> {
+        await respond(summary, allGroups());
+      }
+
+      async function respondToTrash(
+        frameIds: number[],
+        trashed: number[],
+        remaining: Group[],
+        failed: { path: string; error: string }[] = [],
+      ): Promise<void> {
+        const request = http.expectOne('/api/frames/trash');
+        expect(request.request.body).toEqual({ frame_ids: frameIds });
+        request.flush({ trashed, failed });
+        await settle();
+        http.expectOne('/api/session').flush(summary);
+        http.expectOne((request) => request.url.startsWith('/api/groups')).flush(remaining);
+        await settle();
+      }
+
+      it('trashes every Frame of the Groups selected by checkbox, Winners included', async () => {
+        await showAllGroups();
+        expect(trashGroups()).toBeUndefined();
+
+        await click(checkboxes()[0]);
+        await click(checkboxes()[2]);
+        expect(selectedTiles()).toEqual([0, 2]);
+        expect(text('[data-testid="trash-groups"]')).toBe('Trash 2 Groups');
+        await click(trashGroups());
+
+        expect(text('[data-testid="trash-confirmation"] p')).toBe(
+          'Move 2 Groups (5 Frames, 8 files) to the Trash?',
+        );
+        expect(text('#trash-note')).toContain('Lightroom will show as missing');
+        await click(all('[data-testid="trash-confirm"]')[0]);
+        await respondToTrash([1, 2, 3, 5, 6], [1, 2, 3, 5, 6], [allGroups()[1], allGroups()[3]]);
+
+        expect(all('[data-testid="group-view"]')).toEqual([]);
+        expect(coverThumbnails()).toEqual(['/api/frames/4/thumbnail', '/api/frames/7/thumbnail']);
+        expect(selectedTiles()).toEqual([]);
+        expect(trashGroups()).toBeUndefined();
+      });
+
+      async function clickWith(element: HTMLElement, init: MouseEventInit): Promise<void> {
+        element.dispatchEvent(new MouseEvent('click', { bubbles: true, ...init }));
+        await settle();
+      }
+
+      it('selects and deselects a Group with Command-click instead of opening it', async () => {
+        await showAllGroups();
+
+        await clickWith(tiles()[1], { metaKey: true });
+        await clickWith(tiles()[3], { metaKey: true });
+        expect(selectedTiles()).toEqual([1, 3]);
+        await clickWith(tiles()[1], { metaKey: true });
+
+        expect(selectedTiles()).toEqual([3]);
+        expect(text('[data-testid="trash-groups"]')).toBe('Trash 1 Group');
+        expect(all('[data-testid="group-view"]')).toEqual([]);
+      });
+
+      it('selects every Group in capture order between the last one selected and a Shift-click', async () => {
+        await showAllGroups();
+
+        await clickWith(tiles()[3], { metaKey: true });
+        await clickWith(tiles()[1], { shiftKey: true });
+        expect(selectedTiles()).toEqual([1, 2, 3]);
+        await click(trashGroups());
+
+        expect(text('[data-testid="trash-confirmation"] p')).toBe(
+          'Move 3 Groups (4 Frames, 6 files) to the Trash?',
+        );
+        await click(all('[data-testid="trash-confirm"]')[0]);
+        await respondToTrash([4, 5, 6, 7], [4, 5, 6, 7], [allGroups()[0]]);
+      });
+
+      it('selects a range with a Shift-click on a checkbox too', async () => {
+        await showAllGroups();
+
+        await click(checkboxes()[0]);
+        await clickWith(checkboxes()[2], { shiftKey: true });
+
+        expect(selectedTiles()).toEqual([0, 1, 2]);
+      });
+
+      it('still opens a Group on a plain click, clearing the selection', async () => {
+        await showAllGroups();
+        await click(checkboxes()[0]);
+
+        await click(tiles()[1]);
+        expect(all('[data-testid="group-view"]').length).toBe(1);
+        await click(all('[data-testid="back-to-groups"]')[0]);
+
+        expect(all('[data-testid="group-view"]')).toEqual([]);
+        expect(selectedTiles()).toEqual([]);
+        expect(trashGroups()).toBeUndefined();
+      });
+
+      it('clears the selection with Clear selection', async () => {
+        await showAllGroups();
+        await click(checkboxes()[0]);
+        await click(checkboxes()[1]);
+
+        await click(all('[data-testid="clear-selection"]')[0]);
+
+        expect(selectedTiles()).toEqual([]);
+        expect(trashGroups()).toBeUndefined();
+      });
+
+      it('asks to trash the selected Groups with Backspace or Delete, keeping them selected on Cancel', async () => {
+        await showAllGroups();
+        await click(checkboxes()[1]);
+
+        await press('Backspace');
+        expect(text('[data-testid="trash-confirmation"] p')).toBe(
+          'Move 1 Group (1 Frame, 1 file) to the Trash?',
+        );
+        await click(all('[data-testid="trash-cancel"]')[0]);
+        expect(confirmation()).toBeUndefined();
+        expect(selectedTiles()).toEqual([1]);
+
+        await press('Delete');
+        expect(confirmation()).toBeDefined();
+        await click(confirmation()!.parentElement!);
+        expect(confirmation()).toBeUndefined();
+        expect(selectedTiles()).toEqual([1]);
+        http.expectNone('/api/frames/trash');
+      });
+
+      it('keeps the selection when Escape closes the confirmation, and clears it on the next Escape', async () => {
+        await showAllGroups();
+        await click(checkboxes()[0]);
+        await press('Backspace');
+
+        await press('Escape');
+        expect(confirmation()).toBeUndefined();
+        expect(selectedTiles()).toEqual([0]);
+
+        await press('Escape');
+        expect(selectedTiles()).toEqual([]);
+      });
+
+      it('asks nothing on Backspace in All Groups with nothing selected', async () => {
+        await showAllGroups();
+
+        await press('Backspace');
+
+        expect(confirmation()).toBeUndefined();
+      });
+
+      it('trashes the selected Groups from the command palette', async () => {
+        await showAllGroups();
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+        await settle();
+        expect(paletteCommand('Trash selected Groups')?.getAttribute('aria-disabled')).toBe('true');
+        await press('Escape');
+        await click(checkboxes()[1]);
+        await click(checkboxes()[3]);
+
+        await runFromPalette('Trash 2 selected Groups');
+
+        expect(text('[data-testid="trash-confirmation"] p')).toBe(
+          'Move 2 Groups (2 Frames, 2 files) to the Trash?',
+        );
+        await click(all('[data-testid="trash-confirm"]')[0]);
+        await respondToTrash([4, 7], [4, 7], [allGroups()[0], allGroups()[2]]);
+      });
+
+      it('clears the selection and turns selecting off while a filter is on', async () => {
+        await showAllGroups();
+        await click(checkboxes()[0]);
+        await click(checkboxes()[1]);
+        const verdict = all('[data-testid="verdict-filter"]')[0] as HTMLSelectElement;
+
+        await choose(verdict, 'keeper');
+        expect(checkboxes()).toEqual([]);
+        expect(trashGroups()).toBeUndefined();
+        await press('Backspace');
+        expect(confirmation()).toBeUndefined();
+        await choose(verdict, '');
+
+        expect(checkboxes().length).toBe(4);
+        expect(selectedTiles()).toEqual([]);
+      });
+
+      it('trashes the Frames counted when the confirmation opened, even if the Groups reload meanwhile', async () => {
+        vi.useFakeTimers();
+        http.expectOne('/api/session').flush(summary);
+        await respondToPoll({ frames_done: 7, frames_left: 2, seconds_remaining: 10 }, allGroups());
+        await click(checkboxes()[2]);
+        await press('Backspace');
+
+        await nextPoll();
+        await respondToPoll({ frames_done: 9, frames_left: 0, seconds_remaining: 0 }, [
+          ...allGroups().slice(0, 2),
+          group(5, [
+            frame(5, 'raw+jpg', { verdict: 'winner' }),
+            frame(6, 'raw+jpg'),
+            frame(8, 'jpg-only'),
+          ]),
+          allGroups()[3],
+        ]);
+        expect(text('[data-testid="trash-confirmation"] p')).toBe(
+          'Move 1 Group (2 Frames, 4 files) to the Trash?',
+        );
+        await click(all('[data-testid="trash-confirm"]')[0]);
+
+        await respondToTrash(
+          [5, 6],
+          [5, 6],
+          [
+            ...allGroups().slice(0, 2),
+            group(8, [frame(8, 'jpg-only', { verdict: 'winner' })]),
+            allGroups()[3],
+          ],
+        );
+      });
+
+      it('keeps a selected Group selected when analysis gives it an earlier Frame and a new id', async () => {
+        vi.useFakeTimers();
+        http.expectOne('/api/session').flush(summary);
+        await respondToPoll({ frames_done: 7, frames_left: 2, seconds_remaining: 10 }, allGroups());
+        await click(checkboxes()[2]);
+
+        await nextPoll();
+        await respondToPoll({ frames_done: 9, frames_left: 0, seconds_remaining: 0 }, [
+          ...allGroups().slice(0, 2),
+          group(0, [
+            frame(0, 'jpg-only'),
+            frame(5, 'raw+jpg', { verdict: 'winner' }),
+            frame(6, 'raw+jpg'),
+          ]),
+          allGroups()[3],
+        ]);
+
+        expect(selectedTiles()).toEqual([2]);
+      });
+
+      it('drops a selected Group from the selection when analysis merges it with another', async () => {
+        vi.useFakeTimers();
+        http.expectOne('/api/session').flush(summary);
+        await respondToPoll({ frames_done: 7, frames_left: 2, seconds_remaining: 10 }, allGroups());
+        await click(checkboxes()[2]);
+
+        await nextPoll();
+        await respondToPoll({ frames_done: 9, frames_left: 0, seconds_remaining: 0 }, [
+          allGroups()[0],
+          group(4, [
+            frame(4, 'jpg-only', { verdict: 'winner' }),
+            frame(5, 'raw+jpg'),
+            frame(6, 'raw+jpg'),
+          ]),
+          allGroups()[3],
+        ]);
+
+        expect(selectedTiles()).toEqual([]);
+        expect(trashGroups()).toBeUndefined();
+      });
+
+      it('focuses the tile now where the first trashed Group was', async () => {
+        await showAllGroups();
+        await click(checkboxes()[2]);
+        await click(checkboxes()[1]);
+        await press('Backspace');
+        await click(all('[data-testid="trash-confirm"]')[0]);
+
+        await respondToTrash([4, 5, 6], [4, 5, 6], [allGroups()[0], allGroups()[3]]);
+
+        expect(document.activeElement).toBe(tiles()[1]);
+        expect(tiles()[1].getAttribute('aria-label')).toContain('DSCF0007.JPG');
+      });
+
+      it('focuses the last tile when the trashed Groups were at the end', async () => {
+        await showAllGroups();
+        await click(checkboxes()[3]);
+        await press('Backspace');
+        await click(all('[data-testid="trash-confirm"]')[0]);
+
+        await respondToTrash([7], [7], allGroups().slice(0, 3));
+
+        expect(document.activeElement).toBe(tiles()[2]);
+      });
+
+      it('keeps the Groups that could not be fully trashed selected, and says which files failed', async () => {
+        await showAllGroups();
+        await click(checkboxes()[0]);
+        await click(checkboxes()[2]);
+        await press('Backspace');
+        await click(all('[data-testid="trash-confirm"]')[0]);
+
+        await respondToTrash(
+          [1, 2, 3, 5, 6],
+          [1, 3, 5, 6],
+          [group(2, [frame(2, 'raw+jpg', { verdict: 'winner' })]), allGroups()[1], allGroups()[3]],
+          [{ path: 'DSCF0002.JPG', error: 'No Trash on the volume' }],
+        );
+
+        expect(text('[data-testid="trash-error"]')).toBe(
+          'Could not move DSCF0002.JPG to the Trash: No Trash on the volume',
+        );
+        expect(coverThumbnails()).toEqual([
+          '/api/frames/2/thumbnail',
+          '/api/frames/4/thumbnail',
+          '/api/frames/7/thumbnail',
+        ]);
+        expect(selectedTiles()).toEqual([0]);
+        expect(text('[data-testid="trash-groups"]')).toBe('Trash 1 Group');
+      });
+
+      it('offers no Select all', async () => {
+        await showAllGroups();
+
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', metaKey: true }));
+        await settle();
+        await runFromPaletteIfListed('Select all');
+
+        expect(selectedTiles()).toEqual([]);
+      });
+
+      async function runFromPaletteIfListed(label: string): Promise<void> {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+        await settle();
+        expect(paletteCommand(label)).toBeUndefined();
+        await press('Escape');
+      }
     });
   });
 });

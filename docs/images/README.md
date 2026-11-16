@@ -1,6 +1,6 @@
 # README images
 
-`workflow.gif` shows framewise on a Session of 620 RAW+JPG Frames from a hike at the Drei Zinnen, photographed by the author. It is recorded with the scripts in [`scripts/demo`](../../scripts/demo/README.md), then converted from their MP4 at 960 px and 10 fps.
+`workflow.gif` shows framewise on a Session of 620 RAW+JPG Frames from a hike at the Drei Zinnen, photographed by the author. It is recorded with a private demo script, then converted from its MP4 at 960 px and 10 fps.
 
 `review-ui.jpg` shows framewise on a demo Session of 27 wildlife photos taken at NASA's Kennedy Space Center. They are works of the US government in the public domain, from the [NASA Image and Video Library](https://images.nasa.gov), downscaled to 2400 px with their EXIF kept:
 

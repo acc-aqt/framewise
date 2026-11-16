@@ -2810,6 +2810,38 @@ describe('Review UI', () => {
         expect(tiles()[1].getAttribute('aria-label')).toContain('DSCF0007.JPG');
       });
 
+      it('moves focus only once the Groups reload after the Trash, not on an earlier poll', async () => {
+        vi.useFakeTimers();
+        http.expectOne('/api/session').flush(summary);
+        await respondToPoll({ frames_done: 7, frames_left: 2, seconds_remaining: 10 }, allGroups());
+        await click(checkboxes()[1]);
+        await press('Backspace');
+        await click(all('[data-testid="trash-confirm"]')[0]);
+        const trash = http.expectOne('/api/frames/trash');
+        await nextPoll();
+        http.expectOne('/api/progress').flush({
+          frames_done: 8,
+          frames_left: 1,
+          seconds_remaining: 5,
+        });
+        await settle();
+        const groupsBeforeTrash = http.expectOne((request) => request.url.startsWith('/api/groups'));
+
+        trash.flush({ trashed: [4], failed: [] });
+        await settle();
+        http.expectOne('/api/session').flush(summary);
+        groupsBeforeTrash.flush(allGroups());
+        await settle();
+        expect(tiles()).not.toContain(document.activeElement);
+
+        http
+          .expectOne((request) => request.url.startsWith('/api/groups'))
+          .flush([allGroups()[0], allGroups()[2], allGroups()[3]]);
+        await settle();
+        expect(document.activeElement).toBe(tiles()[1]);
+        expect(tiles()[1].getAttribute('aria-label')).toContain('DSCF0005.JPG');
+      });
+
       it('focuses the last tile when the trashed Groups were at the end', async () => {
         await showAllGroups();
         await click(checkboxes()[3]);

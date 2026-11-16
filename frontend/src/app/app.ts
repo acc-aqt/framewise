@@ -172,8 +172,11 @@ export class App {
     return jpg_only_count + 2 * raw_jpg_count;
   });
   protected readonly trashing = signal<PendingTrash | null>(null);
+  // Set by a Trash until the Groups are requested again. A request already under way, such as
+  // one for an analysis poll, may predate the Trash, so the Groups are requested once it ends.
+  private readonly groupsNeedReload = signal(false);
   /** The grid position to focus once the Groups reload after a Trash from All Groups. */
-  private readonly tileToFocus = signal<{ index: number; groupsBefore: Group[] } | null>(null);
+  private readonly tileToFocus = signal<number | null>(null);
   private readonly groupGrid = viewChild(GroupGrid);
   protected readonly trashError = signal<string | null>(null);
   protected readonly paletteOpen = signal(false);
@@ -210,14 +213,21 @@ export class App {
       const timer = setTimeout(() => this.progress.reload(), POLL_INTERVAL_MS);
       onCleanup(() => clearTimeout(timer));
     });
+    effect(() => {
+      if (this.groupsNeedReload() && !this.groupsResource.isLoading()) {
+        this.groupsNeedReload.set(false);
+        this.groupsResource.reload();
+      }
+    });
     const injector = inject(Injector);
     effect(() => {
-      const pending = this.tileToFocus();
-      if (pending === null || this.groups() === pending.groupsBefore) {
+      const index = this.tileToFocus();
+      const reloadedAfterTrash = !this.groupsNeedReload() && !this.groupsResource.isLoading();
+      if (index === null || !reloadedAfterTrash) {
         return;
       }
       this.tileToFocus.set(null);
-      afterNextRender(() => this.groupGrid()?.focusTile(pending.index), { injector });
+      afterNextRender(() => this.groupGrid()?.focusTile(index), { injector });
     });
   }
 
@@ -346,7 +356,7 @@ export class App {
     this.trashApi.trash(trash.frames.map((frame) => frame.id)).subscribe({
       next: (result) => {
         if (trash.tileIndex !== null) {
-          this.tileToFocus.set({ index: trash.tileIndex, groupsBefore: this.groups() });
+          this.tileToFocus.set(trash.tileIndex);
         }
         this.afterTrash(result);
       },
@@ -473,7 +483,7 @@ export class App {
         : `Could not move ${result.failed.map((failure) => failure.path).join(', ')} to the Trash: ${result.failed[0].error}`,
     );
     this.summary.reload();
-    this.groupsResource.reload();
+    this.groupsNeedReload.set(true);
   }
 
   private save(request: Observable<unknown>): void {

@@ -96,6 +96,7 @@ In an open Group, review with Lightroom Classic's shortcuts:
 | `6`–`9` | Red, yellow, green, blue color label |
 | `P` / `X` / `U` | Keep, reject, clear the Override |
 | `W` | Make the current Frame the Group's Winner |
+| `⌫` / `Delete` | Move the current Frame to the Trash, after you confirm |
 | `←` / `→` | Previous or next Frame |
 | `⌥←` / `⌥→` | Previous or next Frame in the current Group |
 | `E` | Open the loupe |
@@ -107,6 +108,8 @@ In an open Group, review with Lightroom Classic's shortcuts:
 Overrides are saved in the Session store as you go ([ADR-0003](docs/adr/0003-overrides.md)). The Keeper budget never changes them, and the Frames you keep count towards it.
 
 To fix wrong grouping in an open Group, split it at a Frame or split off the selected Frames, move a Frame to the previous or next Group, or merge the Group with its neighbor. Fixed Groups are kept on later re-runs ([ADR-0004](docs/adr/0004-group-overrides.md)). **Reset grouping** hands a fixed Group back to framewise's grouping.
+
+To get rid of Frames for good, trash the current Frame, the selected Frames or the whole Group. framewise asks first, then moves every file of each Frame (RAW, JPG and any `.xmp` sidecar) to the OS Trash and takes the Frame out of the Session. Nothing is deleted outright: restore the files from the Trash and run `framewise review` again to bring a Frame back with its Overrides ([ADR-0006](docs/adr/0006-trashing-frames.md)). Trash before you import into Lightroom, because Lightroom shows trashed Frames it already imported as missing.
 
 ## Providers
 

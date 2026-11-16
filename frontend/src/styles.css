@@ -131,6 +131,17 @@ input[type='checkbox'] {
   background: #ffffff;
 }
 
+.btn-danger {
+  border-color: transparent;
+  background: var(--color-label-red);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--color-error);
+}
+
 .btn-ghost {
   border-color: transparent;
   background: transparent;

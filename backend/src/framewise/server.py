@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from send2trash import send2trash
 from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -17,6 +18,7 @@ from framewise.judge import DEFAULT_KEEPER_BUDGET, FaceCheck, Judgement, Proposa
 from framewise.lightroom import read_label_set
 from framewise.review import SessionAnalysis
 from framewise.store import AnalyzedFrame, Frame, Override, SessionStore
+from framewise.trash import MoveToTrash, trash_frames
 from framewise.write_back import (
     FileChange,
     Rating,
@@ -63,6 +65,7 @@ def create_app(
     *,
     provider_lineup: ProviderLineup,
     config_path: Path,
+    move_to_trash: MoveToTrash = send2trash,
 ) -> FastAPI:
     app = FastAPI(title="framewise")
     providers_json = {capability: asdict(lineup) for capability, lineup in provider_lineup.items()}
@@ -237,6 +240,13 @@ def create_app(
 
     def _known_frames(frame_ids: list[int]) -> list[Frame]:
         return [_known_frame(frame_id) for frame_id in frame_ids]
+
+    @app.post("/api/frames/trash")
+    def trash(selection: FrameSelection) -> dict:
+        """Moves the selected Frames' files to the OS Trash and takes them out of the
+        Session."""
+        result = trash_frames(store, _known_frames(selection.frame_ids), move_to_trash)
+        return {"trashed": result.trashed, "failed": [asdict(f) for f in result.failed]}
 
     @app.get("/api/write-back")
     def write_back_dry_run() -> dict:

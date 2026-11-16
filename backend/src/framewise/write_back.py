@@ -136,7 +136,7 @@ class RatingWriteBack:
             self._progress = WriteBackProgress(running=True)
             try:
                 return self._each(
-                    self._store.write_back_originals(),
+                    self._undoable_originals(),
                     lambda original: original.path,
                     self._restore_and_forget,
                 )
@@ -144,7 +144,16 @@ class RatingWriteBack:
                 self._progress = WriteBackProgress()
 
     def can_undo(self) -> bool:
-        return bool(self._store.write_back_originals())
+        return bool(self._undoable_originals())
+
+    def _undoable_originals(self) -> list[WrittenFileOriginal]:
+        """The originals of files still in the Session folder. Those of trashed files are kept,
+        so undo restores them once the files come back from the Trash."""
+        return [
+            original
+            for original in self._store.write_back_originals()
+            if os.path.lexists(self._absolute(original.path))
+        ]
 
     def _each[T](
         self, items: list[T], path_of: Callable[[T], str], change: Callable[[T], str | None]

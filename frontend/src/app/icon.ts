@@ -14,6 +14,7 @@ export type IconName =
   | 'reset'
   | 'scissors'
   | 'settings'
+  | 'trash'
   | 'zoom';
 
 /** A decorative stroke icon (paths from Lucide, ISC license). Give its button an aria-label. */
@@ -91,6 +92,11 @@ export type IconName =
           <svg:path d="M20 4 8.12 15.88" />
           <svg:circle cx="6" cy="18" r="3" />
           <svg:path d="M14.8 14.8 20 20" />
+        }
+        @case ('trash') {
+          <svg:path d="M3 6h18" />
+          <svg:path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+          <svg:path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
         }
         @case ('settings') {
           <svg:path

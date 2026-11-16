@@ -137,10 +137,12 @@ class SessionAnalysis:
                 try:
                     self._save(future.result())
                 except Exception as error:
-                    print(
-                        f"framewise: warning: could not analyze {item.jpg_path}: {error}",
-                        file=sys.stderr,
-                    )
+                    # A Frame trashed while it was analyzed fails quietly.
+                    if item.jpg_path.exists():
+                        print(
+                            f"framewise: warning: could not analyze {item.jpg_path}: {error}",
+                            file=sys.stderr,
+                        )
                 self._count_done(item)
 
     def groups(self, group_overrides: Mapping[str, str] | None = None) -> list[list[AnalyzedFrame]]:

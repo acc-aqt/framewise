@@ -24,6 +24,7 @@ const SHORTCUT_HINTS = [
   { keys: 'W', label: 'Winner' },
   { keys: 'X', label: 'reject' },
   { keys: 'U', label: 'clear' },
+  { keys: '⌫', label: 'trash' },
   { keys: '←→', label: 'Frames' },
   { keys: '⌥←→', label: 'in Group' },
   { keys: 'E', label: 'loupe' },
@@ -77,6 +78,16 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
         <app-icon name="scissors" [size]="14" />
         Split off {{ selected().length }} selected
       </button>
+      <button
+        type="button"
+        class="btn"
+        data-testid="trash-selected"
+        [disabled]="selected().length === 0"
+        (click)="trash.emit(selected())"
+      >
+        <app-icon name="trash" [size]="14" />
+        Trash {{ selected().length }} selected
+      </button>
       @if (hasPrevious() || hasNext()) {
         <div class="merge" role="group" aria-label="Merge">
           @if (hasPrevious()) {
@@ -117,6 +128,16 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
           Reset grouping
         </button>
       }
+      <button
+        type="button"
+        class="btn btn-ghost"
+        data-testid="trash-group"
+        [appTooltip]="trashGroupTooltip"
+        (click)="trash.emit(group().frames)"
+      >
+        <app-icon name="trash" [size]="14" />
+        Trash Group
+      </button>
       <span class="keys">
         @for (hint of shortcutHints; track hint.label) {
           <span class="hint"
@@ -412,6 +433,8 @@ export class GroupView {
   readonly move = output<{ frame: Frame; by: -1 | 1 }>();
   /** Hands the fixed Group back to framewise's grouping. */
   readonly resetGrouping = output();
+  /** Frames to move to the Trash, once the photographer confirms. */
+  readonly trash = output<Frame[]>();
 
   protected readonly breakdown = scoreBreakdown;
   protected readonly shortcutHints = SHORTCUT_HINTS;
@@ -433,6 +456,7 @@ export class GroupView {
   protected readonly movePreviousTooltip = commandById('move-previous');
   protected readonly moveNextTooltip = commandById('move-next');
   protected readonly makeWinnerTooltip = commandById('make-winner');
+  protected readonly trashGroupTooltip = commandById('trash-group');
   protected readonly pinnedWinnerToggleLabel = computed(() =>
     this.pinnedWinnerCollapsed() ? 'Show Winner' : 'Hide Winner',
   );

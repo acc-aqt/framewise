@@ -336,7 +336,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
       flex: 1;
       min-width: 0;
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
       align-content: start;
       gap: var(--space-3);
       padding: var(--space-3) 2px var(--space-2);

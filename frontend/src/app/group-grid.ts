@@ -25,8 +25,11 @@ import {
 } from './proposal';
 import { Frame, Group } from './session-api';
 
-const TILE_WIDTH_PX = 220;
-const ROW_HEIGHT_PX = 200;
+// A grid about as narrow as a portrait window gets fewer, larger tiles, so the Frame name and
+// counts stay readable; wider grids keep the layout they always had.
+const WIDE_LAYOUT = { minTileWidth: 220, rowHeight: 200 };
+const NARROW_LAYOUT = { minTileWidth: 300, rowHeight: 280 };
+const NARROW_GRID_BELOW_PX = 760;
 
 interface GridTile {
   frame: Frame;
@@ -44,11 +47,11 @@ interface GridTile {
         <button type="button" class="btn" (click)="clearFilters.emit()">Clear filters</button>
       }
     </div>
-    <cdk-virtual-scroll-viewport [itemSize]="rowHeight" class="viewport">
+    <cdk-virtual-scroll-viewport [itemSize]="layout().rowHeight" class="viewport">
       <div
         *cdkVirtualFor="let row of rows()"
         class="row"
-        [style.height.px]="rowHeight"
+        [style.height.px]="layout().rowHeight"
         [style.grid-template-columns]="'repeat(' + columns() + ', 1fr)'"
       >
         @for (tile of row; track tile.frame.id) {
@@ -152,8 +155,15 @@ export class GroupGrid {
   readonly open = output<Frame>();
   readonly clearFilters = output<void>();
 
-  protected readonly rowHeight = ROW_HEIGHT_PX;
-  protected readonly columns = signal(4);
+  private readonly width = signal<number | null>(null);
+  protected readonly layout = computed(() => {
+    const width = this.width();
+    return width !== null && width < NARROW_GRID_BELOW_PX ? NARROW_LAYOUT : WIDE_LAYOUT;
+  });
+  protected readonly columns = computed(() => {
+    const width = this.width();
+    return width === null ? 4 : Math.max(1, Math.floor(width / this.layout().minTileWidth));
+  });
   protected readonly filtering = computed(() => isFiltering(this.filter()));
   // Each Group's Winner stands for it, but a filter lists every matching Frame on its own tile.
   protected readonly tiles = computed<GridTile[]>(() => {
@@ -183,7 +193,7 @@ export class GroupGrid {
         return;
       }
       const observer = new ResizeObserver(([entry]) => {
-        this.columns.set(Math.max(1, Math.floor(entry.contentRect.width / TILE_WIDTH_PX)));
+        this.width.set(entry.contentRect.width);
       });
       observer.observe(host);
       destroyRef.onDestroy(() => observer.disconnect());

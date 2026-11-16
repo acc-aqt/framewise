@@ -44,7 +44,7 @@ export interface CommandContext {
 export interface Command {
   id: string;
   label: string;
-  /** The label once the context is known, such as one counting what the command acts on. */
+  /** The label while the command applies, counting what it acts on. */
   contextLabel?: (context: CommandContext) => string;
   /** The key as the photographer sees it, e.g. "P" or "⌥→". */
   key?: string;
@@ -176,12 +176,13 @@ export const COMMANDS: readonly Command[] = [
   frameCommand('trash', 'Trash Frame', '⌫', 'Backspace', { kind: 'trash' }),
   paletteCommand('trash-group', 'Trash Group', { kind: 'trashGroup' }, whenFrameOpen),
   {
-    id: 'trash-groups',
-    label: 'Trash selected Groups',
-    contextLabel: ({ selectedGroupCount: count }) =>
-      count === 0 ? 'Trash selected Groups' : `Trash ${pluralize(count, 'selected Group')}`,
-    shortcut: { kind: 'trashGroups' },
-    appliesTo: (context) => context.selectedGroupCount > 0,
+    ...paletteCommand(
+      'trash-groups',
+      'Trash selected Groups',
+      { kind: 'trashGroups' },
+      (context) => context.selectedGroupCount > 0,
+    ),
+    contextLabel: (context) => `Trash ${pluralize(context.selectedGroupCount, 'selected Group')}`,
   },
   paletteCommand(
     'write-back',
@@ -200,7 +201,9 @@ export function commandById(id: string): Command {
 }
 
 export function commandLabel(command: Command, context: CommandContext): string {
-  return command.contextLabel?.(context) ?? command.label;
+  return command.contextLabel !== undefined && command.appliesTo(context)
+    ? command.contextLabel(context)
+    : command.label;
 }
 
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent);

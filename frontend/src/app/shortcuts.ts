@@ -1,3 +1,4 @@
+import { pluralize } from './pluralize';
 import { ColorLabel, Group } from './session-api';
 
 /**
@@ -79,13 +80,10 @@ function paletteCommand(
 }
 
 const STAR_COMMANDS: Command[] = [1, 2, 3, 4, 5].map((stars) =>
-  frameCommand(
-    `stars-${stars}`,
-    stars === 1 ? '1 star' : `${stars} stars`,
-    String(stars),
-    String(stars),
-    { kind: 'stars', stars },
-  ),
+  frameCommand(`stars-${stars}`, pluralize(stars, 'star'), String(stars), String(stars), {
+    kind: 'stars',
+    stars,
+  }),
 );
 
 const LABEL_COMMANDS: Command[] = (
@@ -181,9 +179,7 @@ export const COMMANDS: readonly Command[] = [
     id: 'trash-groups',
     label: 'Trash selected Groups',
     contextLabel: ({ selectedGroupCount: count }) =>
-      count === 0
-        ? 'Trash selected Groups'
-        : `Trash ${count} selected ${count === 1 ? 'Group' : 'Groups'}`,
+      count === 0 ? 'Trash selected Groups' : `Trash ${pluralize(count, 'selected Group')}`,
     shortcut: { kind: 'trashGroups' },
     appliesTo: (context) => context.selectedGroupCount > 0,
   },

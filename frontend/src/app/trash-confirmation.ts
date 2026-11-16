@@ -8,6 +8,7 @@ import {
   output,
   viewChild,
 } from '@angular/core';
+import { pluralize } from './pluralize';
 import { Frame } from './session-api';
 
 /** Asks before Frames go to the Trash. Enter confirms, as the confirm button has focus. */
@@ -101,12 +102,12 @@ export class TrashConfirmation {
   protected readonly question = computed(() => {
     const frames = this.frames();
     const files = frames.reduce((sum, frame) => sum + (frame.kind === 'raw+jpg' ? 2 : 1), 0);
-    const frameCount = count(frames.length, 'Frame');
-    const fileCount = count(files, 'file');
+    const frameCount = pluralize(frames.length, 'Frame');
+    const fileCount = pluralize(files, 'file');
     const groupCount = this.groupCount();
     return groupCount === null
       ? `Move ${frameCount} (${fileCount}) to the Trash?`
-      : `Move ${count(groupCount, 'Group')} (${frameCount}, ${fileCount}) to the Trash?`;
+      : `Move ${pluralize(groupCount, 'Group')} (${frameCount}, ${fileCount}) to the Trash?`;
   });
 
   private readonly confirmButton =
@@ -115,8 +116,4 @@ export class TrashConfirmation {
   constructor() {
     afterNextRender(() => this.confirmButton().nativeElement.focus());
   }
-}
-
-function count(n: number, noun: string): string {
-  return n === 1 ? `1 ${noun}` : `${n} ${noun}s`;
 }

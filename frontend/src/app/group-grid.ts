@@ -14,6 +14,7 @@ import {
 } from '@angular/core';
 import { FrameTile } from './frame-tile';
 import { Icon } from './icon';
+import { pluralize } from './pluralize';
 import {
   isFiltering,
   isKept,
@@ -55,7 +56,7 @@ interface GridTile {
           (click)="trash.emit(selected())"
         >
           <app-icon name="trash" [size]="14" />
-          Trash {{ groupCount(selected().length) }}
+          Trash {{ pluralize(selected().length, 'Group') }}
         </button>
         <button
           type="button"
@@ -233,6 +234,7 @@ export class GroupGrid {
   private selectionOrderFrameIds: number[] = [];
   private readonly width = signal<number | null>(null);
   protected readonly narrowLayout = NARROW_LAYOUT;
+  protected readonly pluralize = pluralize;
   protected readonly layout = computed(() => {
     const width = this.width();
     return width !== null && width < NARROW_GRID_BELOW_PX ? NARROW_LAYOUT : WIDE_LAYOUT;
@@ -313,15 +315,11 @@ export class GroupGrid {
     return this.selected().includes(group);
   }
 
-  protected groupCount(count: number): string {
-    return count === 1 ? '1 Group' : `${count} Groups`;
-  }
-
   protected frameCount(group: Group): string {
     if (this.filtering()) {
       return `in Group of ${group.frames.length}`;
     }
-    return group.frames.length === 1 ? '1 Frame' : `${group.frames.length} Frames`;
+    return pluralize(group.frames.length, 'Frame');
   }
 
   protected tileName({ frame, group }: GridTile): string {

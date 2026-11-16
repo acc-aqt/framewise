@@ -135,7 +135,7 @@
   @if (trashing(); as trash) {
     <app-trash-confirmation
       [frames]="trash.frames"
-      [groupCount]="trash.groupCount"
+      [groupCount]="trash.fromGrid?.groupCount ?? null"
       (confirm)="confirmTrash()"
       (cancel)="trashing.set(null)"
     />

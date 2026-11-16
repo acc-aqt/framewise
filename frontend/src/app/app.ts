@@ -48,10 +48,11 @@ export const POLL_INTERVAL_MS = 1000;
 /** Frames waiting for the photographer to confirm they go to the Trash. */
 interface PendingTrash {
   frames: Frame[];
-  /** How many Groups the Frames make up, when whole Groups go from All Groups. */
-  groupCount: number | null;
-  /** The grid position of the first of those Groups, in capture order. */
-  tileIndex: number | null;
+  /**
+   * Set when the Frames make up whole Groups selected in All Groups: how many Groups, and the
+   * grid position of the first of them in capture order.
+   */
+  fromGrid: { groupCount: number; tileIndex: number } | null;
 }
 
 @Component({
@@ -333,7 +334,7 @@ export class App {
 
   protected askToTrash(frames: Frame[]): void {
     if (frames.length > 0) {
-      this.trashing.set({ frames, groupCount: null, tileIndex: null });
+      this.trashing.set({ frames, fromGrid: null });
     }
   }
 
@@ -341,8 +342,7 @@ export class App {
     if (groups.length > 0) {
       this.trashing.set({
         frames: groups.flatMap((group) => group.frames),
-        groupCount: groups.length,
-        tileIndex: this.groups().indexOf(groups[0]),
+        fromGrid: { groupCount: groups.length, tileIndex: this.groups().indexOf(groups[0]) },
       });
     }
   }
@@ -355,8 +355,8 @@ export class App {
     }
     this.trashApi.trash(trash.frames.map((frame) => frame.id)).subscribe({
       next: (result) => {
-        if (trash.tileIndex !== null) {
-          this.tileToFocus.set(trash.tileIndex);
+        if (trash.fromGrid !== null) {
+          this.tileToFocus.set(trash.fromGrid.tileIndex);
         }
         this.afterTrash(result);
       },

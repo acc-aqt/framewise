@@ -2571,7 +2571,7 @@ describe('Review UI', () => {
       });
 
       async function clickWith(element: HTMLElement, init: MouseEventInit): Promise<void> {
-        element.dispatchEvent(new MouseEvent('click', { bubbles: true, ...init }));
+        element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ...init }));
         await settle();
       }
 
@@ -2610,6 +2610,17 @@ describe('Review UI', () => {
         await clickWith(checkboxes()[2], { shiftKey: true });
 
         expect(selectedTiles()).toEqual([0, 1, 2]);
+      });
+
+      it('keeps the checkbox of a selected Group ticked when a Shift-click on it selects a range', async () => {
+        await showAllGroups();
+        await click(checkboxes()[0]);
+        await click(checkboxes()[2]);
+
+        await clickWith(checkboxes()[0], { shiftKey: true });
+
+        expect(selectedTiles()).toEqual([0, 1, 2]);
+        expect(text('[data-testid="trash-groups"]')).toBe('Trash 3 Groups');
       });
 
       it('still opens a Group on a plain click, clearing the selection', async () => {

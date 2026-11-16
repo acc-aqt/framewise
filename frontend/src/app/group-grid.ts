@@ -299,6 +299,8 @@ export class GroupGrid {
   }
 
   protected onCheckboxClick(event: MouseEvent, group: Group): void {
+    // The checkbox shows the selection, so the click doesn't tick it by itself.
+    event.preventDefault();
     if (event.shiftKey) {
       this.selectRange(group);
     } else {

@@ -377,28 +377,6 @@ export class GroupGrid {
   }
 }
 
-/**
- * The Groups still selected once the Groups change, as when analysis or a Trash reloads them.
- * A Group stays selected while its Frames all come from one selected Group, so it survives
- * gaining Frames or a new id. A Group merged with another, or fully trashed, drops out.
- */
-export function stillSelected(before: Group[], selected: Group[], after: Group[]): Group[] {
-  if (selected.length === 0) {
-    return [];
-  }
-  const groupOf = new Map<number, Group>();
-  for (const group of before) {
-    for (const frame of group.frames) {
-      groupOf.set(frame.id, group);
-    }
-  }
-  return after.filter((group) => {
-    const earlier = new Set(group.frames.map((frame) => groupOf.get(frame.id)));
-    earlier.delete(undefined);
-    return earlier.size === 1 && selected.includes([...earlier][0]!);
-  });
-}
-
 function chunk<T>(items: T[], size: number): T[][] {
   const rows: T[][] = [];
   for (let start = 0; start < items.length; start += size) {

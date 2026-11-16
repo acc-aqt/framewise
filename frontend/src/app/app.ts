@@ -14,13 +14,13 @@ import {
 import { Observable } from 'rxjs';
 import { AnalysisProgressView } from './analysis-progress';
 import { AnalysisSettings } from './analysis-settings';
-import { GroupGrid, stillSelected } from './group-grid';
+import { GroupGrid } from './group-grid';
 import { GroupView } from './group-view';
 import { Icon } from './icon';
 import { KeeperBudget } from './keeper-budget';
 import { Loupe, LoupeZoom } from './loupe';
 import { OverrideApi } from './override-api';
-import { findWinner, isFiltering, NO_FILTER, ProposalFilter } from './proposal';
+import { findWinner, isFiltering, NO_FILTER, ProposalFilter, stillSelected } from './proposal';
 import { ProposalFilters } from './proposal-filters';
 import { AnalysisProgress, Frame, Group, OverrideChange, SessionSummary } from './session-api';
 import { SessionChangeApi } from './session-change-api';

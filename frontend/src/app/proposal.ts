@@ -51,6 +51,32 @@ export function winnerOf(group: Group): Frame {
   return findWinner(group) ?? group.frames[0];
 }
 
+/**
+ * The Groups still selected once the Groups change, as when analysis or a Trash reloads them.
+ * A Group stays selected while its Frames that existed before all came from one selected
+ * Group, so it survives gaining Frames or a new id. A Group merged with another, or fully
+ * trashed, drops out.
+ */
+export function stillSelected(before: Group[], selected: Group[], after: Group[]): Group[] {
+  const groupBefore = new Map<number, Group>();
+  for (const group of before) {
+    for (const frame of group.frames) {
+      groupBefore.set(frame.id, group);
+    }
+  }
+  return after.filter((group) => {
+    const earlierGroups = group.frames
+      .map((frame) => groupBefore.get(frame.id))
+      .filter((earlier) => earlier !== undefined);
+    const first = earlierGroups[0];
+    return (
+      first !== undefined &&
+      earlierGroups.every((earlier) => earlier === first) &&
+      selected.includes(first)
+    );
+  });
+}
+
 export function scoreBreakdown(frame: Frame): string[] {
   const { scores } = frame;
   return [

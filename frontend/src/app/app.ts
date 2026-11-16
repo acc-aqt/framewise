@@ -1,12 +1,15 @@
 import { HttpErrorResponse, httpResource } from '@angular/common/http';
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
   effect,
   inject,
+  Injector,
   linkedSignal,
   signal,
+  viewChild,
 } from '@angular/core';
 import { Observable } from 'rxjs';
 import { AnalysisProgressView } from './analysis-progress';
@@ -17,7 +20,7 @@ import { Icon } from './icon';
 import { KeeperBudget } from './keeper-budget';
 import { Loupe, LoupeZoom } from './loupe';
 import { OverrideApi } from './override-api';
-import { findWinner, NO_FILTER, ProposalFilter } from './proposal';
+import { findWinner, isFiltering, NO_FILTER, ProposalFilter, stillSelected } from './proposal';
 import { ProposalFilters } from './proposal-filters';
 import { AnalysisProgress, Frame, Group, OverrideChange, SessionSummary } from './session-api';
 import { SessionChangeApi } from './session-change-api';
@@ -41,6 +44,16 @@ import { TrashConfirmation } from './trash-confirmation';
 import { WriteBackView } from './write-back';
 
 export const POLL_INTERVAL_MS = 1000;
+
+/** Frames waiting for the photographer to confirm they go to the Trash. */
+interface PendingTrash {
+  frames: Frame[];
+  /**
+   * Set when the Frames make up whole Groups selected in All Groups: how many Groups, and the
+   * grid position of the first of them in capture order.
+   */
+  fromGrid: { groupCount: number; tileIndex: number } | null;
+}
 
 @Component({
   selector: 'app-root',
@@ -105,6 +118,17 @@ export class App {
   // Group gains an earlier Frame during analysis.
   protected readonly openedFrameId = signal<number | null>(null);
   protected readonly filter = signal<ProposalFilter>(NO_FILTER);
+  /** The Groups selected in All Groups. A filter clears the selection. */
+  protected readonly selectedGroups = linkedSignal<
+    { groups: Group[]; filtering: boolean },
+    Group[]
+  >({
+    source: () => ({ groups: this.groups(), filtering: isFiltering(this.filter()) }),
+    computation: (source, previous) =>
+      source.filtering || previous === undefined
+        ? []
+        : stillSelected(previous.source.groups, previous.value, source.groups),
+  });
   protected readonly writingBack = signal(false);
   protected readonly openGroup = computed(
     () =>
@@ -148,8 +172,13 @@ export class App {
     const { jpg_only_count, raw_jpg_count } = this.summary.value();
     return jpg_only_count + 2 * raw_jpg_count;
   });
-  /** The Frames waiting for the photographer to confirm they go to the Trash. */
-  protected readonly trashing = signal<Frame[] | null>(null);
+  protected readonly trashing = signal<PendingTrash | null>(null);
+  // Set by a Trash until the Groups are requested again. A request already under way, such as
+  // one for an analysis poll, may predate the Trash, so the Groups are requested once it ends.
+  private readonly groupsNeedReload = signal(false);
+  /** The grid position to focus once the Groups reload after a Trash from All Groups. */
+  private readonly tileToFocus = signal<number | null>(null);
+  private readonly groupGrid = viewChild(GroupGrid);
   protected readonly trashError = signal<string | null>(null);
   protected readonly paletteOpen = signal(false);
   protected readonly paletteAvailable = computed(
@@ -166,6 +195,7 @@ export class App {
       hasNextGroup: frameOpen && this.neighbourGroup(1) !== null,
       canSplitHere: frameOpen && group.frames[0] !== frame,
       canMakeWinner: frameOpen && frame.verdict !== 'winner',
+      selectedGroupCount: this.selectedGroups().length,
       writeBackAvailable: this.summary.hasValue() && !this.analyzing(),
     };
   });
@@ -183,6 +213,22 @@ export class App {
       }
       const timer = setTimeout(() => this.progress.reload(), POLL_INTERVAL_MS);
       onCleanup(() => clearTimeout(timer));
+    });
+    effect(() => {
+      if (this.groupsNeedReload() && !this.groupsResource.isLoading()) {
+        this.groupsNeedReload.set(false);
+        this.groupsResource.reload();
+      }
+    });
+    const injector = inject(Injector);
+    effect(() => {
+      const index = this.tileToFocus();
+      const reloadedAfterTrash = !this.groupsNeedReload() && !this.groupsResource.isLoading();
+      if (index === null || !reloadedAfterTrash) {
+        return;
+      }
+      this.tileToFocus.set(null);
+      afterNextRender(() => this.groupGrid()?.focusTile(index), { injector });
     });
   }
 
@@ -211,13 +257,17 @@ export class App {
       }
       return;
     }
-    const frame = this.currentFrame();
-    const shortcut = frame === null ? null : shortcutFor(event);
-    if (frame === null || shortcut === null) {
+    const shortcut = shortcutFor(event);
+    if (shortcut === null) {
       return;
     }
-    event.preventDefault();
-    this.run(shortcut, frame);
+    const frame = this.currentFrame();
+    if (frame !== null) {
+      event.preventDefault();
+      this.run(shortcut, frame);
+    } else if (this.selectedGroups().length > 0) {
+      this.runOnSelectedGroups(shortcut, event);
+    }
   }
 
   protected runCommand(command: Command): void {
@@ -225,10 +275,18 @@ export class App {
     if (command.shortcut.kind === 'writeBack') {
       return this.openWriteBack();
     }
+    if (command.shortcut.kind === 'trashGroups') {
+      return this.askToTrashGroups(this.selectedGroups());
+    }
     const frame = this.currentFrame();
     if (frame !== null) {
       this.run(command.shortcut, frame);
     }
+  }
+
+  protected openFromGrid(frame: Frame): void {
+    this.selectedGroups.set([]);
+    this.openedFrameId.set(frame.id);
   }
 
   protected clearFilters(): void {
@@ -237,6 +295,7 @@ export class App {
 
   protected openWriteBack(): void {
     this.closeGroup();
+    this.selectedGroups.set([]);
     this.writingBack.set(true);
   }
 
@@ -275,15 +334,32 @@ export class App {
 
   protected askToTrash(frames: Frame[]): void {
     if (frames.length > 0) {
-      this.trashing.set(frames);
+      this.trashing.set({ frames, fromGrid: null });
+    }
+  }
+
+  protected askToTrashGroups(groups: Group[]): void {
+    if (groups.length > 0) {
+      this.trashing.set({
+        frames: groups.flatMap((group) => group.frames),
+        fromGrid: { groupCount: groups.length, tileIndex: this.groups().indexOf(groups[0]) },
+      });
     }
   }
 
   protected confirmTrash(): void {
-    const frames = this.trashing() ?? [];
+    const trash = this.trashing();
     this.trashing.set(null);
-    this.trashApi.trash(frames.map((frame) => frame.id)).subscribe({
-      next: (result) => this.afterTrash(result),
+    if (trash === null) {
+      return;
+    }
+    this.trashApi.trash(trash.frames.map((frame) => frame.id)).subscribe({
+      next: (result) => {
+        if (trash.fromGrid !== null) {
+          this.tileToFocus.set(trash.fromGrid.tileIndex);
+        }
+        this.afterTrash(result);
+      },
       error: () => this.trashError.set('Could not move the Frames to the Trash.'),
     });
   }
@@ -377,6 +453,17 @@ export class App {
     }
   }
 
+  /** In All Groups, ⌫/Delete trashes the selected Groups and Escape clears the selection. */
+  private runOnSelectedGroups(shortcut: Shortcut, event: KeyboardEvent): void {
+    if (shortcut.kind === 'trash') {
+      event.preventDefault();
+      this.askToTrashGroups(this.selectedGroups());
+    } else if (shortcut.kind === 'close') {
+      event.preventDefault();
+      this.selectedGroups.set([]);
+    }
+  }
+
   private afterTrash(result: TrashResult): void {
     const current = this.openedFrameId();
     if (current !== null) {
@@ -387,13 +474,16 @@ export class App {
         this.openedFrameId.set(next);
       }
     }
+    if (result.failed.length === 0) {
+      this.selectedGroups.set([]);
+    }
     this.trashError.set(
       result.failed.length === 0
         ? null
         : `Could not move ${result.failed.map((failure) => failure.path).join(', ')} to the Trash: ${result.failed[0].error}`,
     );
     this.summary.reload();
-    this.groupsResource.reload();
+    this.groupsNeedReload.set(true);
   }
 
   private save(request: Observable<unknown>): void {

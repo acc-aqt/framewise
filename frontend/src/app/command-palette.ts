@@ -10,7 +10,7 @@ import {
   OnDestroy,
   viewChild,
 } from '@angular/core';
-import { Command, CommandContext } from './shortcuts';
+import { Command, CommandContext, commandLabel } from './shortcuts';
 
 /** Lists every command with its key, so the photographer can find, run and learn them. */
 @Component({
@@ -50,7 +50,7 @@ import { Command, CommandContext } from './shortcuts';
             (mouseenter)="highlighted.set(index)"
             (click)="choose(command)"
           >
-            <span class="label">{{ command.label }}</span>
+            <span class="label">{{ label(command) }}</span>
             @if (command.key) {
               <kbd class="key">{{ command.key }}</kbd>
             }
@@ -132,7 +132,7 @@ export class CommandPalette implements OnDestroy {
   protected readonly highlighted = signal(0);
   protected readonly matches = computed(() => {
     const query = this.query().trim().toLowerCase();
-    return this.commands().filter((command) => command.label.toLowerCase().includes(query));
+    return this.commands().filter((command) => this.label(command).toLowerCase().includes(query));
   });
   protected readonly highlightedId = computed(() => {
     const command = this.matches()[this.highlighted()];
@@ -150,6 +150,10 @@ export class CommandPalette implements OnDestroy {
     if (this.focusedBefore instanceof HTMLElement && this.focusedBefore.isConnected) {
       this.focusedBefore.focus();
     }
+  }
+
+  protected label(command: Command): string {
+    return commandLabel(command, this.context());
   }
 
   protected setQuery(query: string): void {

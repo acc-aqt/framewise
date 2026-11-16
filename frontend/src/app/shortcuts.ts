@@ -1,3 +1,4 @@
+import { pluralize } from './pluralize';
 import { ColorLabel, Group } from './session-api';
 
 /**
@@ -22,6 +23,7 @@ export type Shortcut =
   | { kind: 'makeWinner' }
   | { kind: 'trash' }
   | { kind: 'trashGroup' }
+  | { kind: 'trashGroups' }
   | { kind: 'writeBack' };
 
 /** What the Review UI is showing, which decides the commands that apply. */
@@ -33,6 +35,7 @@ export interface CommandContext {
   canSplitHere: boolean;
   /** Whether the current Frame is not already its Group's Winner. */
   canMakeWinner: boolean;
+  selectedGroupCount: number;
   writeBackAvailable: boolean;
 }
 
@@ -40,6 +43,8 @@ export interface CommandContext {
 export interface Command {
   id: string;
   label: string;
+  /** The label while the command applies, counting what it acts on. */
+  contextLabel?: (context: CommandContext) => string;
   /** The key as the photographer sees it, e.g. "P" or "⌥→". */
   key?: string;
   /** The `KeyboardEvent.key` that runs the command, matched case-insensitively. */
@@ -74,13 +79,10 @@ function paletteCommand(
 }
 
 const STAR_COMMANDS: Command[] = [1, 2, 3, 4, 5].map((stars) =>
-  frameCommand(
-    `stars-${stars}`,
-    stars === 1 ? '1 star' : `${stars} stars`,
-    String(stars),
-    String(stars),
-    { kind: 'stars', stars },
-  ),
+  frameCommand(`stars-${stars}`, pluralize(stars, 'star'), String(stars), String(stars), {
+    kind: 'stars',
+    stars,
+  }),
 );
 
 const LABEL_COMMANDS: Command[] = (
@@ -172,6 +174,15 @@ export const COMMANDS: readonly Command[] = [
   },
   frameCommand('trash', 'Trash Frame', '⌫', 'Backspace', { kind: 'trash' }),
   paletteCommand('trash-group', 'Trash Group', { kind: 'trashGroup' }, whenFrameOpen),
+  {
+    ...paletteCommand(
+      'trash-groups',
+      'Trash selected Groups',
+      { kind: 'trashGroups' },
+      (context) => context.selectedGroupCount > 0,
+    ),
+    contextLabel: (context) => `Trash ${pluralize(context.selectedGroupCount, 'selected Group')}`,
+  },
   paletteCommand(
     'write-back',
     'Rating write-back',
@@ -186,6 +197,12 @@ export function commandById(id: string): Command {
     throw new Error(`Unknown command: ${id}`);
   }
   return command;
+}
+
+export function commandLabel(command: Command, context: CommandContext): string {
+  return command.contextLabel !== undefined && command.appliesTo(context)
+    ? command.contextLabel(context)
+    : command.label;
 }
 
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent);

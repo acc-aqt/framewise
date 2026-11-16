@@ -12,6 +12,7 @@ import {
 } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { Icon } from './icon';
+import { pluralize } from './pluralize';
 import { VERDICT_LABELS } from './proposal';
 import {
   ColorLabel,
@@ -492,11 +493,11 @@ export class WriteBackView {
     if (progress === null) {
       return 'reading the current ratings…';
     }
-    return `${progress.files_done} of ${files(progress.files_total)}`;
+    return `${progress.files_done} of ${pluralize(progress.files_total, 'file')}`;
   });
   protected readonly filesToRead = computed(() => {
     const count = this.fileCount();
-    return count === null ? 'every file' : files(count);
+    return count === null ? 'every file' : pluralize(count, 'file');
   });
   protected readonly outcome = signal<Outcome | null>(null);
   protected readonly changing = computed(() =>
@@ -584,7 +585,7 @@ export class WriteBackView {
       const result = await firstValueFrom(this.http.post<WriteBackResult>(url, null));
       this.outcome.set({
         ok: true,
-        summary: `${verb} ${files(result.written.length)}.`,
+        summary: `${verb} ${pluralize(result.written.length, 'file')}.`,
         failed: result.failed,
       });
       return true;
@@ -598,8 +599,4 @@ export class WriteBackView {
       this.dryRun.reload();
     }
   }
-}
-
-function files(count: number): string {
-  return count === 1 ? '1 file' : `${count} files`;
 }

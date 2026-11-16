@@ -125,14 +125,17 @@
       <app-group-grid
         [groups]="groups()"
         [filter]="filter()"
-        (open)="openedFrameId.set($event.id)"
+        [(selected)]="selectedGroups"
+        (open)="openFromGrid($event)"
         (clearFilters)="clearFilters()"
+        (trash)="askToTrashGroups($event)"
       />
     }
   </main>
-  @if (trashing(); as frames) {
+  @if (trashing(); as trash) {
     <app-trash-confirmation
-      [frames]="frames"
+      [frames]="trash.frames"
+      [groupCount]="trash.fromGrid?.groupCount ?? null"
       (confirm)="confirmTrash()"
       (cancel)="trashing.set(null)"
     />

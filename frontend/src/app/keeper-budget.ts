@@ -6,6 +6,7 @@ import {
   linkedSignal,
   output,
 } from '@angular/core';
+import { pluralize } from './pluralize';
 import { isKept } from './proposal';
 import { Group } from './session-api';
 import { Tooltip, TooltipContent } from './tooltip';
@@ -31,8 +32,7 @@ import { Tooltip, TooltipContent } from './tooltip';
       <output data-testid="keeper-budget-percent">{{ percent() }}%</output>
     </label>
     <span class="count" data-testid="keeper-count">
-      {{ keeperCount() }} {{ keeperCount() === 1 ? 'Keeper' : 'Keepers' }} · {{ keptCount() }} of
-      {{ frameCount() }} Frames kept
+      {{ keepers() }} · {{ keptCount() }} of {{ frameCount() }} Frames kept
     </span>
   `,
   styles: `
@@ -79,8 +79,8 @@ export class KeeperBudget {
   protected readonly percent = linkedSignal(() => Math.round(this.share() * 100));
   private readonly frames = computed(() => this.groups().flatMap((group) => group.frames));
   protected readonly frameCount = computed(() => this.frames().length);
-  protected readonly keeperCount = computed(
-    () => this.frames().filter((frame) => frame.verdict === 'keeper').length,
+  protected readonly keepers = computed(() =>
+    pluralize(this.frames().filter((frame) => frame.verdict === 'keeper').length, 'Keeper'),
   );
   protected readonly keptCount = computed(() => this.frames().filter(isKept).length);
 

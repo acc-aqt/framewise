@@ -2685,9 +2685,19 @@ describe('Review UI', () => {
 
         await press('Delete');
         expect(confirmation()).toBeDefined();
-        await click(confirmation()!.parentElement!);
+      });
+
+      it('keeps the selection when a click outside the confirmation closes it', async () => {
+        await showAllGroups();
+        await click(checkboxes()[1]);
+        await click(checkboxes()[3]);
+        await press('Backspace');
+
+        await click(all('app-trash-confirmation')[0]);
+
         expect(confirmation()).toBeUndefined();
-        expect(selectedTiles()).toEqual([1]);
+        expect(selectedTiles()).toEqual([1, 3]);
+        expect(text('[data-testid="trash-groups"]')).toBe('Trash 2 Groups');
         http.expectNone('/api/frames/trash');
       });
 

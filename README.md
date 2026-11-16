@@ -5,7 +5,7 @@
 
 Cull a photo shoot on your own machine: framewise groups bursts and near-duplicates, proposes which Frames to keep and why, and writes your decisions back as ratings for Lightroom Classic.
 
-![Opening a Session, analysis, merging two pairs of Groups, comparing Frames with the Winner and making a new Winner, then Rating write-back](docs/images/workflow.gif)
+![Opening a Session of 221 photos, analysis, merging Groups, comparing a Frame with the Winner and making it the new Winner, then Rating write-back and the result in Lightroom Classic](docs/images/workflow.gif)
 
 - [**How it judges**](#how-it-judges): what framewise checks in each Frame.
 - [**Reviewing**](#reviewing): the Review UI and its keyboard shortcuts.
@@ -87,8 +87,6 @@ framewise analyzes each Frame's JPG with the installed analysis Providers; which
 The Review UI filters by Verdict and by Reason.
 
 ## Reviewing
-
-![An open Group in the Review UI: the Winner on the left, three Rejects marked as weaker duplicates, each with its scores](docs/images/review-ui.jpg)
 
 In an open Group, review with Lightroom Classic's shortcuts:
 

@@ -2571,7 +2571,9 @@ describe('Review UI', () => {
       });
 
       async function clickWith(element: HTMLElement, init: MouseEventInit): Promise<void> {
-        element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ...init }));
+        element.dispatchEvent(
+          new MouseEvent('click', { bubbles: true, cancelable: true, ...init }),
+        );
         await settle();
       }
 
@@ -2859,7 +2861,9 @@ describe('Review UI', () => {
           seconds_remaining: 5,
         });
         await settle();
-        const groupsBeforeTrash = http.expectOne((request) => request.url.startsWith('/api/groups'));
+        const groupsBeforeTrash = http.expectOne((request) =>
+          request.url.startsWith('/api/groups'),
+        );
 
         trash.flush({ trashed: [4], failed: [] });
         await settle();

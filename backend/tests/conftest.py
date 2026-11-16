@@ -214,11 +214,45 @@ def analyzer():
     fake.release_all()
 
 
+class FakeTrash:
+    """Stands in for the OS Trash: moves files into a folder outside the Session, or refuses
+    like a volume without a Trash for the paths it is told to refuse."""
+
+    def __init__(self, folder: Path):
+        self.folder = folder
+        self.trashed: list[Path] = []
+        self._refusing: set[Path] = set()
+
+    def refuse(self, path: Path) -> Path:
+        self._refusing.add(path.resolve())
+        return path
+
+    def __call__(self, path: Path) -> None:
+        if path.resolve() in self._refusing:
+            raise PermissionError(f"No Trash on the volume of {path}")
+        self.folder.mkdir(exist_ok=True)
+        path.rename(self.folder / path.name)
+        self.trashed.append(path)
+
+    def restore(self, path: Path) -> None:
+        (self.folder / path.name).rename(path)
+
+
+@pytest.fixture
+def trash(tmp_path: Path) -> FakeTrash:
+    return FakeTrash(tmp_path / "Trash")
+
+
+def _no_trash(path: Path) -> None:
+    raise AssertionError(f"a test not about Trash trashed {path}")
+
+
 def review_app(store, analysis: SessionAnalysis, *args, **app_options) -> TestClient:
     """The Review UI, with a stand-in Provider lineup and config path for the tests that are
-    not about them."""
+    not about them. Tests that trash Frames pass a FakeTrash, so none reaches the OS Trash."""
     app_options.setdefault("provider_lineup", {})
     app_options.setdefault("config_path", Path("config.toml"))
+    app_options.setdefault("move_to_trash", _no_trash)
     return TestClient(create_app(store, analysis, *args, **app_options))
 
 

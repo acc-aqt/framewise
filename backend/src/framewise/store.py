@@ -181,6 +181,17 @@ class SessionStore:
                     (current,),
                 )
 
+    def remove_frames(self, jpg_paths: list[str]) -> None:
+        """Takes these Frames out of the Session, keeping their Overrides and Group Overrides
+        as for Frames that vanish from the Session folder."""
+        paths = json.dumps(jpg_paths)
+        with self._db:
+            for table in ("frames", "thumbnails", "analyses"):
+                self._db.execute(
+                    f"DELETE FROM {table} WHERE jpg_path IN (SELECT value FROM json_each(?))",
+                    (paths,),
+                )
+
     def has_current_thumbnail(self, jpg_path: Path) -> bool:
         return self._has_current_row("thumbnails", jpg_path)
 

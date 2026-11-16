@@ -99,6 +99,10 @@ _Avoid_: App, dashboard, gallery
 A change the photographer makes to a Verdict or a Group in the Review UI. An Override always beats framewise's own judgment.
 _Avoid_: Correction, edit
 
+**Trash**:
+To move a Frame's files to the OS Trash and take the Frame out of the Session, after the photographer confirms. It is the only way framewise removes files, and it never deletes them outright. Unlike a Reject, a trashed Frame is gone from the Review UI.
+_Avoid_: Delete, remove, discard
+
 **Rating write-back**:
 The explicit, opt-in and reversible step that writes the reviewed Verdicts into the Frames' files so Lightroom Classic can read them.
 _Avoid_: Export, sync, apply

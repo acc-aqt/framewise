@@ -79,6 +79,9 @@
     </div>
   </header>
   <main>
+    @if (trashError(); as error) {
+      <p class="error" data-testid="trash-error">{{ error }}</p>
+    }
     @if (groupsResource.error()) {
       <p class="error">Could not load the Groups.</p>
     } @else if (writingBack()) {
@@ -104,6 +107,7 @@
         (merge)="mergeGroup(group, $event)"
         (move)="moveFrame($event.frame, $event.by)"
         (resetGrouping)="resetGrouping(group)"
+        (trash)="askToTrash($event)"
       />
       @if (loupeZoom(); as zoom) {
         @if (loupeFrames().length > 0) {
@@ -126,6 +130,13 @@
       />
     }
   </main>
+  @if (trashing(); as frames) {
+    <app-trash-confirmation
+      [frames]="frames"
+      (confirm)="confirmTrash()"
+      (cancel)="trashing.set(null)"
+    />
+  }
   @if (paletteOpen() && paletteAvailable()) {
     <app-command-palette
       [commands]="commands"

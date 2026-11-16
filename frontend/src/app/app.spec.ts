@@ -1678,7 +1678,9 @@ describe('Review UI', () => {
         expect(rows()).toContain('Next Frame in Group ⌥→');
         expect(rows()).toContain('Close Esc');
         expect(rows()).toContain('Make Winner W');
-        expect(rows().length).toBe(29);
+        expect(rows()).toContain('Trash Frame ⌫');
+        expect(rows()).toContain('Trash Group');
+        expect(rows().length).toBe(31);
       });
 
       it('opens from the header button', async () => {
@@ -2335,6 +2337,174 @@ describe('Review UI', () => {
       await click(all('[data-testid="reset-grouping"]')[0]);
 
       await expectFix('/api/groups/reset', { frame_ids: [2] });
+    });
+  });
+
+  describe('Trash', () => {
+    const groups = (): Group[] => [
+      group(1, [
+        frame(1, 'jpg-only', { verdict: 'winner' }),
+        frame(2, 'raw+jpg'),
+        frame(3, 'jpg-only'),
+      ]),
+      group(4, [frame(4, 'jpg-only', { verdict: 'winner' })]),
+    ];
+
+    async function openGroup(index: number): Promise<void> {
+      await respond(summary, groups());
+      all('[data-testid="group-tile"]')[index].click();
+      await fixture.whenStable();
+    }
+
+    async function press(key: string): Promise<void> {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+      await settle();
+    }
+
+    async function click(element: HTMLElement): Promise<void> {
+      element.click();
+      await settle();
+    }
+
+    function confirmation(): HTMLElement | undefined {
+      return all('[data-testid="trash-confirmation"]')[0];
+    }
+
+    function currentFrameThumbnail(): string | null | undefined {
+      return all('[data-testid="frame-details"].current')[0]
+        ?.querySelector('img')
+        ?.getAttribute('src');
+    }
+
+    async function confirmTrash(
+      frameIds: number[],
+      remaining: Group[],
+      failed: { path: string; error: string }[] = [],
+    ): Promise<void> {
+      await click(all('[data-testid="trash-confirm"]')[0]);
+      const request = http.expectOne('/api/frames/trash');
+      expect(request.request.method).toBe('POST');
+      expect(request.request.body).toEqual({ frame_ids: frameIds });
+      const trashed = frameIds.filter((id) => !failed.length || id !== frameIds[0]);
+      request.flush({ trashed, failed });
+      await settle();
+      http.expectOne('/api/session').flush(summary);
+      http.expectOne((request) => request.url.startsWith('/api/groups')).flush(remaining);
+      await settle();
+    }
+
+    it('asks before trashing the current Frame with Backspace, then shows the next Frame', async () => {
+      await openGroup(0);
+      await press('ArrowRight');
+
+      await press('Backspace');
+
+      expect(text('[data-testid="trash-confirmation"] p')).toBe(
+        'Move 1 Frame (2 files) to the Trash?',
+      );
+      expect(text('#trash-note')).toContain('Lightroom will show as missing');
+      expect(document.activeElement).toBe(all('[data-testid="trash-confirm"]')[0]);
+
+      await confirmTrash(
+        [2],
+        [
+          group(1, [frame(1, 'jpg-only', { verdict: 'winner' }), frame(3, 'jpg-only')]),
+          groups()[1],
+        ],
+      );
+
+      expect(confirmation()).toBeUndefined();
+      expect(currentFrameThumbnail()).toBe('/api/frames/3/thumbnail');
+    });
+
+    it('asks to trash with Delete too, and trashes nothing on Escape', async () => {
+      await openGroup(0);
+
+      await press('Delete');
+      expect(confirmation()).toBeDefined();
+      await press('x');
+      await press('Escape');
+
+      expect(confirmation()).toBeUndefined();
+      expect(all('[data-testid="group-view"]').length).toBe(1);
+      http.expectNone('/api/frames/trash');
+      http.expectNone((request) => request.url.includes('/override'));
+    });
+
+    it('trashes nothing on Cancel', async () => {
+      await openGroup(0);
+      await press('Backspace');
+
+      await click(all('[data-testid="trash-cancel"]')[0]);
+
+      expect(confirmation()).toBeUndefined();
+      http.expectNone('/api/frames/trash');
+    });
+
+    it('shows the previous Frame after trashing the last Frame of a Group', async () => {
+      await openGroup(0);
+      await press('ArrowRight');
+      await press('ArrowRight');
+      await press('Backspace');
+
+      await confirmTrash(
+        [3],
+        [group(1, [frame(1, 'jpg-only', { verdict: 'winner' }), frame(2, 'raw+jpg')]), groups()[1]],
+      );
+
+      expect(currentFrameThumbnail()).toBe('/api/frames/2/thumbnail');
+    });
+
+    it('trashes a whole Group and opens the next one', async () => {
+      await openGroup(0);
+
+      await click(all('[data-testid="trash-group"]')[0]);
+      expect(text('[data-testid="trash-confirmation"] p')).toBe(
+        'Move 3 Frames (4 files) to the Trash?',
+      );
+      await confirmTrash([1, 2, 3], [groups()[1]]);
+
+      expect(currentFrameThumbnail()).toBe('/api/frames/4/thumbnail');
+    });
+
+    it('returns to All Groups after trashing the last Group', async () => {
+      await openGroup(1);
+
+      await runFromPalette('Trash Group');
+      await confirmTrash([4], [groups()[0]]);
+
+      expect(all('[data-testid="group-view"]')).toEqual([]);
+      expect(all('[data-testid="group-tile"]').length).toBe(1);
+    });
+
+    it('trashes the selected Frames', async () => {
+      await openGroup(0);
+      const trashSelected = all('[data-testid="trash-selected"]')[0] as HTMLButtonElement;
+      expect(trashSelected.disabled).toBe(true);
+
+      await click(all('[data-testid="select-frame"]')[1]);
+      await click(all('[data-testid="select-frame"]')[2]);
+      expect(text('[data-testid="trash-selected"]')).toBe('Trash 2 selected');
+      await click(trashSelected);
+
+      await confirmTrash(
+        [2, 3],
+        [group(1, [frame(1, 'jpg-only', { verdict: 'winner' })]), groups()[1]],
+      );
+    });
+
+    it('says which files could not be moved to the Trash', async () => {
+      await openGroup(0);
+      await press('Backspace');
+
+      await confirmTrash([1], groups(), [
+        { path: 'DSCF0001.JPG', error: 'No Trash on the volume' },
+      ]);
+
+      expect(text('[data-testid="trash-error"]')).toBe(
+        'Could not move DSCF0001.JPG to the Trash: No Trash on the volume',
+      );
+      expect(currentFrameThumbnail()).toBe('/api/frames/1/thumbnail');
     });
   });
 });

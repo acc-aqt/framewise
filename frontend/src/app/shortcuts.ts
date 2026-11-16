@@ -20,6 +20,8 @@ export type Shortcut =
   | { kind: 'splitHere' }
   | { kind: 'move'; by: -1 | 1 }
   | { kind: 'makeWinner' }
+  | { kind: 'trash' }
+  | { kind: 'trashGroup' }
   | { kind: 'writeBack' };
 
 /** What the Review UI is showing, which decides the commands that apply. */
@@ -168,6 +170,8 @@ export const COMMANDS: readonly Command[] = [
     shortcut: { kind: 'makeWinner' },
     appliesTo: (context) => context.canMakeWinner,
   },
+  frameCommand('trash', 'Trash Frame', '⌫', 'Backspace', { kind: 'trash' }),
+  paletteCommand('trash-group', 'Trash Group', { kind: 'trashGroup' }, whenFrameOpen),
   paletteCommand(
     'write-back',
     'Rating write-back',
@@ -197,7 +201,13 @@ export function shortcutFor(event: KeyboardEvent): Shortcut | null {
   if (event.metaKey || event.ctrlKey || isTypingInto(event.target)) {
     return null;
   }
-  const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+  // Delete trashes like Backspace, as in Lightroom Classic.
+  const key =
+    event.key === 'Delete'
+      ? 'Backspace'
+      : event.key.length === 1
+        ? event.key.toLowerCase()
+        : event.key;
   const command = COMMANDS.find(
     (candidate) => candidate.eventKey === key && (candidate.alt ?? false) === event.altKey,
   );
@@ -222,6 +232,37 @@ export function stepFrom(
     return frameId;
   }
   return frames[Math.min(frames.length - 1, Math.max(0, index + by))].id;
+}
+
+/**
+ * The id of the Frame to show once the Frames in `trashedIds` have left the Session: the
+ * current Frame if it stays, else the next Frame left in its Group, else the previous one,
+ * else the first Frame of the next Group. Null returns to All Groups.
+ */
+export function frameAfterTrash(
+  groups: Group[],
+  currentId: number,
+  trashedIds: readonly number[],
+): number | null {
+  const trashed = new Set(trashedIds);
+  if (!trashed.has(currentId)) {
+    return currentId;
+  }
+  const index = groups.findIndex((group) => group.frames.some((frame) => frame.id === currentId));
+  if (index === -1) {
+    return null;
+  }
+  const frames = groups[index].frames;
+  const at = frames.findIndex((frame) => frame.id === currentId);
+  const left = (candidates: typeof frames) => candidates.find((frame) => !trashed.has(frame.id));
+  const next =
+    left(frames.slice(at + 1)) ??
+    left(frames.slice(0, at).reverse()) ??
+    groups
+      .slice(index + 1)
+      .flatMap((group) => group.frames)
+      .find((frame) => !trashed.has(frame.id));
+  return next?.id ?? null;
 }
 
 function isTypingInto(target: EventTarget | null): boolean {

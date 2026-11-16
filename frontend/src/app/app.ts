@@ -28,6 +28,7 @@ import {
   Command,
   CommandContext,
   COMMANDS,
+  frameAfterTrash,
   isPaletteKey,
   PALETTE_KEY,
   Shortcut,
@@ -35,6 +36,8 @@ import {
   stepFrom,
 } from './shortcuts';
 import { Tooltip, TooltipContent } from './tooltip';
+import { TrashApi, TrashResult } from './trash-api';
+import { TrashConfirmation } from './trash-confirmation';
 import { WriteBackView } from './write-back';
 
 export const POLL_INTERVAL_MS = 1000;
@@ -56,6 +59,7 @@ export const POLL_INTERVAL_MS = 1000;
     SessionPicker,
     SessionSummaryView,
     Tooltip,
+    TrashConfirmation,
     WriteBackView,
   ],
   templateUrl: './app.html',
@@ -144,8 +148,13 @@ export class App {
     const { jpg_only_count, raw_jpg_count } = this.summary.value();
     return jpg_only_count + 2 * raw_jpg_count;
   });
+  /** The Frames waiting for the photographer to confirm they go to the Trash. */
+  protected readonly trashing = signal<Frame[] | null>(null);
+  protected readonly trashError = signal<string | null>(null);
   protected readonly paletteOpen = signal(false);
-  protected readonly paletteAvailable = computed(() => !this.noSession() && !this.writingBack());
+  protected readonly paletteAvailable = computed(
+    () => !this.noSession() && !this.writingBack() && this.trashing() === null,
+  );
   protected readonly commands = COMMANDS;
   protected readonly commandContext = computed<CommandContext>(() => {
     const frame = this.currentFrame();
@@ -165,6 +174,7 @@ export class App {
 
   private readonly overrideApi = inject(OverrideApi);
   private readonly sessionChangeApi = inject(SessionChangeApi);
+  private readonly trashApi = inject(TrashApi);
 
   constructor() {
     effect((onCleanup) => {
@@ -192,6 +202,12 @@ export class App {
     if (this.paletteOpen()) {
       if (event.key === 'Escape') {
         this.paletteOpen.set(false);
+      }
+      return;
+    }
+    if (this.trashing() !== null) {
+      if (event.key === 'Escape') {
+        this.trashing.set(null);
       }
       return;
     }
@@ -255,6 +271,21 @@ export class App {
     if (neighbour !== null) {
       this.save(this.overrideApi.move(frame.id, neighbour.frames[0].id));
     }
+  }
+
+  protected askToTrash(frames: Frame[]): void {
+    if (frames.length > 0) {
+      this.trashing.set(frames);
+    }
+  }
+
+  protected confirmTrash(): void {
+    const frames = this.trashing() ?? [];
+    this.trashing.set(null);
+    this.trashApi.trash(frames.map((frame) => frame.id)).subscribe({
+      next: (result) => this.afterTrash(result),
+      error: () => this.trashError.set('Could not move the Frames to the Trash.'),
+    });
   }
 
   protected changeKeeperBudget(share: number): void {
@@ -335,11 +366,34 @@ export class App {
       }
       case 'move':
         return this.moveFrame(frame, shortcut.by);
+      case 'trash':
+        return this.askToTrash([frame]);
+      case 'trashGroup':
+        return this.askToTrash(this.openGroup()!.frames);
       case 'makeWinner':
         return frame.verdict === 'winner'
           ? undefined
           : this.changeOverride(frame, { verdict: 'winner' });
     }
+  }
+
+  private afterTrash(result: TrashResult): void {
+    const current = this.openedFrameId();
+    if (current !== null) {
+      const next = frameAfterTrash(this.groups(), current, result.trashed);
+      if (next === null) {
+        this.closeGroup();
+      } else {
+        this.openedFrameId.set(next);
+      }
+    }
+    this.trashError.set(
+      result.failed.length === 0
+        ? null
+        : `Could not move ${result.failed.map((failure) => failure.path).join(', ')} to the Trash: ${result.failed[0].error}`,
+    );
+    this.summary.reload();
+    this.groupsResource.reload();
   }
 
   private save(request: Observable<unknown>): void {

@@ -35,7 +35,6 @@ export interface CommandContext {
   canSplitHere: boolean;
   /** Whether the current Frame is not already its Group's Winner. */
   canMakeWinner: boolean;
-  /** How many Groups are selected in All Groups. */
   selectedGroupCount: number;
   writeBackAvailable: boolean;
 }

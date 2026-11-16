@@ -228,8 +228,9 @@ export class GroupGrid {
   /** Groups to move to the Trash, once the photographer confirms. */
   readonly trash = output<Group[]>();
 
-  // A Frame of the Group selected last, where a Shift-click range starts.
-  private anchorFrameId: number | null = null;
+  // A Frame of each Group in the order the Groups were selected, as a Group's id can change.
+  // A Shift-click range starts from the last of these Groups that is still selected.
+  private selectionOrderFrameIds: number[] = [];
   private readonly width = signal<number | null>(null);
   protected readonly narrowLayout = NARROW_LAYOUT;
   protected readonly layout = computed(() => {
@@ -338,19 +339,18 @@ export class GroupGrid {
       selected.delete(group);
     } else {
       selected.add(group);
-      this.anchorFrameId = group.frames[0].id;
+      this.selectionOrderFrameIds.push(group.frames[0].id);
     }
     this.select(selected);
   }
 
   private selectRange(group: Group): void {
-    const groups = this.groups();
-    const anchor = groups.findIndex((candidate) =>
-      candidate.frames.some((frame) => frame.id === this.anchorFrameId),
-    );
-    if (this.selected().length === 0 || anchor === -1) {
+    const anchorGroup = this.anchorGroup();
+    if (anchorGroup === undefined) {
       return this.toggle(group);
     }
+    const groups = this.groups();
+    const anchor = groups.indexOf(anchorGroup);
     const target = groups.indexOf(group);
     const range = groups.slice(Math.min(anchor, target), Math.max(anchor, target) + 1);
     this.select(new Set([...this.selected(), ...range]));
@@ -358,6 +358,24 @@ export class GroupGrid {
 
   private select(selected: Set<Group>): void {
     this.selected.set(this.groups().filter((group) => selected.has(group)));
+    this.selectionOrderFrameIds = this.selectionOrderFrameIds.filter(
+      (frameId) => this.selectedGroupWith(frameId) !== undefined,
+    );
+  }
+
+  /** The last Group selected that is still selected, where a Shift-click range starts. */
+  private anchorGroup(): Group | undefined {
+    for (const frameId of [...this.selectionOrderFrameIds].reverse()) {
+      const group = this.selectedGroupWith(frameId);
+      if (group !== undefined) {
+        return group;
+      }
+    }
+    return undefined;
+  }
+
+  private selectedGroupWith(frameId: number): Group | undefined {
+    return this.selected().find((group) => group.frames.some((frame) => frame.id === frameId));
   }
 }
 

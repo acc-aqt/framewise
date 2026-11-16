@@ -2612,6 +2612,30 @@ describe('Review UI', () => {
         expect(selectedTiles()).toEqual([0, 1, 2]);
       });
 
+      it('starts a Shift-click range from the last Group selected that is still selected', async () => {
+        await showAllGroups();
+        await click(checkboxes()[0]);
+        await clickWith(tiles()[3], { metaKey: true });
+        await clickWith(tiles()[3], { metaKey: true });
+
+        await clickWith(tiles()[2], { shiftKey: true });
+
+        expect(selectedTiles()).toEqual([0, 1, 2]);
+      });
+
+      it('only toggles a Group on Shift-click once the selection is cleared', async () => {
+        await showAllGroups();
+        await click(checkboxes()[0]);
+        await click(all('[data-testid="clear-selection"]')[0]);
+        await clickWith(tiles()[2], { shiftKey: true });
+        expect(selectedTiles()).toEqual([2]);
+
+        await press('Escape');
+        await clickWith(checkboxes()[1], { shiftKey: true });
+
+        expect(selectedTiles()).toEqual([1]);
+      });
+
       it('keeps the checkbox of a selected Group ticked when a Shift-click on it selects a range', async () => {
         await showAllGroups();
         await click(checkboxes()[0]);

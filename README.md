@@ -46,8 +46,8 @@ It installs everything else framewise needs, optional tools included, builds the
 
 ## Platform support
 
-- **macOS**: the Apple Vision Providers serve every Capability. `aesthetics` needs macOS 15 or later.
-- **Linux**: the [portable Providers](#providers) serve `fingerprint`, `face-detection` and `eye-state`. There is no `face-quality` or `aesthetics` Provider for Linux yet.
+- **macOS**: the Apple Vision Providers serve every Capability. `subject` needs macOS 14 or later and `aesthetics` macOS 15 or later.
+- **Linux**: the [portable Providers](#providers) serve `fingerprint`, `face-detection` and `eye-state`. There is no `face-quality`, `aesthetics` or `subject` Provider for Linux yet.
 - The portable Providers also run on macOS 14 or later, which onnxruntime needs.
 
 ## Running it
@@ -114,7 +114,7 @@ To get rid of Frames for good, trash the current Frame, the selected Frames or t
 
 ## Providers
 
-By default each Capability (`fingerprint`, `face-detection`, `eye-state`, `face-quality`, `aesthetics`) uses its highest-priority Provider available on the machine ([ADR-0005](docs/adr/0005-pluggable-analysis-providers.md)). To choose one yourself, name its Provider id in a `config.toml` in the same folder as the Session store:
+By default each Capability (`fingerprint`, `face-detection`, `eye-state`, `face-quality`, `aesthetics`, `subject`) uses its highest-priority Provider available on the machine ([ADR-0005](docs/adr/0005-pluggable-analysis-providers.md)). To choose one yourself, name its Provider id in a `config.toml` in the same folder as the Session store:
 
 ```toml
 [providers]

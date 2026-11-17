@@ -185,6 +185,97 @@ def test_without_a_measurable_focus_area_there_is_no_subject(tmp_path, focus_are
     assert analyzer.analyze(frame).subject is None
 
 
+# The subject's left, top, right and bottom as fractions of the Frame.
+SUBJECT_BOX = (0.375, 0.25, 0.625, 0.75)
+
+
+def draw_blurred_subject(path: Path) -> Path:
+    """A crisp checkerboard with an oval subject in the middle that is the same checkerboard,
+    blurred, like a person out of focus in front of sharp mountains."""
+    image = Image.new("L", (800, 600), 128)
+    draw = ImageDraw.Draw(image)
+    for top in range(0, 600, 20):
+        for left in range(0, 800, 20):
+            if (top + left) // 20 % 2:
+                draw.rectangle((left, top, left + 19, top + 19), fill=40)
+    image.paste(image.filter(ImageFilter.GaussianBlur(6)), mask=subject_mask(image.size))
+    image.save(path, "JPEG", quality=95)
+    return path
+
+
+def subject_mask(size: tuple[int, int]) -> Image.Image:
+    width, height = size
+    left, top, right, bottom = SUBJECT_BOX
+    mask = Image.new("L", size, 0)
+    ImageDraw.Draw(mask).ellipse((left * width, top * height, right * width, bottom * height), 255)
+    return mask
+
+
+@dataclass
+class FakeSubject(FakeProvider):
+    capability: str = "subject"
+    id: str = "fake-subject"
+    mask: Image.Image | None = field(default_factory=lambda: subject_mask((400, 300)))
+
+    asked: int = 0
+
+    def subject_mask(self, jpg_path: Path) -> Image.Image | None:
+        self.asked += 1
+        return self.mask
+
+
+def test_the_subject_is_measured_on_its_mask_alone(tmp_path):
+    """Its box would take in the crisp background showing around the oval."""
+    frame = draw_blurred_subject(tmp_path / "frame.jpg")
+    analyzer = compose_analyzer(without("face-detection") + [FakeSubject()])
+
+    signals = analyzer.analyze(frame)
+
+    assert signals.sharpness > 0.8
+    assert signals.subject.found_by == "subject-mask"
+    assert signals.subject.sharpness < 0.2
+    assert (signals.subject.x, signals.subject.y) == pytest.approx((0.375, 0.25), abs=0.01)
+    assert (signals.subject.width, signals.subject.height) == pytest.approx((0.25, 0.5), abs=0.01)
+
+
+@pytest.mark.parametrize(("faces", "asked"), [([CRISP_BOX], 0), ([TINY_BOX], 1)])
+def test_the_subject_mask_is_only_asked_for_without_a_measurable_face(tmp_path, faces, asked):
+    """A Frame with faces is judged on its faces, so its mask would go unused."""
+    frame = draw_blurred_subject(tmp_path / "frame.jpg")
+    subject = FakeSubject()
+    providers = without("face-detection") + [FakeFaceDetection(boxes=faces), subject]
+
+    compose_analyzer(providers).analyze(frame)
+
+    assert subject.asked == asked
+
+
+def test_the_focus_point_wins_over_the_subject_mask(tmp_path):
+    frame = draw_blurred_subject(tmp_path / "frame.jpg")
+    analyzer = compose_analyzer(
+        without("face-detection") + [FakeSubject()], focus_area=lambda jpg_path: CRISP_BOX
+    )
+
+    subject = analyzer.analyze(frame).subject
+
+    assert subject.found_by == "focus-point"
+    assert subject.sharpness > 0.8
+
+
+def a_speck(size: tuple[int, int]) -> Image.Image:
+    mask = Image.new("L", size, 0)
+    ImageDraw.Draw(mask).ellipse((195, 145, 205, 155), fill=255)
+    return mask
+
+
+@pytest.mark.parametrize("mask", [None, Image.new("L", (400, 300), 0), a_speck((400, 300))])
+def test_without_a_measurable_subject_mask_there_is_no_subject(tmp_path, mask):
+    frame = draw_blurred_subject(tmp_path / "frame.jpg")
+    analyzer = compose_analyzer(without("face-detection") + [FakeSubject(mask=mask)])
+
+    assert analyzer.analyze(frame).subject is None
+
+
 def test_reading_focus_points_is_part_of_the_signature():
     """So a Session analyzed before ExifTool was installed is analyzed again once it is."""
     without_focus = compose_analyzer(full_stack()).signature

@@ -292,6 +292,35 @@ def test_the_real_analyzer_checks_every_face_in_a_group_shot(tmp_path):
     assert [face.eyes_open for face in faces] == [True, False, True]
 
 
+@pytest.mark.skipif(
+    sys.platform == "darwin" and int(platform.mac_ver()[0].split(".")[0]) < 14,
+    reason="Apple Vision's foreground mask request needs macOS 14",
+)
+def test_the_subject_mask_covers_the_person_where_they_appear(tmp_path):
+    from framewise.apple_vision import AppleSubject
+
+    upright = portrait(tmp_path / "upright.jpg", background=128)
+    on_its_side = stored_rotated(upright, tmp_path / "on-its-side.jpg")
+
+    for frame in (upright, on_its_side):
+        mask = AppleSubject().subject_mask(frame).resize((768, 512))
+        left, top, right, bottom = mask.point(lambda value: 255 if value >= 128 else 0).getbbox()
+        assert (left, top, right, bottom) == pytest.approx((64, 128, 320, 384), abs=24)
+
+
+@pytest.mark.skipif(
+    sys.platform == "darwin" and int(platform.mac_ver()[0].split(".")[0]) < 14,
+    reason="Apple Vision's foreground mask request needs macOS 14",
+)
+def test_a_frame_without_a_subject_has_no_subject_mask(tmp_path):
+    from framewise.apple_vision import AppleSubject
+
+    blank = tmp_path / "blank.jpg"
+    Image.new("RGB", (800, 600), (128, 128, 128)).save(blank, "JPEG")
+
+    assert AppleSubject().subject_mask(blank) is None
+
+
 def test_framewise_registers_its_apple_vision_providers_like_any_plug_in():
     chosen = select_providers(discover_providers())
 
@@ -299,6 +328,7 @@ def test_framewise_registers_its_apple_vision_providers_like_any_plug_in():
     assert chosen["face-detection"].id == "apple-vision-face-detection"
     assert chosen["eye-state"].id == "apple-vision-eye-state"
     assert chosen["face-quality"].id == "apple-vision-face-quality"
+    assert chosen["subject"].id == "apple-vision-subject"
 
 
 # Where the reference face sits in its fixture, as a hand-drawn box rather than Vision's own.

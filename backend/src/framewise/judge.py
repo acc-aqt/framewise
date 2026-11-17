@@ -8,7 +8,8 @@ the whole Session, become Keepers; the rest are Rejects.
 
 A Frame with faces is judged on its faces: its sharpness is that of its softest face, and every
 face must have open eyes and be sharp for the Frame to pass. A Frame without faces is judged on
-the sharpness of the area its camera focused on where it recorded one, else of the whole Frame.
+the sharpness of the area its camera focused on where it recorded one, else of its main subject
+where the subject Provider found one, else of the whole Frame.
 
 The photographer's Verdict Overrides steer the Winner: a Frame they made the Winner wins its
 Group, and a Frame they overrode to another Verdict is not picked, so the rest of the Group is
@@ -36,8 +37,8 @@ SOFT_BELOW = 0.4
 FACE_BLURRY_BELOW = 0.25
 FACE_SOFT_BELOW = 0.5
 FACE_SHARP_FROM = 0.67
-# The area a camera focused on is measured on its own like a face, and starts out with the face
-# thresholds until it is calibrated on the reference benchmark (#175).
+# The area a camera focused on and a subject mask are measured on their own like a face, and start
+# out with the face thresholds until they are calibrated on the reference benchmark (#175).
 FOCUS_BLURRY_BELOW = FACE_BLURRY_BELOW
 FOCUS_SOFT_BELOW = FACE_SOFT_BELOW
 FOCUS_SHARP_FROM = FACE_SHARP_FROM
@@ -78,7 +79,7 @@ class Reason:
     text: str
 
 
-SharpnessMeasuredOn = Literal["faces", "focus-point", "frame"]
+SharpnessMeasuredOn = Literal["faces", "focus-point", "subject-mask", "frame"]
 
 
 @dataclass(frozen=True)
@@ -105,6 +106,13 @@ SHARPNESS_RULES: dict[SharpnessMeasuredOn, SharpnessRule] = {
         FOCUS_SHARP_FROM,
         Reason("blurry", "Blurry", "Blurry at focus point"),
         Reason("soft", "Slightly soft", "Slightly soft at focus point"),
+    ),
+    "subject-mask": SharpnessRule(
+        FOCUS_BLURRY_BELOW,
+        FOCUS_SOFT_BELOW,
+        FOCUS_SHARP_FROM,
+        Reason("blurry", "Blurry", "Blurry subject"),
+        Reason("soft", "Slightly soft", "Slightly soft subject"),
     ),
     "frame": SharpnessRule(
         BLURRY_BELOW,

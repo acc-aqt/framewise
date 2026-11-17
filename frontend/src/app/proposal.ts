@@ -80,6 +80,7 @@ export function stillSelected(before: Group[], selected: Group[], after: Group[]
 const SHARPNESS_NOTES: Record<Frame['sharpness_measured_on'], string> = {
   faces: ' (softest face)',
   'focus-point': ' (at focus point)',
+  'subject-mask': ' (on subject)',
   frame: '',
 };
 

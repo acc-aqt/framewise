@@ -6,15 +6,25 @@ from array import array
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from PIL import Image
+
 from framewise.analyzer import SimilarityThresholds
 from framewise.image_measures import Region
-from framewise.providers import AESTHETICS, EYE_STATE, FACE_DETECTION, FACE_QUALITY, FINGERPRINT
+from framewise.providers import (
+    AESTHETICS,
+    EYE_STATE,
+    FACE_DETECTION,
+    FACE_QUALITY,
+    FINGERPRINT,
+    SUBJECT,
+)
 
 try:
     import Foundation
+    import Quartz
     import Vision
 except ImportError:
-    Foundation = Vision = None
+    Foundation = Quartz = Vision = None
 
 PRIORITY = 100
 FLOAT_ELEMENT_TYPE = 1
@@ -109,6 +119,31 @@ class AppleAesthetics(_AppleVisionProvider):
         return _clamp((float(request.results()[0].overallScore()) + 1) / 2)
 
 
+class AppleSubject(_AppleVisionProvider):
+    capability = SUBJECT
+    id = "apple-vision-subject"
+
+    def is_available(self) -> bool:
+        """Apple Vision's foreground mask request exists from macOS 14 on."""
+        return Vision is not None and hasattr(Vision, "VNGenerateForegroundInstanceMaskRequest")
+
+    def subject_mask(self, jpg_path: Path) -> Image.Image | None:
+        """Joins every foreground instance Vision finds into one subject. Vision's own
+        low-resolution mask spans the whole Frame as displayed, stretched to a square, so it
+        costs far less than one scaled to the Frame's full size."""
+        request = Vision.VNGenerateForegroundInstanceMaskRequest.alloc().init()
+        _perform(_vision_image(jpg_path), [request])
+        if not request.results():
+            return None
+        observation = request.results()[0]
+        buffer, error = observation.generateMaskForInstances_error_(
+            observation.allInstances(), None
+        )
+        if buffer is None:
+            raise RuntimeError(f"Apple Vision could not mask the subject of {jpg_path}: {error}")
+        return _greyscale(buffer)
+
+
 @dataclass
 class _VisionImage:
     key: tuple[Path, int]
@@ -195,6 +230,21 @@ def _openness(eye) -> float:
 def _quality(observation) -> float | None:
     quality = None if observation is None else observation.faceCaptureQuality()
     return None if quality is None else float(quality)
+
+
+def _greyscale(mask_buffer) -> Image.Image:
+    """Vision's mask holds one float per pixel, from 0 outside the subject to 1 inside it."""
+    Quartz.CVPixelBufferLockBaseAddress(mask_buffer, Quartz.kCVPixelBufferLock_ReadOnly)
+    try:
+        width = Quartz.CVPixelBufferGetWidth(mask_buffer)
+        height = Quartz.CVPixelBufferGetHeight(mask_buffer)
+        row_bytes = Quartz.CVPixelBufferGetBytesPerRow(mask_buffer)
+        address = Quartz.CVPixelBufferGetBaseAddress(mask_buffer)
+        pixels = bytes(address.as_buffer(row_bytes * height))
+    finally:
+        Quartz.CVPixelBufferUnlockBaseAddress(mask_buffer, Quartz.kCVPixelBufferLock_ReadOnly)
+    floats = Image.frombuffer("F", (width, height), pixels, "raw", "F", row_bytes, 1)
+    return floats.point(lambda value: value * 255).convert("L")
 
 
 def _clamp(value: float) -> float:

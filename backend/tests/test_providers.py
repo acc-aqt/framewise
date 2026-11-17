@@ -217,7 +217,10 @@ class FakeSubject(FakeProvider):
     id: str = "fake-subject"
     mask: Image.Image | None = field(default_factory=lambda: subject_mask((400, 300)))
 
+    asked: int = 0
+
     def subject_mask(self, jpg_path: Path) -> Image.Image | None:
+        self.asked += 1
         return self.mask
 
 
@@ -233,6 +236,18 @@ def test_the_subject_is_measured_on_its_mask_alone(tmp_path):
     assert signals.subject.sharpness < 0.2
     assert (signals.subject.x, signals.subject.y) == pytest.approx((0.375, 0.25), abs=0.01)
     assert (signals.subject.width, signals.subject.height) == pytest.approx((0.25, 0.5), abs=0.01)
+
+
+@pytest.mark.parametrize(("faces", "asked"), [([CRISP_BOX], 0), ([TINY_BOX], 1)])
+def test_the_subject_mask_is_only_asked_for_without_a_measurable_face(tmp_path, faces, asked):
+    """A Frame with faces is judged on its faces, so its mask would go unused."""
+    frame = draw_blurred_subject(tmp_path / "frame.jpg")
+    subject = FakeSubject()
+    providers = without("face-detection") + [FakeFaceDetection(boxes=faces), subject]
+
+    compose_analyzer(providers).analyze(frame)
+
+    assert subject.asked == asked
 
 
 def test_the_focus_point_wins_over_the_subject_mask(tmp_path):

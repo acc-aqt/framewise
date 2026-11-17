@@ -161,10 +161,10 @@ class ProviderAnalyzer:
     def analyze(self, jpg_path: Path) -> FrameSignals:
         boxes = self.face_detection.detect_faces(jpg_path) if self.face_detection else []
         focus_area = self.focus_area(jpg_path) if self.focus_area else None
-        subject_mask = (
-            self.subject.subject_mask(jpg_path) if self.subject and focus_area is None else None
-        )
-        measures = measure_image(jpg_path, boxes, focus_area, subject_mask)
+        measures = measure_image(jpg_path, boxes, focus_area)
+        if self._needs_subject_mask(focus_area, measures):
+            subject_mask = self.subject.subject_mask(jpg_path)
+            measures = measure_image(jpg_path, boxes, focus_area, subject_mask)
         return FrameSignals(
             fingerprint=self.fingerprint.fingerprint(jpg_path),
             sharpness=measures.sharpness,
@@ -176,6 +176,12 @@ class ProviderAnalyzer:
             faces=self._faces(jpg_path, boxes, measures.face_sharpness),
             subject=_subject(focus_area, measures),
         )
+
+    def _needs_subject_mask(self, focus_area: Region | None, measures: ImageMeasures) -> bool:
+        """Only a Frame without a focus point or a face to judge it on is judged on its subject
+        mask, so other Frames skip asking for one."""
+        has_measurable_face = any(sharpness is not None for sharpness in measures.face_sharpness)
+        return self.subject is not None and focus_area is None and not has_measurable_face
 
     def _faces(
         self, jpg_path: Path, boxes: list[Region], sharpness: list[float | None]

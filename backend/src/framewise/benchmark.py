@@ -55,6 +55,13 @@ class Agreement:
 
 
 @dataclass(frozen=True)
+class WinnerAgreement:
+    agreeing: int
+    groups: int
+    share: float | None
+
+
+@dataclass(frozen=True)
 class Timing:
     frames: int
     seconds: float
@@ -131,6 +138,33 @@ def agreement(proposal: Proposal, references: dict[int, int]) -> Agreement:
             stars: dict(counts) for stars, counts in sorted(by_stars.items())
         },
         reasons_on_rated_rejects_or_unsure=dict(reasons.most_common()),
+    )
+
+
+def winner_agreement(
+    proposal: Proposal, groups: list[list[int]], references: dict[int, int]
+) -> WinnerAgreement:
+    """How many Groups with a Reference rating have a Winner among their highest-rated Frames.
+    `groups` holds each Group's Frame ids. A Group of one Frame is left out, as its Winner
+    could not disagree, and an unrated Frame ranks below every rated one."""
+    counted = [
+        group
+        for group in groups
+        if len(group) > 1 and any(frame_id in references for frame_id in group)
+    ]
+    agreeing = [group for group in counted if _winner_is_top_rated(proposal, group, references)]
+    return WinnerAgreement(
+        agreeing=len(agreeing),
+        groups=len(counted),
+        share=len(agreeing) / len(counted) if counted else None,
+    )
+
+
+def _winner_is_top_rated(proposal: Proposal, group: list[int], references: dict[int, int]) -> bool:
+    top = max(references[frame_id] for frame_id in group if frame_id in references)
+    return any(
+        proposal[frame_id].verdict == Verdict.WINNER and references.get(frame_id) == top
+        for frame_id in group
     )
 
 
@@ -215,12 +249,14 @@ def _run(
 
     frames = store.frames()
     references = match_references(frames, session_root, ratings)
+    group_ids = [[analyzed.frame.id for analyzed in group] for group in groups]
     return {
         "session": str(session_root),
         "frames": len(frames),
         "frames_analysed": sum(len(group) for group in groups),
         "providers": dict(analyzer.signature),
         "agreement": asdict(agreement(proposal, references)),
+        "winner_agreement": asdict(winner_agreement(proposal, group_ids, references)),
         "timing": asdict(timing(len(frames), judged - started)),
         "analysis_seconds": analysed - started,
         "judging_seconds": judged - analysed,
@@ -243,6 +279,7 @@ def _frame_result(frame: Frame, proposal: Proposal, references: dict[int, int]) 
 
 def _summary(report: dict, catalog: Path, report_path: Path) -> str:
     result = report["agreement"]
+    winners = report["winner_agreement"]
     time_taken = report["timing"]
     by_stars = "; ".join(
         f"{stars}★ → " + ", ".join(f"{verdict} {count}" for verdict, count in verdicts.items())
@@ -273,6 +310,8 @@ def _summary(report: dict, catalog: Path, report_path: Path) -> str:
             + _share(result["with_reference_rejected_or_unsure"], result["with_reference"]),
             f"  Verdicts by Reference rating: {by_stars or 'none'}",
             f"  Reasons on rated Rejects and Unsure: {reasons or 'none'}",
+            "  Winners among their Group's top-rated Frames: "
+            + _share(winners["agreeing"], winners["groups"]),
             "",
             "Timing",
             f"  Analysis: {report['analysis_seconds']:.1f} s, "

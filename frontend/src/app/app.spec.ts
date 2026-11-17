@@ -659,6 +659,22 @@ describe('Review UI', () => {
     expect(title).toContain('Aesthetics unavailable');
   });
 
+  it('names what the sharpness was measured on in the score breakdown', async () => {
+    await respond(summary, [
+      group(1, [frame(1, 'jpg-only', { sharpness_measured_on: 'focus-point' })]),
+      group(2, [frame(2, 'jpg-only', { sharpness_measured_on: 'faces' })]),
+      group(3, [frame(3, 'jpg-only', { sharpness_measured_on: 'frame' })]),
+    ]);
+
+    const titles = all('[data-testid="group-tile"] app-frame-tile').map((tile) =>
+      tile.getAttribute('title'),
+    );
+
+    expect(titles[0]).toContain('Sharpness 0.90 (at focus point)');
+    expect(titles[1]).toContain('Sharpness 0.90 (softest face)');
+    expect(titles[2]).toContain('Sharpness 0.90\n');
+  });
+
   it("shows each Frame's Verdict, Reasons and score breakdown in an open Group", async () => {
     await respond(summary, [
       group(1, [
@@ -2973,6 +2989,7 @@ function frame(id: number, kind: Frame['kind'], overrides: Partial<Frame> = {}):
       high_key: false,
       aesthetics: 0,
     },
+    sharpness_measured_on: 'frame',
     faces: [],
     ...overrides,
   };

@@ -44,10 +44,15 @@ class ImageMeasures:
     high_key: bool
     face_sharpness: list[float | None]
     """The sharpness of each face asked for, or None where it is too small to measure."""
+    focus_sharpness: float | None = None
+    """The sharpness of the focus area asked for, or None without one it can measure."""
 
 
-def measure_image(jpg_path: Path, faces: list[Region] | None = None) -> ImageMeasures:
-    """`faces` are boxes in the Frame as it is displayed, after its EXIF orientation."""
+def measure_image(
+    jpg_path: Path, faces: list[Region] | None = None, focus_area: Region | None = None
+) -> ImageMeasures:
+    """`faces` and `focus_area` are boxes in the Frame as it is displayed, after its EXIF
+    orientation."""
     with Image.open(jpg_path) as image:
         image.draft("L", MEASURE_BOX)
         grey = ImageOps.exif_transpose(image).convert("L")
@@ -57,6 +62,7 @@ def measure_image(jpg_path: Path, faces: list[Region] | None = None) -> ImageMea
     histogram = grey.histogram()
     stops = _exposure_stops(histogram)
     face_boxes = [_pixel_box(grey, face) for face in faces or []]
+    focus_box = None if focus_area is None else _pixel_box(grey, focus_area)
     return ImageMeasures(
         sharpness=_sharpness(ratios),
         motion_blur=0.0 if sharpest == 0 else 1 - softest / sharpest,
@@ -65,6 +71,7 @@ def measure_image(jpg_path: Path, faces: list[Region] | None = None) -> ImageMea
         and _share_from(histogram, LOW_KEY_HIGHLIGHT_TONE) >= LOW_KEY_MIN_HIGHLIGHT_SHARE,
         high_key=stops >= KEY_FROM_STOPS and _keeps_highlights(grey, histogram, face_boxes),
         face_sharpness=[None if box is None else _box_sharpness(grey, box) for box in face_boxes],
+        focus_sharpness=None if focus_box is None else _box_sharpness(grey, focus_box),
     )
 
 

@@ -12,6 +12,13 @@ EXIFTOOL_TEMP_SUFFIX = "_exiftool_tmp"
 """ExifTool writes a file's new version next to it under this suffix, then moves it over."""
 
 
+def find_exiftool() -> str | None:
+    """The installed ExifTool, or None without one."""
+    return shutil.which("exiftool") or (
+        HOMEBREW_EXIFTOOL if Path(HOMEBREW_EXIFTOOL).is_file() else None
+    )
+
+
 @dataclass(frozen=True)
 class ExifToolResult:
     output: str
@@ -23,7 +30,7 @@ class ExifTool:
     It starts on the first command, so creating it touches nothing."""
 
     def __init__(self, executable: str | None = None):
-        self._executable = executable or shutil.which("exiftool") or HOMEBREW_EXIFTOOL
+        self._executable = executable or find_exiftool() or HOMEBREW_EXIFTOOL
         self._process: subprocess.Popen[str] | None = None
         self._lock = threading.Lock()
         # Unguessable, so no file name or metadata ExifTool echoes can pass for the end of output.

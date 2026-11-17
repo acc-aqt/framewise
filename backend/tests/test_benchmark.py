@@ -111,7 +111,7 @@ def judgement(verdict: Verdict) -> Judgement:
         camera_rating=0,
         total=1,
     )
-    return Judgement(verdict, [], scores, faces=[])
+    return Judgement(verdict, [], scores, faces=[], sharpness_measured_on="frame")
 
 
 def frame(frame_id: int, jpg_path: str) -> Frame:

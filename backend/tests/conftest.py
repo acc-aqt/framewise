@@ -78,6 +78,13 @@ def make_sidecar(path: Path, stars: int | None = None, label: str | None = None)
     return path
 
 
+@pytest.fixture(autouse=True)
+def no_focus_point_reader(monkeypatch):
+    """Analysis reads no focus points, so what it signs and measures doesn't depend on whether
+    ExifTool is installed where the tests run."""
+    monkeypatch.setattr("framewise.providers.find_exiftool", lambda: None)
+
+
 @pytest.fixture
 def session_dir(tmp_path: Path) -> Path:
     folder = tmp_path / "session"

@@ -456,6 +456,7 @@ def _judged_frame_json(
             for name, value in asdict(judgement.scores).items()
         },
         "signals": signals,
+        "sharpness_measured_on": judgement.sharpness_measured_on,
         "faces": [_face_json(check) for check in judgement.faces],
     }
 

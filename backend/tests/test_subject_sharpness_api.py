@@ -11,6 +11,44 @@ def at_focus_point(sharpness: float) -> Subject:
     )
 
 
+def on_subject_mask(sharpness: float) -> Subject:
+    return Subject(
+        x=0.3, y=0.25, width=0.25, height=0.6, sharpness=sharpness, found_by="subject-mask"
+    )
+
+
+def test_a_frame_whose_subject_is_blurred_is_a_reject_however_sharp_the_rest(
+    session_dir, review, analyzer
+):
+    burst(
+        session_dir,
+        analyzer,
+        ("DSCF0001", {}),
+        ("DSCF0002", {"sharpness": 1.0, "subject": on_subject_mask(0.15)}),
+    )
+
+    frame = frames_by_name(review())["DSCF0002.JPG"]
+
+    assert frame["verdict"] == "reject"
+    assert reasons(frame) == ["Blurry subject"]
+    assert [reason["code"] for reason in frame["reasons"]] == ["blurry"]
+
+
+def test_a_frame_whose_subject_is_slightly_soft_is_unsure(session_dir, review, analyzer):
+    burst(
+        session_dir,
+        analyzer,
+        ("DSCF0001", {}),
+        ("DSCF0002", {"sharpness": 1.0, "subject": on_subject_mask(0.3)}),
+    )
+
+    frame = frames_by_name(review())["DSCF0002.JPG"]
+
+    assert frame["verdict"] == "unsure"
+    assert reasons(frame) == ["Slightly soft subject"]
+    assert [reason["code"] for reason in frame["reasons"]] == ["soft"]
+
+
 def test_a_frame_blurred_at_its_focus_point_is_a_reject_however_sharp_the_rest(
     session_dir, review, analyzer
 ):
@@ -87,6 +125,7 @@ def test_a_frame_with_faces_is_still_judged_on_its_faces(session_dir, review, an
     ("signals", "measured_on", "sharpness_score"),
     [
         ({"sharpness": 0.9, "subject": at_focus_point(0.5)}, "focus-point", 0.746),
+        ({"sharpness": 0.9, "subject": on_subject_mask(0.5)}, "subject-mask", 0.746),
         ({"sharpness": 0.9}, "frame", 0.9),
     ],
 )

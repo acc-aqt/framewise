@@ -664,6 +664,7 @@ describe('Review UI', () => {
       group(1, [frame(1, 'jpg-only', { sharpness_measured_on: 'focus-point' })]),
       group(2, [frame(2, 'jpg-only', { sharpness_measured_on: 'faces' })]),
       group(3, [frame(3, 'jpg-only', { sharpness_measured_on: 'frame' })]),
+      group(4, [frame(4, 'jpg-only', { sharpness_measured_on: 'subject-mask' })]),
     ]);
 
     const titles = all('[data-testid="group-tile"] app-frame-tile').map((tile) =>
@@ -673,6 +674,7 @@ describe('Review UI', () => {
     expect(titles[0]).toContain('Sharpness 0.90 (at focus point)');
     expect(titles[1]).toContain('Sharpness 0.90 (softest face)');
     expect(titles[2]).toContain('Sharpness 0.90\n');
+    expect(titles[3]).toContain('Sharpness 0.90 (on subject)');
   });
 
   it("shows each Frame's Verdict, Reasons and score breakdown in an open Group", async () => {

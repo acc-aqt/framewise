@@ -29,6 +29,10 @@ const CAPABILITY_TEXTS: Record<string, { label: string; noneMeans: string | null
   'eye-state': { label: 'Eye state', noneMeans: 'eyes count as unknown' },
   'face-quality': { label: 'Face quality', noneMeans: 'face quality is left out of the score' },
   aesthetics: { label: 'Aesthetics', noneMeans: 'aesthetics is left out of the score' },
+  subject: {
+    label: 'Subject',
+    noneMeans: 'without faces or a focus point, sharpness is measured on the whole Frame',
+  },
 };
 
 const SOURCES: Record<ActiveProvider['source'], string> = {

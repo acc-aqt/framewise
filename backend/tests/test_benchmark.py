@@ -36,6 +36,7 @@ CREATE TABLE Adobe_images (
 );
 """
 DUPLICATE = [1.0] + [0.0] * 63
+OTHER_DUPLICATE = [0.0, 1.0] + [0.0] * 62
 
 
 class FakeCatalog:
@@ -283,6 +284,50 @@ def test_benchmark_reports_agreement_and_timing_without_touching_session_or_cata
     out = capsys.readouterr().out
     assert "Rated Frames proposed as Reject or Unsure: 1 of 2" in out
     assert "Winners among their Group's top-rated Frames: 0 of 1 (0%)" in out
+    assert fingerprint_of(session_dir) == session_before
+    assert fingerprint_of(catalog.path.parent) == catalog_before
+    assert not data_dir.exists()
+
+
+def test_fitting_the_weights_reports_them_with_held_out_agreement_and_writes_nothing(
+    session_dir, catalog, tmp_path, monkeypatch, capsys
+):
+    data_dir = tmp_path / "app-support"
+    monkeypatch.setenv("FRAMEWISE_DATA_DIR", str(data_dir))
+    analyzer = FakeAnalyzer()
+    for number, fingerprint in ((1, DUPLICATE), (3, OTHER_DUPLICATE)):
+        sharper_but_shaken = session_dir / f"DSCF000{number}.JPG"
+        steady = session_dir / f"DSCF000{number + 1}.JPG"
+        analyzer.script(make_jpg(sharper_but_shaken), fingerprint, sharpness=1.0, motion_blur=0.3)
+        analyzer.script(make_jpg(steady), fingerprint, sharpness=0.8, motion_blur=0.0)
+        catalog.add_photo(sharper_but_shaken, 2.0)
+        catalog.add_photo(steady, 4.0)
+    catalog.close()
+    session_before = fingerprint_of(session_dir)
+    catalog_before = fingerprint_of(catalog.path.parent)
+
+    main(
+        [
+            str(session_dir),
+            "--catalog",
+            str(catalog.path),
+            "--report",
+            str(tmp_path / "report.json"),
+            "--fit-weights",
+        ],
+        analyzer=analyzer,
+    )
+
+    out = capsys.readouterr().out
+    assert (
+        "  Proposed weights: sharpness 0.00, steadiness 1.20, exposure 0.00, aesthetics 0.00, "
+        "face_quality 0.00" in out
+    )
+    assert "  Held-out pairs ranked as rated: current 0 of 2 (0%), proposed 2 of 2 (100%)" in out
+    assert (
+        "  Held-out Winners among their Group's top-rated Frames: "
+        "current 0 of 2 (0%), proposed 2 of 2 (100%)" in out
+    )
     assert fingerprint_of(session_dir) == session_before
     assert fingerprint_of(catalog.path.parent) == catalog_before
     assert not data_dir.exists()

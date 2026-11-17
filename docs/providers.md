@@ -11,6 +11,7 @@ framewise analyzes each Frame's Analysis source with one Provider per Capability
 | `eye-state` | `eyes_open(jpg_path, faces)` | For each box, `True` (open), `False` (closed) or `None` (cannot tell). |
 | `face-quality` | `face_quality(jpg_path, faces)` | For each box, a score from 0 to 1, or `None`. |
 | `aesthetics` | `aesthetics(jpg_path)` | A score from 0 to 1, or `None`. |
+| `subject` | `subject_mask(jpg_path)` | A mask of the Frame's main subject, or `None` where it finds none. |
 
 The protocols are in `backend/src/framewise/providers.py`. `jpg_path` is a `pathlib.Path` to the Frame's JPG.
 
@@ -25,6 +26,15 @@ A box is a tuple `(x, y, width, height)`:
 - measured from the top left.
 
 The face detection Provider alone decides which faces a Frame has. The eye state and face quality Providers receive its boxes, possibly from a different Provider, and must return exactly one value per box, in the same order. framewise leaves out faces too small to measure.
+
+### Subject masks
+
+A subject mask is a greyscale `PIL.Image.Image` (mode `"L"`):
+
+- covering the Frame as it is displayed, after its EXIF orientation, at any size: framewise stretches it over the Frame;
+- 255 inside the subject and 0 outside it.
+
+framewise measures sharpness on the mask's pixels alone, shrunk by a few pixels so the subject's outline against the background doesn't count. A Frame without faces is judged on that sharpness, unless its camera recorded a focus point, which wins. framewise ignores a mask too small to measure.
 
 ### Scales
 

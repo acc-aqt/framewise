@@ -6,6 +6,16 @@ a little, never past a Flaw. Then each Group picks its Winner and proposes its f
 Unsure or Rejects. The Keeper budget decides how many of the remaining Frames, best first across
 the whole Session, become Keepers; the rest are Rejects.
 
+The Winner is the Frame with the fewest Flaws, and among Frames that tie on Flaws, the one that
+stands best within its Group. Each Score component gives a Frame a standing from 0, when every
+other Frame of the Group is better on it, to 1, when it is better than all of them; a Frame within
+STANDING_TOLERANCE of another counts as half beaten by it, so near-identical Frames share a
+standing. The weighted total of those standings, plus the Camera rating hint, ranks the Frames,
+and a tie falls to the first Frame by JPG path. A component any Frame of the Group lacks is left
+out for that Group. Components vary by very different amounts within a Group, so standings keep
+one component's scale from deciding the Winner. Only the Winner pick uses standings: the Keeper
+budget ranks Frames across the Session by their total Score, and the Review UI shows Scores.
+
 A Frame with faces is judged on its faces: its sharpness is that of its softest face, and every
 face must have open eyes and be sharp for the Frame to pass.
 
@@ -51,6 +61,10 @@ WEIGHTS = {
     "aesthetics": 0.3,
     "face_quality": 0.2,
 }
+# Score components that differ by less than this give Frames the same standing within their
+# Group, so noise between near-identical Frames does not decide the Winner. The Review UI shows
+# Scores to two decimals, so Frames this close look equal there too.
+STANDING_TOLERANCE = 0.02
 EYES_CLOSED = "eyes-closed"
 
 
@@ -225,12 +239,56 @@ def _pick_winner(assessments: list[_Assessment], overrides: Mapping[str, Verdict
         for assessment in assessments
         if assessment.analyzed.frame.jpg_path not in overrides
     ]
-    return min(candidates or assessments, key=_winner_rank)
+    standings = _standings(assessments)
+    return min(
+        candidates or assessments,
+        key=lambda assessment: _winner_rank(assessment, standings),
+    )
 
 
-def _winner_rank(assessment: _Assessment) -> tuple[int, float, str]:
+def _winner_rank(assessment: _Assessment, standings: Mapping[int, float]) -> tuple[int, float, str]:
     flaw_rank = {None: 0, Verdict.UNSURE: 1, Verdict.REJECT: 2}[assessment.worst]
-    return flaw_rank, -assessment.scores.total, assessment.analyzed.frame.jpg_path
+    frame = assessment.analyzed.frame
+    return flaw_rank, -standings[frame.id], frame.jpg_path
+
+
+def _standings(assessments: list[_Assessment]) -> dict[int, float]:
+    """Each Frame's weighted standing within its Group plus its Camera rating hint, by Frame id.
+    A Score component that any Frame of the Group lacks is left out."""
+    components = [
+        name
+        for name in WEIGHTS
+        if all(getattr(assessment.scores, name) is not None for assessment in assessments)
+    ]
+    total_weight = sum(WEIGHTS[name] for name in components)
+    standings = {}
+    for assessment in assessments:
+        weighted = sum(
+            WEIGHTS[name] * _standing(assessment, assessments, name) for name in components
+        )
+        standings[assessment.analyzed.frame.id] = (
+            weighted / total_weight + assessment.scores.camera_rating
+        )
+    return standings
+
+
+def _standing(assessment: _Assessment, assessments: list[_Assessment], component: str) -> float:
+    """From 0 when every other Frame of the Group is better on the component to 1 when it is
+    better than all of them. A Frame within STANDING_TOLERANCE counts as half beaten."""
+    others = len(assessments) - 1
+    if others == 0:
+        return 1.0
+    value = getattr(assessment.scores, component)
+    beaten = 0.0
+    for other in assessments:
+        if other is assessment:
+            continue
+        gap = value - getattr(other.scores, component)
+        if abs(gap) < STANDING_TOLERANCE:
+            beaten += 0.5
+        elif gap > 0:
+            beaten += 1
+    return beaten / others
 
 
 def _judge_flaws_against_winner(assessment: _Assessment, winner: _Assessment) -> Judgement | None:

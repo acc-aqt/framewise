@@ -206,6 +206,27 @@ def test_rejecting_the_winner_makes_framewise_pick_another(session_dir, review, 
     }
 
 
+def test_rejecting_the_winner_picks_the_frame_standing_best_among_the_rest(
+    session_dir, review, analyzer
+):
+    burst(
+        session_dir,
+        analyzer,
+        ("DSCF0001", {"sharpness": 0.9, "aesthetics": 0.95}),
+        ("DSCF0002", {"sharpness": 0.8, "aesthetics": 0.5}),
+        ("DSCF0003", {"sharpness": 0.7, "aesthetics": 0.9}),
+    )
+    client = keep_every_clean_frame(review())
+
+    override(client, "DSCF0001.JPG", verdict="reject")
+
+    assert verdicts(client) == {
+        "DSCF0001.JPG": "reject",
+        "DSCF0002.JPG": "winner",
+        "DSCF0003.JPG": "keeper",
+    }
+
+
 def test_an_override_rejects_invalid_values(session_dir, review, analyzer):
     burst(session_dir, analyzer, ("DSCF0001", {}))
     client = review()

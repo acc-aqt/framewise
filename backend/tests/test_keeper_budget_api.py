@@ -141,7 +141,7 @@ def test_the_photographers_keepers_count_towards_the_keeper_budget(session_dir, 
 
 
 def test_a_camera_rating_tips_the_balance_between_near_equal_frames(session_dir, review, analyzer):
-    burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.65}), ("DSCF0002", {}))
+    burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.51}), ("DSCF0002", {}))
     make_jpg(session_dir / "DSCF0002.JPG", stars=1, captured_at=seconds(0.3))
 
     frames = frames_by_name(review())

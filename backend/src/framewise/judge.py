@@ -7,7 +7,8 @@ Unsure or Rejects. The Keeper budget decides how many of the remaining Frames, b
 the whole Session, become Keepers; the rest are Rejects.
 
 A Frame with faces is judged on its faces: its sharpness is that of its softest face, and every
-face must have open eyes and be sharp for the Frame to pass.
+face must have open eyes and be sharp for the Frame to pass. Its face quality and expression are
+those of its weakest face, and only rank it, never Flaw it.
 
 The photographer's Verdict Overrides steer the Winner: a Frame they made the Winner wins its
 Group, and a Frame they overrode to another Verdict is not picked, so the rest of the Group is
@@ -50,6 +51,7 @@ WEIGHTS = {
     "exposure": 0.2,
     "aesthetics": 0.3,
     "face_quality": 0.2,
+    "expression": 0.1,
 }
 EYES_CLOSED = "eyes-closed"
 
@@ -81,6 +83,8 @@ class Scores:
     aesthetics: float | None
     face_quality: float | None
     """The quality of the Frame's weakest face, or None without faces."""
+    expression: float | None
+    """The expression of the Frame's weakest face, or None without faces."""
     camera_rating: float
     """The hint a Camera rating adds to the total, or 0 without one."""
     total: float
@@ -257,6 +261,7 @@ def _scores(analyzed: AnalyzedFrame) -> Scores:
         "exposure": _exposure_score(signals, analyzed.frame.kind),
         "aesthetics": None if signals.aesthetics is None else _clamp(signals.aesthetics),
         "face_quality": _face_quality(signals.faces),
+        "expression": _expression(signals.faces),
     }
     available = {name: value for name, value in components.items() if value is not None}
     total_weight = sum(WEIGHTS[name] for name in available)
@@ -293,6 +298,15 @@ def _judged_sharpness(signals: FrameSignals) -> float:
 def _face_quality(faces: list[Face]) -> float | None:
     qualities = [face.quality for face in faces if face.quality is not None]
     return _clamp(min(qualities)) if qualities else None
+
+
+def _expression(faces: list[Face]) -> float | None:
+    smiles = [
+        face.expression.smile
+        for face in faces
+        if face.expression is not None and face.expression.smile is not None
+    ]
+    return _clamp(min(smiles)) if smiles else None
 
 
 def _check_face(face: Face) -> FaceCheck:

@@ -17,6 +17,7 @@ from framewise.benchmark import (
     match_references,
     read_reference_ratings,
     timing,
+    winner_agreement,
 )
 from framewise.camera_rating import CameraRating
 from framewise.judge import Judgement, Scores, Verdict
@@ -187,6 +188,57 @@ def test_agreement_counts_kept_and_rejected_frames_with_a_reference_rating():
         2: {"keeper": 1, "reject": 1},
         3: {"winner": 1, "unsure": 1},
     }
+
+
+def test_winner_agreement_counts_groups_whose_winner_is_among_the_top_rated_frames():
+    proposal = {
+        1: judgement(Verdict.WINNER),
+        2: judgement(Verdict.KEEPER),
+        3: judgement(Verdict.REJECT),
+        4: judgement(Verdict.WINNER),
+        5: judgement(Verdict.KEEPER),
+    }
+    groups = [[1, 2, 3], [4, 5]]
+    references = {1: 4, 2: 2, 4: 1, 5: 3}
+
+    result = winner_agreement(proposal, groups, references)
+
+    assert result.agreeing == 1
+    assert result.groups == 2
+
+
+def test_a_winner_tied_for_the_top_rating_agrees():
+    proposal = {1: judgement(Verdict.KEEPER), 2: judgement(Verdict.WINNER)}
+
+    result = winner_agreement(proposal, [[1, 2]], {1: 3, 2: 3})
+
+    assert result.agreeing == 1
+    assert result.groups == 1
+
+
+def test_groups_without_a_reference_rating_are_not_counted():
+    proposal = {1: judgement(Verdict.WINNER), 2: judgement(Verdict.KEEPER)}
+
+    result = winner_agreement(proposal, [[1, 2]], {})
+
+    assert result.groups == 0
+
+
+def test_an_unrated_winner_disagrees_with_a_rated_frame_in_its_group():
+    proposal = {1: judgement(Verdict.WINNER), 2: judgement(Verdict.REJECT)}
+
+    result = winner_agreement(proposal, [[1, 2]], {2: 1})
+
+    assert result.agreeing == 0
+    assert result.groups == 1
+
+
+def test_groups_of_one_frame_are_not_counted():
+    proposal = {1: judgement(Verdict.WINNER)}
+
+    result = winner_agreement(proposal, [[1]], {1: 3})
+
+    assert result.groups == 0
 
 
 def test_timing_is_measured_against_15_minutes_per_200_frames():

@@ -55,6 +55,12 @@ class Agreement:
 
 
 @dataclass(frozen=True)
+class WinnerAgreement:
+    agreeing: int
+    groups: int
+
+
+@dataclass(frozen=True)
 class Timing:
     frames: int
     seconds: float
@@ -131,6 +137,29 @@ def agreement(proposal: Proposal, references: dict[int, int]) -> Agreement:
             stars: dict(counts) for stars, counts in sorted(by_stars.items())
         },
         reasons_on_rated_rejects_or_unsure=dict(reasons.most_common()),
+    )
+
+
+def winner_agreement(
+    proposal: Proposal, groups: list[list[int]], references: dict[int, int]
+) -> WinnerAgreement:
+    """How many Groups with a Reference rating have a Winner among their highest-rated Frames.
+    `groups` holds each Group's Frame ids. A Group of one Frame is left out, as its Winner
+    could not disagree, and an unrated Frame ranks below every rated one."""
+    counted = [
+        group
+        for group in groups
+        if len(group) > 1 and any(frame_id in references for frame_id in group)
+    ]
+    agreeing = [group for group in counted if _winner_is_top_rated(proposal, group, references)]
+    return WinnerAgreement(agreeing=len(agreeing), groups=len(counted))
+
+
+def _winner_is_top_rated(proposal: Proposal, group: list[int], references: dict[int, int]) -> bool:
+    top = max(references[frame_id] for frame_id in group if frame_id in references)
+    return any(
+        proposal[frame_id].verdict == Verdict.WINNER and references.get(frame_id) == top
+        for frame_id in group
     )
 
 

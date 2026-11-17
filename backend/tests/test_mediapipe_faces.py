@@ -16,7 +16,11 @@ from test_verdicts_api import frames_by_name, reasons
 
 from framewise.analyzer import SimilarityThresholds
 from framewise.apple_vision import PRIORITY
-from framewise.mediapipe_faces import MediaPipeEyeState, MediaPipeFaceDetection
+from framewise.mediapipe_faces import (
+    MediaPipeExpression,
+    MediaPipeEyeState,
+    MediaPipeFaceDetection,
+)
 from framewise.models import FACE_LANDMARKER, is_verified
 from framewise.providers import compose_analyzer, discover_providers, select_providers
 from framewise.review import SessionAnalysis, open_session, resolve_data_dir
@@ -46,6 +50,16 @@ def eyes_open(jpg_path: Path) -> list[bool | None]:
 def test_eye_state_tells_open_from_closed_eyes():
     assert eyes_open(FACES / "eyes-open.jpg") == [True]
     assert eyes_open(FACES / "eyes-closed.jpg") == [False]
+
+
+def smile(jpg_path: Path) -> float | None:
+    faces = MediaPipeFaceDetection().detect_faces(jpg_path)
+    [expression] = MediaPipeExpression().expression(jpg_path, faces)
+    return expression.smile
+
+
+def test_a_smiling_face_scores_a_higher_smile_than_a_neutral_one():
+    assert smile(FACES / "eyes-open.jpg") > 0.5 > smile(FACES / "neutral.jpg")
 
 
 def test_a_frame_without_faces_has_none(tmp_path):
@@ -109,3 +123,4 @@ def test_framewise_registers_its_mediapipe_providers_below_apple_vision():
     expected = "apple-vision" if sys.platform == "darwin" else "mediapipe"
     assert chosen["face-detection"].id == f"{expected}-face-detection"
     assert chosen["eye-state"].id == f"{expected}-eye-state"
+    assert chosen["expression"].id == "mediapipe-expression"

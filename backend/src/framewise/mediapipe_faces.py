@@ -7,9 +7,10 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
+from framewise.analyzer import Expression
 from framewise.image_measures import Region
 from framewise.models import FACE_LANDMARKER, ensure_model
-from framewise.providers import EYE_STATE, FACE_DETECTION
+from framewise.providers import EXPRESSION, EYE_STATE, FACE_DETECTION
 from framewise.review import resolve_data_dir
 
 try:
@@ -30,6 +31,7 @@ BLINKS = ("eyeBlinkLeft", "eyeBlinkRight")
 # open eyes score 0.03 for both eyes and the painted-shut eyes 0.75 and 0.76, so the threshold
 # sits between them.
 EYES_CLOSED_FROM = 0.5
+SMILES = ("mouthSmileLeft", "mouthSmileRight")
 MIN_OVERLAP = 0.3
 """How much a box from another detector must overlap a landmarked face to be read as it."""
 
@@ -59,11 +61,22 @@ class MediaPipeEyeState(_MediaPipeProvider):
         return [_eyes_open(_overlapping_face(face, landmarked)) for face in faces]
 
 
+class MediaPipeExpression(_MediaPipeProvider):
+    capability = EXPRESSION
+    id = "mediapipe-expression"
+
+    def expression(self, jpg_path: Path, faces: list[Region]) -> list[Expression | None]:
+        landmarked = _landmarked_faces(jpg_path)
+        return [_expression(_overlapping_face(face, landmarked)) for face in faces]
+
+
 @dataclass(frozen=True)
 class _LandmarkedFace:
     box: Region
     blink: float
     """The mean of both eyes' blink blendshapes."""
+    smile: float
+    """The mean of both mouth corners' smile blendshapes."""
 
 
 _this_thread = threading.local()
@@ -76,7 +89,7 @@ def _landmarked_faces(jpg_path: Path) -> list[_LandmarkedFace]:
     if getattr(_this_thread, "key", None) != key:
         result = _landmarker().detect(_mediapipe_image(jpg_path))
         _this_thread.faces = [
-            _LandmarkedFace(_box(landmarks), _blink(blendshapes))
+            _landmarked_face(landmarks, blendshapes)
             for landmarks, blendshapes in zip(
                 result.face_landmarks, result.face_blendshapes, strict=True
             )
@@ -115,9 +128,15 @@ def _box(landmarks) -> Region:
     return min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
 
 
-def _blink(blendshapes) -> float:
+def _landmarked_face(landmarks, blendshapes) -> _LandmarkedFace:
     scores = {category.category_name: category.score for category in blendshapes}
-    return sum(scores[name] for name in BLINKS) / len(BLINKS)
+    return _LandmarkedFace(
+        _box(landmarks), blink=_mean(scores, BLINKS), smile=_mean(scores, SMILES)
+    )
+
+
+def _mean(scores: dict[str, float], names: tuple[str, ...]) -> float:
+    return sum(scores[name] for name in names) / len(names)
 
 
 def _overlapping_face(box: Region, faces: list[_LandmarkedFace]) -> _LandmarkedFace | None:
@@ -139,6 +158,10 @@ def _overlap(first: Region, second: Region) -> float:
 
 def _eyes_open(face: _LandmarkedFace | None) -> bool | None:
     return None if face is None else face.blink < EYES_CLOSED_FROM
+
+
+def _expression(face: _LandmarkedFace | None) -> Expression | None:
+    return None if face is None else Expression(smile=face.smile)
 
 
 def _clamp(value: float) -> float:

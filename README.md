@@ -46,8 +46,8 @@ It installs everything else framewise needs, optional tools included, builds the
 
 ## Platform support
 
-- **macOS**: the Apple Vision Providers serve every Capability. `aesthetics` needs macOS 15 or later.
-- **Linux**: the [portable Providers](#providers) serve `fingerprint`, `face-detection` and `eye-state`. There is no `face-quality` or `aesthetics` Provider for Linux yet.
+- **macOS**: the Apple Vision Providers serve every Capability but `expression`, which only the portable MediaPipe Provider serves. `aesthetics` needs macOS 15 or later.
+- **Linux**: the [portable Providers](#providers) serve `fingerprint`, `face-detection`, `eye-state` and `expression`. There is no `face-quality` or `aesthetics` Provider for Linux yet.
 - The portable Providers also run on macOS 14 or later, which onnxruntime needs.
 
 ## Running it
@@ -80,7 +80,7 @@ framewise analyzes each Frame's JPG with the installed analysis Providers; which
 
 - **Groups**: near-duplicate and burst Frames are grouped together.
 - **Verdicts**: each Frame gets a proposed Verdict (Winner, Keeper, Reject or Unsure) with Reasons, judged from its sharpness, motion blur, exposure and, where an `aesthetics` Provider is available, an aesthetics score.
-- **Faces**: in Frames with faces, every face is checked for closed eyes, sharpness and, where a `face-quality` Provider is available, face quality. Sharpness is then judged on the faces rather than the whole image. An open Group and the loupe show a badge on each face.
+- **Faces**: in Frames with faces, every face is checked for closed eyes, sharpness and, where a `face-quality` Provider is available, face quality. Sharpness is then judged on the faces rather than the whole image. Where an `expression` Provider is available, a Frame where everyone smiles ranks above one where someone does not; a missing smile is never a flaw. An open Group and the loupe show a badge on each face.
 - **Camera rating**: a rating already on the file, such as in-camera stars, nudges a Frame up a little but never past a technical flaw.
 - **Keeper budget**: the slider sets roughly what share of the Session's Frames to keep (40% to start, stored per Session). Each Group's Winner always stays, then the best Frames without flaws become Keepers until the budget is spent. The slider shows how many Keepers result.
 
@@ -113,7 +113,7 @@ To get rid of Frames for good, trash the current Frame, the selected Frames or t
 
 ## Providers
 
-By default each Capability (`fingerprint`, `face-detection`, `eye-state`, `face-quality`, `aesthetics`) uses its highest-priority Provider available on the machine ([ADR-0005](docs/adr/0005-pluggable-analysis-providers.md)). To choose one yourself, name its Provider id in a `config.toml` in the same folder as the Session store:
+By default each Capability (`fingerprint`, `face-detection`, `eye-state`, `face-quality`, `expression`, `aesthetics`) uses its highest-priority Provider available on the machine ([ADR-0005](docs/adr/0005-pluggable-analysis-providers.md)). To choose one yourself, name its Provider id in a `config.toml` in the same folder as the Session store:
 
 ```toml
 [providers]

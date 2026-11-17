@@ -6,7 +6,7 @@ from typing import Literal, Protocol
 # Bump whenever the built-in image maths or the shape of FrameSignals changes, so a re-run
 # re-analyzes Frames whose saved analysis predates it. A Provider's own changes are covered by
 # its version, in the ProviderSignature.
-ANALYSIS_VERSION = 5
+ANALYSIS_VERSION = 6
 
 ProviderSignature = Mapping[str, str]
 """The Provider that served each Capability of an analysis, as "<id>@<version>" by Capability."""
@@ -53,6 +53,15 @@ class SimilarityThresholds:
 
 
 @dataclass(frozen=True)
+class Expression:
+    """How a face looks, as the expression Provider reads it."""
+
+    smile: float | None
+    """From 0 for a neutral or downturned mouth to 1 for a broad smile, or None where the
+    Provider cannot tell."""
+
+
+@dataclass(frozen=True)
 class Face:
     """One face the face detection Provider found in a Frame. Its box is a fraction of the
     Frame's width and height, measured from the top left."""
@@ -67,6 +76,8 @@ class Face:
     """Like the Frame's sharpness, measured on the face alone."""
     quality: float | None
     """The face quality Provider's score from 0 to 1, or None where it is unavailable."""
+    expression: Expression | None
+    """None where the expression Provider could not read the face, or there is none."""
 
 
 @dataclass(frozen=True)

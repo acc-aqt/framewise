@@ -1,12 +1,13 @@
 from test_verdicts_api import burst, frames_by_name, keep_every_clean_frame, reasons, verdicts
 
-from framewise.analyzer import Face
+from framewise.analyzer import Expression, Face
 
 
 def face(
     eyes_open: bool | None = True,
     sharpness: float = 0.9,
     quality: float | None = 0.7,
+    smile: float | None = 0.5,
     x: float = 0.4,
 ) -> Face:
     return Face(
@@ -17,6 +18,7 @@ def face(
         eyes_open=eyes_open,
         sharpness=sharpness,
         quality=quality,
+        expression=None if smile is None else Expression(smile=smile),
     )
 
 
@@ -201,6 +203,54 @@ def test_a_frame_without_faces_has_no_face_quality_score(session_dir, review, an
 
     assert frame["scores"]["face_quality"] is None
     assert frame["faces"] == []
+
+
+def test_a_frame_where_everyone_smiles_beats_one_where_someone_does_not(
+    session_dir, review, analyzer
+):
+    burst(
+        session_dir,
+        analyzer,
+        ("DSCF0001", {"faces": [face(x=0.1, smile=0.95), face(x=0.6, smile=0.1)]}),
+        ("DSCF0002", {"faces": [face(x=0.1, smile=0.6), face(x=0.6, smile=0.6)]}),
+    )
+
+    frames = frames_by_name(review())
+
+    assert frames["DSCF0002.JPG"]["verdict"] == "winner"
+    assert frames["DSCF0001.JPG"]["scores"]["expression"] == 0.1
+    assert frames["DSCF0002.JPG"]["scores"]["expression"] == 0.6
+
+
+def test_no_smile_is_never_a_flaw(session_dir, review, analyzer):
+    burst(session_dir, analyzer, ("DSCF0001", {"faces": [face(smile=0.0)]}))
+
+    [frame] = frames_by_name(review()).values()
+
+    assert frame["verdict"] == "winner"
+    assert frame["reasons"] == []
+
+
+def test_an_unknown_expression_is_left_out_of_the_score(session_dir, review, analyzer):
+    burst(
+        session_dir,
+        analyzer,
+        ("DSCF0001", {"faces": [face(smile=0.0)]}),
+        ("DSCF0002", {"faces": [face(smile=None)]}),
+    )
+
+    frames = frames_by_name(review())
+
+    assert frames["DSCF0002.JPG"]["scores"]["expression"] is None
+    assert frames["DSCF0002.JPG"]["verdict"] == "winner"
+
+
+def test_a_frame_without_faces_has_no_expression_score(session_dir, review, analyzer):
+    burst(session_dir, analyzer, ("DSCF0001", {}))
+
+    [frame] = frames_by_name(review()).values()
+
+    assert frame["scores"]["expression"] is None
 
 
 def test_each_face_carries_its_box_and_badges(session_dir, review, analyzer):

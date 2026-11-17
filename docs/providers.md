@@ -10,6 +10,7 @@ framewise analyzes each Frame's Analysis source with one Provider per Capability
 | `face-detection` | `detect_faces(jpg_path)` | One box per face. |
 | `eye-state` | `eyes_open(jpg_path, faces)` | For each box, `True` (open), `False` (closed) or `None` (cannot tell). |
 | `face-quality` | `face_quality(jpg_path, faces)` | For each box, a score from 0 to 1, or `None`. |
+| `expression` | `expression(jpg_path, faces)` | For each box, an `Expression`, or `None` (cannot read the face). |
 | `aesthetics` | `aesthetics(jpg_path)` | A score from 0 to 1, or `None`. |
 
 The protocols are in `backend/src/framewise/providers.py`. `jpg_path` is a `pathlib.Path` to the Frame's JPG.
@@ -24,11 +25,19 @@ A box is a tuple `(x, y, width, height)`:
 - measured as fractions from 0 to 1 of the Frame as it is displayed, after its EXIF orientation;
 - measured from the top left.
 
-The face detection Provider alone decides which faces a Frame has. The eye state and face quality Providers receive its boxes, possibly from a different Provider, and must return exactly one value per box, in the same order. framewise leaves out faces too small to measure.
+The face detection Provider alone decides which faces a Frame has. The eye state, face quality and expression Providers receive its boxes, possibly from a different Provider, and must return exactly one value per box, in the same order. framewise leaves out faces too small to measure.
+
+### Expressions
+
+`Expression`, from `framewise.analyzer`, holds what an expression Provider reads from a face:
+
+- `smile`: from 0 for a neutral or downturned mouth to 1 for a broad smile, or `None` where your Provider cannot tell.
+
+framewise ranks a Frame by its least smiling face. A missing smile never counts as a flaw.
 
 ### Scales
 
-Return face quality and aesthetics on the 0 to 1 scale, whatever your model's own scale is. Any threshold your Provider applies, such as the openness below which eyes count as closed, is yours to choose and calibrate.
+Return face quality, smiles and aesthetics on the 0 to 1 scale, whatever your model's own scale is. Any threshold your Provider applies, such as the openness below which eyes count as closed, is yours to choose and calibrate.
 
 ### Similarity thresholds
 

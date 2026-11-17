@@ -81,6 +81,7 @@ framewise analyzes each Frame's JPG with the installed analysis Providers; which
 - **Groups**: near-duplicate and burst Frames are grouped together.
 - **Verdicts**: each Frame gets a proposed Verdict (Winner, Keeper, Reject or Unsure) with Reasons, judged from its sharpness, motion blur, exposure and, where an `aesthetics` Provider is available, an aesthetics score.
 - **Faces**: in Frames with faces, every face is checked for closed eyes, sharpness and, where a `face-quality` Provider is available, face quality. Sharpness is then judged on the faces rather than the whole image. An open Group and the loupe show a badge on each face.
+- **Focus point**: in Frames without faces, sharpness is judged on the area the camera focused on, where its maker notes record one (Fujifilm for now, read with [ExifTool](https://exiftool.org)), rather than the whole Frame. The score breakdown says which one it was measured on.
 - **Camera rating**: a rating already on the file, such as in-camera stars, nudges a Frame up a little but never past a technical flaw.
 - **Keeper budget**: the slider sets roughly what share of the Session's Frames to keep (40% to start, stored per Session). Each Group's Winner always stays, then the best Frames without flaws become Keepers until the budget is spent. The slider shows how many Keepers result.
 

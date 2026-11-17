@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from framewise.analyzer import ANALYSIS_VERSION, Face, FrameSignals, ProviderSignature
+from framewise.analyzer import ANALYSIS_VERSION, Face, FrameSignals, ProviderSignature, Subject
 from framewise.camera_rating import CameraRating
 from framewise.scan import ScannedFrame
 
@@ -432,7 +432,13 @@ def _signals_without_fingerprint(signals: FrameSignals) -> dict:
 def _signals(row: sqlite3.Row) -> FrameSignals:
     values = json.loads(row["signals"])
     faces = [Face(**face) for face in values.pop("faces")]
-    return FrameSignals(fingerprint=array("f", row["fingerprint"]).tolist(), faces=faces, **values)
+    subject = values.pop("subject")
+    return FrameSignals(
+        fingerprint=array("f", row["fingerprint"]).tolist(),
+        faces=faces,
+        subject=None if subject is None else Subject(**subject),
+        **values,
+    )
 
 
 def _frame(row: sqlite3.Row) -> Frame:

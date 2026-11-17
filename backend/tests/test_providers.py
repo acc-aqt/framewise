@@ -165,6 +165,34 @@ def test_faces_too_small_to_measure_are_left_out(tmp_path):
     assert [(face.x, face.y, face.width, face.height) for face in faces] == [CRISP_BOX]
 
 
+@pytest.mark.parametrize(("focus_area", "sharp"), [(CRISP_BOX, True), (BLURRED_BOX, False)])
+def test_the_subject_is_measured_inside_the_cameras_focus_area(tmp_path, focus_area, sharp):
+    frame = draw_frame(tmp_path / "frame.jpg")
+    analyzer = compose_analyzer(full_stack(), focus_area=lambda jpg_path: focus_area)
+
+    subject = analyzer.analyze(frame).subject
+
+    assert (subject.x, subject.y, subject.width, subject.height) == focus_area
+    assert subject.found_by == "focus-point"
+    assert (subject.sharpness > 0.8) if sharp else (subject.sharpness < 0.2)
+
+
+@pytest.mark.parametrize("focus_area", [lambda jpg_path: None, lambda jpg_path: TINY_BOX, None])
+def test_without_a_measurable_focus_area_there_is_no_subject(tmp_path, focus_area):
+    frame = draw_frame(tmp_path / "frame.jpg")
+    analyzer = compose_analyzer(full_stack(), focus_area=focus_area)
+
+    assert analyzer.analyze(frame).subject is None
+
+
+def test_reading_focus_points_is_part_of_the_signature():
+    """So a Session analyzed before ExifTool was installed is analyzed again once it is."""
+    without_focus = compose_analyzer(full_stack()).signature
+    with_focus = compose_analyzer(full_stack(), focus_area=lambda jpg_path: None).signature
+
+    assert with_focus == without_focus | {"focus-point": "exiftool@1"}
+
+
 def test_without_face_detection_a_frame_has_no_faces(tmp_path):
     frame = draw_frame(tmp_path / "frame.jpg")
     assert compose_analyzer(without("face-detection")).analyze(frame).faces == []

@@ -7,7 +7,8 @@ Unsure or Rejects. The Keeper budget decides how many of the remaining Frames, b
 the whole Session, become Keepers; the rest are Rejects.
 
 A Frame with faces is judged on its faces: its sharpness is that of its softest face, and every
-face must have open eyes and be sharp for the Frame to pass.
+face must have open eyes and be sharp for the Frame to pass. A Frame without faces is judged on
+the sharpness of the area its camera focused on where it recorded one, else of the whole Frame.
 
 The photographer's Verdict Overrides steer the Winner: a Frame they made the Winner wins its
 Group, and a Frame they overrode to another Verdict is not picked, so the rest of the Group is
@@ -19,6 +20,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import PurePosixPath
+from typing import Literal
 
 from framewise.analyzer import Face, FrameSignals
 from framewise.camera_rating import CameraRating
@@ -34,6 +36,11 @@ SOFT_BELOW = 0.4
 FACE_BLURRY_BELOW = 0.25
 FACE_SOFT_BELOW = 0.5
 FACE_SHARP_FROM = 0.67
+# The area a camera focused on is measured on its own like a face, and starts out with the face
+# thresholds until it is calibrated on the reference benchmark (#175).
+FOCUS_BLURRY_BELOW = FACE_BLURRY_BELOW
+FOCUS_SOFT_BELOW = FACE_SOFT_BELOW
+FOCUS_SHARP_FROM = FACE_SHARP_FROM
 MOTION_BLUR_FROM = 0.5
 POSSIBLE_MOTION_BLUR_FROM = 0.35
 EXPOSURE_TOLERANCE_STOPS = 0.7
@@ -71,6 +78,44 @@ class Reason:
     text: str
 
 
+SharpnessMeasuredOn = Literal["faces", "focus-point", "frame"]
+
+
+@dataclass(frozen=True)
+class SharpnessRule:
+    blurry_below: float
+    soft_below: float
+    sharp_from: float
+    """The sharpness from which the sharpness Score is full."""
+    blurry: Reason
+    soft: Reason
+
+
+SHARPNESS_RULES: dict[SharpnessMeasuredOn, SharpnessRule] = {
+    "faces": SharpnessRule(
+        FACE_BLURRY_BELOW,
+        FACE_SOFT_BELOW,
+        FACE_SHARP_FROM,
+        Reason("blurry-face", "Blurry face", "Blurry face"),
+        Reason("soft-face", "Soft face", "Soft face"),
+    ),
+    "focus-point": SharpnessRule(
+        FOCUS_BLURRY_BELOW,
+        FOCUS_SOFT_BELOW,
+        FOCUS_SHARP_FROM,
+        Reason("blurry", "Blurry", "Blurry at focus point"),
+        Reason("soft", "Slightly soft", "Slightly soft at focus point"),
+    ),
+    "frame": SharpnessRule(
+        BLURRY_BELOW,
+        SOFT_BELOW,
+        1.0,
+        Reason("blurry", "Blurry", "Blurry"),
+        Reason("soft", "Slightly soft", "Slightly soft"),
+    ),
+}
+
+
 @dataclass(frozen=True)
 class Scores:
     """Each Frame's score components from 0 (worst) to 1 (best), and their weighted total."""
@@ -99,6 +144,7 @@ class Judgement:
     reasons: list[Reason]
     scores: Scores
     faces: list[FaceCheck]
+    sharpness_measured_on: SharpnessMeasuredOn
 
 
 Proposal = dict[int, Judgement]
@@ -144,7 +190,8 @@ class _Assessment:
         return self.worst is None and bool(faces) and all(face.eyes_open for face in faces)
 
     def judgement(self, verdict: Verdict, reasons: list[Reason]) -> Judgement:
-        return Judgement(verdict, reasons, self.scores, self.faces)
+        measured_on, _ = _judged_sharpness(self.analyzed.signals)
+        return Judgement(verdict, reasons, self.scores, self.faces, measured_on)
 
 
 def judge(
@@ -279,15 +326,17 @@ def _exposure_score(signals: FrameSignals, kind: FrameKind) -> float:
 
 
 def _sharpness_score(signals: FrameSignals) -> float:
-    if signals.faces:
-        return _clamp(_judged_sharpness(signals) / FACE_SHARP_FROM)
-    return _clamp(signals.sharpness)
+    measured_on, sharpness = _judged_sharpness(signals)
+    return _clamp(sharpness / SHARPNESS_RULES[measured_on].sharp_from)
 
 
-def _judged_sharpness(signals: FrameSignals) -> float:
+def _judged_sharpness(signals: FrameSignals) -> tuple[SharpnessMeasuredOn, float]:
+    """What the Frame's sharpness is judged on, and that sharpness."""
     if signals.faces:
-        return min(face.sharpness for face in signals.faces)
-    return signals.sharpness
+        return "faces", min(face.sharpness for face in signals.faces)
+    if signals.subject is not None:
+        return signals.subject.found_by, signals.subject.sharpness
+    return "frame", signals.sharpness
 
 
 def _face_quality(faces: list[Face]) -> float | None:
@@ -301,19 +350,12 @@ def _check_face(face: Face) -> FaceCheck:
 
 
 def _sharpness_flaws(analyzed: AnalyzedFrame) -> list[Flaw]:
-    sharpness = _judged_sharpness(analyzed.signals)
-    if analyzed.signals.faces:
-        blurry = Reason("blurry-face", "Blurry face", "Blurry face")
-        soft = Reason("soft-face", "Soft face", "Soft face")
-        blurry_below, soft_below = FACE_BLURRY_BELOW, FACE_SOFT_BELOW
-    else:
-        blurry = Reason("blurry", "Blurry", "Blurry")
-        soft = Reason("soft", "Slightly soft", "Slightly soft")
-        blurry_below, soft_below = BLURRY_BELOW, SOFT_BELOW
-    if sharpness < blurry_below:
-        return [Flaw(blurry, Verdict.REJECT)]
-    if sharpness < soft_below:
-        return [Flaw(soft, Verdict.UNSURE)]
+    measured_on, sharpness = _judged_sharpness(analyzed.signals)
+    rule = SHARPNESS_RULES[measured_on]
+    if sharpness < rule.blurry_below:
+        return [Flaw(rule.blurry, Verdict.REJECT)]
+    if sharpness < rule.soft_below:
+        return [Flaw(rule.soft, Verdict.UNSURE)]
     return []
 
 

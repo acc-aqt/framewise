@@ -28,6 +28,7 @@ const CAPABILITY_TEXTS: Record<string, { label: string; noneMeans: string | null
   'face-detection': { label: 'Face detection', noneMeans: 'no faces are detected' },
   'eye-state': { label: 'Eye state', noneMeans: 'eyes count as unknown' },
   'face-quality': { label: 'Face quality', noneMeans: 'face quality is left out of the score' },
+  expression: { label: 'Expression', noneMeans: 'expression is left out of the score' },
   aesthetics: { label: 'Aesthetics', noneMeans: 'aesthetics is left out of the score' },
 };
 

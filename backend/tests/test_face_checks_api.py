@@ -194,6 +194,41 @@ def test_face_quality_decides_between_otherwise_equal_frames(session_dir, review
     assert frames["DSCF0001.JPG"]["scores"]["face_quality"] == 0.2
 
 
+def test_the_winner_is_picked_by_standing_within_its_group_not_by_absolute_scores(
+    session_dir, review, analyzer
+):
+    """Each Frame stands best on one Score component. Sharpness weighs more than face quality,
+    so the slightly sharper Frame wins, although the other's much better face quality gives it
+    the higher total Score."""
+    burst(
+        session_dir,
+        analyzer,
+        ("DSCF0001", {"faces": [face(sharpness=0.55, quality=0.9)]}),
+        ("DSCF0002", {"faces": [face(sharpness=0.6, quality=0.3)]}),
+    )
+
+    frames = frames_by_name(review())
+
+    assert frames["DSCF0001.JPG"]["scores"]["total"] > frames["DSCF0002.JPG"]["scores"]["total"]
+    assert frames["DSCF0002.JPG"]["verdict"] == "winner"
+
+
+def test_a_score_component_one_frame_lacks_is_left_out_of_its_groups_standings(
+    session_dir, review, analyzer
+):
+    burst(
+        session_dir,
+        analyzer,
+        ("DSCF0001", {"faces": [face(sharpness=0.55, quality=0.9)]}),
+        ("DSCF0002", {"faces": [face(sharpness=0.6, quality=None)]}),
+    )
+
+    frames = frames_by_name(review())
+
+    assert frames["DSCF0002.JPG"]["scores"]["face_quality"] is None
+    assert frames["DSCF0002.JPG"]["verdict"] == "winner"
+
+
 def test_a_frame_without_faces_has_no_face_quality_score(session_dir, review, analyzer):
     burst(session_dir, analyzer, ("DSCF0001", {}))
 

@@ -126,6 +126,39 @@ def test_the_sharp_frame_of_a_burst_wins_over_a_blurry_one_with_better_aesthetic
     assert verdicts(review()) == {"DSCF0001.JPG": "reject", "DSCF0002.JPG": "winner"}
 
 
+def test_near_identical_frames_tie_on_standing_so_the_first_frame_wins(
+    session_dir, review, analyzer
+):
+    burst(
+        session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.5}), ("DSCF0002", {"aesthetics": 0.51})
+    )
+
+    assert verdicts(keep_every_clean_frame(review())) == {
+        "DSCF0001.JPG": "winner",
+        "DSCF0002.JPG": "keeper",
+    }
+
+
+def test_when_every_frame_is_flawed_the_least_flawed_wins_and_the_rest_keep_their_flaws(
+    session_dir, review, analyzer
+):
+    burst(
+        session_dir,
+        analyzer,
+        ("DSCF0001", {"sharpness": 0.1, "aesthetics": 0.95}),
+        ("DSCF0002", {"sharpness": 0.3}),
+        ("DSCF0003", {"motion_blur": 0.7, "aesthetics": 0.9}),
+    )
+
+    frames = frames_by_name(review())
+
+    assert [(frame["verdict"], reasons(frame)) for frame in frames.values()] == [
+        ("reject", ["Blurry"]),
+        ("winner", ["Slightly soft"]),
+        ("reject", ["Motion blur"]),
+    ]
+
+
 def test_a_much_weaker_duplicate_becomes_a_reject_naming_the_winner(session_dir, review, analyzer):
     burst(
         session_dir, analyzer, ("DSCF0412", {"aesthetics": 0.9}), ("DSCF0413", {"aesthetics": 0.2})

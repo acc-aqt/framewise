@@ -1,6 +1,6 @@
 # ADR-0002: Local analysis pipeline and web Review UI
 
-**Status:** Accepted — 2026-11-13. Partly superseded by ADR-0005: Tier 1 runs on pluggable Providers, so framewise is no longer macOS only. §4 is amended by ADR-0006: Trash also changes the photo folders.
+**Status:** Accepted — 2026-11-13. Partly superseded by ADR-0005: Tier 1 runs on pluggable Providers, so framewise is no longer macOS only. §4 is amended by ADR-0006: Trash also changes the photo folders. Tier 2 (§2, the local vision-language model) was never built and is deferred: framewise runs Tier 1 only.
 
 ## Context
 

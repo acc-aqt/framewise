@@ -58,6 +58,7 @@ class Agreement:
 class WinnerAgreement:
     agreeing: int
     groups: int
+    share: float | None
 
 
 @dataclass(frozen=True)
@@ -152,7 +153,11 @@ def winner_agreement(
         if len(group) > 1 and any(frame_id in references for frame_id in group)
     ]
     agreeing = [group for group in counted if _winner_is_top_rated(proposal, group, references)]
-    return WinnerAgreement(agreeing=len(agreeing), groups=len(counted))
+    return WinnerAgreement(
+        agreeing=len(agreeing),
+        groups=len(counted),
+        share=len(agreeing) / len(counted) if counted else None,
+    )
 
 
 def _winner_is_top_rated(proposal: Proposal, group: list[int], references: dict[int, int]) -> bool:
@@ -244,12 +249,14 @@ def _run(
 
     frames = store.frames()
     references = match_references(frames, session_root, ratings)
+    group_ids = [[analyzed.frame.id for analyzed in group] for group in groups]
     return {
         "session": str(session_root),
         "frames": len(frames),
         "frames_analysed": sum(len(group) for group in groups),
         "providers": dict(analyzer.signature),
         "agreement": asdict(agreement(proposal, references)),
+        "winner_agreement": asdict(winner_agreement(proposal, group_ids, references)),
         "timing": asdict(timing(len(frames), judged - started)),
         "analysis_seconds": analysed - started,
         "judging_seconds": judged - analysed,
@@ -272,6 +279,7 @@ def _frame_result(frame: Frame, proposal: Proposal, references: dict[int, int]) 
 
 def _summary(report: dict, catalog: Path, report_path: Path) -> str:
     result = report["agreement"]
+    winners = report["winner_agreement"]
     time_taken = report["timing"]
     by_stars = "; ".join(
         f"{stars}★ → " + ", ".join(f"{verdict} {count}" for verdict, count in verdicts.items())
@@ -302,6 +310,8 @@ def _summary(report: dict, catalog: Path, report_path: Path) -> str:
             + _share(result["with_reference_rejected_or_unsure"], result["with_reference"]),
             f"  Verdicts by Reference rating: {by_stars or 'none'}",
             f"  Reasons on rated Rejects and Unsure: {reasons or 'none'}",
+            "  Winners among their Group's top-rated Frames: "
+            + _share(winners["agreeing"], winners["groups"]),
             "",
             "Timing",
             f"  Analysis: {report['analysis_seconds']:.1f} s, "

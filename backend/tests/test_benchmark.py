@@ -205,6 +205,7 @@ def test_winner_agreement_counts_groups_whose_winner_is_among_the_top_rated_fram
 
     assert result.agreeing == 1
     assert result.groups == 2
+    assert result.share == 0.5
 
 
 def test_a_winner_tied_for_the_top_rating_agrees():
@@ -222,6 +223,7 @@ def test_groups_without_a_reference_rating_are_not_counted():
     result = winner_agreement(proposal, [[1, 2]], {})
 
     assert result.groups == 0
+    assert result.share is None
 
 
 def test_an_unrated_winner_disagrees_with_a_rated_frame_in_its_group():
@@ -277,7 +279,10 @@ def test_benchmark_reports_agreement_and_timing_without_touching_session_or_cata
     assert result["agreement"]["rejected_with_reference"] == 1
     assert result["timing"]["budget_seconds"] == pytest.approx(3 * 4.5)
     assert result["providers"] == {"fingerprint": "fake-fingerprint@1"}
-    assert "Rated Frames proposed as Reject or Unsure: 1 of 2" in capsys.readouterr().out
+    assert result["winner_agreement"] == {"agreeing": 0, "groups": 1, "share": 0.0}
+    out = capsys.readouterr().out
+    assert "Rated Frames proposed as Reject or Unsure: 1 of 2" in out
+    assert "Winners among their Group's top-rated Frames: 0 of 1 (0%)" in out
     assert fingerprint_of(session_dir) == session_before
     assert fingerprint_of(catalog.path.parent) == catalog_before
     assert not data_dir.exists()

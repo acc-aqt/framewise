@@ -9,6 +9,8 @@ from importlib.metadata import EntryPoint, entry_points
 from pathlib import Path
 from typing import Protocol
 
+from PIL import Image
+
 from framewise.analyzer import (
     ActiveProvider,
     AlternativeProvider,
@@ -22,14 +24,15 @@ from framewise.analyzer import (
 )
 from framewise.exiftool import ExifTool, find_exiftool
 from framewise.focus_point import read_focus_area
-from framewise.image_measures import Region, measure_image
+from framewise.image_measures import ImageMeasures, Region, measure_image
 
 FINGERPRINT = "fingerprint"
 FACE_DETECTION = "face-detection"
 EYE_STATE = "eye-state"
 FACE_QUALITY = "face-quality"
 AESTHETICS = "aesthetics"
-CAPABILITIES = (FINGERPRINT, FACE_DETECTION, EYE_STATE, FACE_QUALITY, AESTHETICS)
+SUBJECT = "subject"
+CAPABILITIES = (FINGERPRINT, FACE_DETECTION, EYE_STATE, FACE_QUALITY, AESTHETICS, SUBJECT)
 ENTRY_POINT_GROUP = "framewise.providers"
 
 FOCUS_POINT = "focus-point"
@@ -96,11 +99,20 @@ class AestheticsProvider(Provider, Protocol):
         ...
 
 
+class SubjectProvider(Provider, Protocol):
+    def subject_mask(self, jpg_path: Path) -> Image.Image | None:
+        """A greyscale mask of the Frame's main subject, of any size, covering the Frame as it is
+        displayed, after its EXIF orientation: 255 inside the subject, 0 outside it. None where
+        it finds no subject."""
+        ...
+
+
 class ProviderAnalyzer:
     """Analyzes a Frame's Analysis source with one Provider per Capability and the built-in
     image maths. The face detection Provider alone decides which faces a Frame has; the eye
     state and face quality Providers and the image maths look inside its boxes. The image maths
-    also measure the area the camera focused on, where `focus_area` finds one."""
+    also measure the subject: the area the camera focused on, where `focus_area` finds one, else
+    the subject Provider's mask."""
 
     def __init__(
         self,
@@ -109,6 +121,7 @@ class ProviderAnalyzer:
         eye_state: EyeStateProvider | None = None,
         face_quality: FaceQualityProvider | None = None,
         aesthetics: AestheticsProvider | None = None,
+        subject: SubjectProvider | None = None,
         *,
         provider_lineup: ProviderLineup,
         focus_area: FocusAreaReader | None = None,
@@ -118,6 +131,7 @@ class ProviderAnalyzer:
         self.eye_state = eye_state
         self.face_quality = face_quality
         self.aesthetics = aesthetics
+        self.subject = subject
         self.provider_lineup = provider_lineup
         self.focus_area = focus_area
 
@@ -133,6 +147,7 @@ class ProviderAnalyzer:
             self.eye_state,
             self.face_quality,
             self.aesthetics,
+            self.subject,
         )
         signature = {
             provider.capability: f"{provider.id}@{provider.version}"
@@ -146,7 +161,10 @@ class ProviderAnalyzer:
     def analyze(self, jpg_path: Path) -> FrameSignals:
         boxes = self.face_detection.detect_faces(jpg_path) if self.face_detection else []
         focus_area = self.focus_area(jpg_path) if self.focus_area else None
-        measures = measure_image(jpg_path, boxes, focus_area)
+        subject_mask = (
+            self.subject.subject_mask(jpg_path) if self.subject and focus_area is None else None
+        )
+        measures = measure_image(jpg_path, boxes, focus_area, subject_mask)
         return FrameSignals(
             fingerprint=self.fingerprint.fingerprint(jpg_path),
             sharpness=measures.sharpness,
@@ -156,11 +174,7 @@ class ProviderAnalyzer:
             high_key=measures.high_key,
             aesthetics=self.aesthetics.aesthetics(jpg_path) if self.aesthetics else None,
             faces=self._faces(jpg_path, boxes, measures.face_sharpness),
-            subject=(
-                None
-                if focus_area is None or measures.focus_sharpness is None
-                else Subject(*focus_area, measures.focus_sharpness, found_by="focus-point")
-            ),
+            subject=_subject(focus_area, measures),
         )
 
     def _faces(
@@ -185,6 +199,14 @@ class ProviderAnalyzer:
             )
             if face_sharpness is not None
         ]
+
+
+def _subject(focus_area: Region | None, measures: ImageMeasures) -> Subject | None:
+    if focus_area is not None and measures.focus_sharpness is not None:
+        return Subject(*focus_area, measures.focus_sharpness, found_by="focus-point")
+    if measures.subject is not None:
+        return Subject(*measures.subject.box, measures.subject.sharpness, found_by="subject-mask")
+    return None
 
 
 def resolve_analyzer(
@@ -293,6 +315,7 @@ def _compose(
         eye_state=chosen.get(EYE_STATE),
         face_quality=chosen.get(FACE_QUALITY),
         aesthetics=chosen.get(AESTHETICS),
+        subject=chosen.get(SUBJECT),
         provider_lineup=_describe_provider_lineup(installed, chosen, overrides),
         focus_area=focus_area,
     )

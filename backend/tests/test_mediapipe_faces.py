@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from conftest import review_app
+from PIL import Image
 from test_apple_vision import (
     FIXTURE_FACE_BOX,
     draw_landscape,
@@ -85,6 +86,42 @@ def test_eye_state_reads_the_eyes_inside_boxes_from_another_detector():
         None,
     ]
     assert eye_state.eyes_open(FACES / "eyes-closed.jpg", [FIXTURE_FACE_BOX]) == [False]
+
+
+def small_face(path: Path, face: Path) -> tuple[Path, tuple[float, float, float, float]]:
+    """The reference face pasted at about 12% of a large canvas's width, like a person far from
+    the camera, and the box around it a face detector reports."""
+    canvas = Image.new("RGB", (2133, 1422), (128, 128, 128))
+    left, top = 1200, 500
+    with Image.open(face) as face_image:
+        canvas.paste(face_image.convert("RGB"), (left, top))
+    canvas.save(path, "JPEG", quality=90)
+    x, y, width, height = FIXTURE_FACE_BOX
+    box = (
+        (left + x * 256) / canvas.width,
+        (top + y * 256) / canvas.height,
+        width * 256 / canvas.width,
+        height * 256 / canvas.height,
+    )
+    return path, box
+
+
+def test_eye_state_reads_a_small_face_from_the_detectors_box(tmp_path):
+    eyes_open_frame, box = small_face(tmp_path / "eyes-open.jpg", FACES / "eyes-open.jpg")
+    eyes_closed_frame, _ = small_face(tmp_path / "eyes-closed.jpg", FACES / "eyes-closed.jpg")
+
+    assert MediaPipeEyeState().eyes_open(eyes_open_frame, [box]) == [True]
+    assert MediaPipeEyeState().eyes_open(eyes_closed_frame, [box]) == [False]
+
+
+def test_expression_reads_a_small_face_from_the_detectors_box(tmp_path):
+    smiling, box = small_face(tmp_path / "smiling.jpg", FACES / "eyes-open.jpg")
+    neutral, _ = small_face(tmp_path / "neutral.jpg", FACES / "neutral.jpg")
+
+    [smiling_expression] = MediaPipeExpression().expression(smiling, [box])
+    [neutral_expression] = MediaPipeExpression().expression(neutral, [box])
+
+    assert smiling_expression.smile > 0.5 > neutral_expression.smile
 
 
 def test_a_face_is_found_where_it_appears_in_a_frame_stored_on_its_side(tmp_path):

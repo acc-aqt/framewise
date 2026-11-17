@@ -1,12 +1,13 @@
 from test_verdicts_api import burst, frames_by_name, keep_every_clean_frame, reasons, verdicts
 
-from framewise.analyzer import Face
+from framewise.analyzer import Expression, Face
 
 
 def face(
     eyes_open: bool | None = True,
     sharpness: float = 0.9,
     quality: float | None = 0.7,
+    smile: float | None = 0.5,
     x: float = 0.4,
 ) -> Face:
     return Face(
@@ -17,6 +18,7 @@ def face(
         eyes_open=eyes_open,
         sharpness=sharpness,
         quality=quality,
+        expression=None if smile is None else Expression(smile=smile),
     )
 
 

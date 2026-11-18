@@ -1,6 +1,7 @@
 import threading
 from collections.abc import Callable
 from dataclasses import asdict, replace
+from importlib.metadata import version
 from pathlib import Path
 from typing import Literal
 
@@ -68,6 +69,7 @@ def create_app(
     move_to_trash: MoveToTrash = send2trash,
 ) -> FastAPI:
     app = FastAPI(title="framewise")
+    _add_about(app)
     providers_json = {capability: asdict(lineup) for capability, lineup in provider_lineup.items()}
     write_back = RatingWriteBack(store, ExifTool())
 
@@ -348,6 +350,7 @@ class SessionPicker:
         self._session_app: FastAPI | None = None
         self._lock = threading.Lock()
         self._picker_app = FastAPI(title="framewise")
+        _add_about(self._picker_app)
 
         @self._picker_app.get("/api/session")
         def no_session() -> None:
@@ -367,6 +370,12 @@ class SessionPicker:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         await (self._session_app or self._picker_app)(scope, receive, send)
+
+
+def _add_about(app: FastAPI) -> None:
+    @app.get("/api/about")
+    def about() -> dict:
+        return {"version": version("framewise")}
 
 
 def _mount_review_ui(app: FastAPI, ui_dir: Path | None) -> None:

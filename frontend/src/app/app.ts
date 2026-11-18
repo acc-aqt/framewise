@@ -12,6 +12,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { Observable } from 'rxjs';
+import { About } from './about-api';
 import { AnalysisProgressView } from './analysis-progress';
 import { AnalysisSettings } from './analysis-settings';
 import { GroupGrid } from './group-grid';
@@ -79,6 +80,7 @@ interface PendingTrash {
   styleUrl: './app.css',
 })
 export class App {
+  protected readonly about = httpResource<About>(() => '/api/about');
   protected readonly summary = httpResource<SessionSummary>(() => '/api/session');
   // framewise started without a Session folder, so the photographer chooses one here.
   protected readonly noSession = computed(() => {

@@ -45,6 +45,13 @@ h1 {
   font-weight: 650;
 }
 
+.version {
+  flex: none;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
 .divider {
   flex: none;
   width: 1px;

@@ -1,6 +1,9 @@
 @if (noSession()) {
   <header>
     <h1><img src="logo.svg" alt="" width="20" height="20" />framewise</h1>
+    @if (about.hasValue()) {
+      <span class="version" data-testid="version">{{ about.value().version }}</span>
+    }
   </header>
   <main>
     <app-session-picker (opened)="openSession()" />
@@ -9,6 +12,9 @@
   <header>
     <div class="identity">
       <h1><img src="logo.svg" alt="" width="20" height="20" />framewise</h1>
+      @if (about.hasValue()) {
+        <span class="version" data-testid="version">{{ about.value().version }}</span>
+      }
       @if (summary.hasValue()) {
         <span class="divider" aria-hidden="true"></span>
         <p class="root" [title]="summary.value().root">

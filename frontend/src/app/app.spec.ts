@@ -1,6 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { About } from './about-api';
 import { App, POLL_INTERVAL_MS } from './app';
 import { TOOLTIP_DELAY_MS } from './tooltip';
 import {
@@ -45,6 +46,8 @@ const summary: SessionSummary = {
   config_path: '/Users/me/Library/Application Support/framewise/config.toml',
 };
 
+const about: About = { version: '0.1.0' };
+
 describe('Review UI', () => {
   let fixture: ComponentFixture<App>;
   let http: HttpTestingController;
@@ -55,9 +58,14 @@ describe('Review UI', () => {
       providers: [provideHttpClient(), provideHttpClientTesting()],
     });
     http = TestBed.inject(HttpTestingController);
+    startApp();
+  });
+
+  function startApp(running: About = about): void {
     fixture = TestBed.createComponent(App);
     TestBed.tick();
-  });
+    http.expectOne('/api/about').flush(running);
+  }
 
   afterEach(() => {
     http.verify();
@@ -225,6 +233,12 @@ describe('Review UI', () => {
     expect(all('[data-testid="skipped-files"]')).toEqual([]);
   });
 
+  it('shows the running version next to the name', async () => {
+    await respond(summary, []);
+
+    expect(text('header [data-testid="version"]')).toBe('0.1.0');
+  });
+
   describe('without a Session', () => {
     const notFound = { status: 404, statusText: 'Not Found' };
 
@@ -258,6 +272,12 @@ describe('Review UI', () => {
       expect(chooseButton()).not.toBeNull();
       expect(all('[data-testid="open-write-back"]')).toEqual([]);
       expect(all('header .error')).toEqual([]);
+    });
+
+    it('shows the running version next to the name', async () => {
+      await respondWithoutSession();
+
+      expect(text('header [data-testid="version"]')).toBe('0.1.0');
     });
 
     it('opens the chosen Session', async () => {
@@ -2085,8 +2105,7 @@ describe('Review UI', () => {
       );
 
       fixture.destroy();
-      fixture = TestBed.createComponent(App);
-      TestBed.tick();
+      startApp();
       await openGroup(0);
 
       expect(pinnedThumbnail()).toBeUndefined();

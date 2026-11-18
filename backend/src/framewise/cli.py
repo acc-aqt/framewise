@@ -57,6 +57,10 @@ def serve_with_uvicorn(app: ASGIApp, host: str, port: int, on_ready: Callable[[]
 @contextmanager
 def keep_machine_awake() -> Iterator[None]:
     """Stops idle sleep until the block ends, or until framewise exits if it ends first."""
+    if sys.platform == "win32":
+        with _keep_windows_awake():
+            yield
+        return
     command = _wake_lock_command()
     if command is None:
         print("framewise: warning: cannot keep the machine awake here", file=sys.stderr)
@@ -73,6 +77,29 @@ def keep_machine_awake() -> Iterator[None]:
     finally:
         wake_lock.terminate()
         wake_lock.wait()
+
+
+ES_CONTINUOUS = 0x80000000
+ES_SYSTEM_REQUIRED = 0x00000001
+
+
+@contextmanager
+def _keep_windows_awake() -> Iterator[None]:
+    """Asks Windows to stay awake while this thread is in the block. Windows also drops the
+    request when the thread ends."""
+    import ctypes
+
+    set_state = ctypes.windll.kernel32.SetThreadExecutionState
+    set_state.restype = ctypes.c_uint32
+    set_state.argtypes = [ctypes.c_uint32]
+    if set_state(ES_CONTINUOUS | ES_SYSTEM_REQUIRED) == 0:
+        print("framewise: warning: cannot keep the machine awake", file=sys.stderr)
+        yield
+        return
+    try:
+        yield
+    finally:
+        set_state(ES_CONTINUOUS)
 
 
 def _wake_lock_command() -> list[str] | None:
@@ -96,7 +123,7 @@ def _wake_lock_command() -> list[str] | None:
 def choose_folder_in_dialog() -> Path | None:
     """Asks for a Session folder with the system's folder dialog, or None if canceled or
     there is none."""
-    command = _folder_dialog_command()
+    command = folder_dialog_command(sys.platform)
     if command is None:
         print(
             "framewise: warning: no folder dialog here, pass the Session folder to "
@@ -104,16 +131,35 @@ def choose_folder_in_dialog() -> Path | None:
             file=sys.stderr,
         )
         return None
-    result = subprocess.run(command, capture_output=True, text=True)
+    result = subprocess.run(command, capture_output=True, encoding="utf-8")
     if result.returncode != 0:
         return None
     return Path(result.stdout.strip())
 
 
-def _folder_dialog_command() -> list[str] | None:
-    if sys.platform == "darwin":
+# Tk's folder dialog is the Explorer one on Windows. It prints the chosen folder as UTF-8, so a
+# name outside the console's code page survives, and exits non-zero when canceled.
+TK_FOLDER_DIALOG = """
+import sys, tkinter, tkinter.filedialog
+root = tkinter.Tk()
+root.withdraw()
+root.attributes("-topmost", True)
+folder = tkinter.filedialog.askdirectory(title="Choose a Session folder", mustexist=True)
+if not folder:
+    sys.exit(1)
+sys.stdout.reconfigure(encoding="utf-8")
+print(folder)
+"""
+
+
+def folder_dialog_command(platform: str) -> list[str] | None:
+    """The command that shows the system's folder dialog and prints the chosen folder, or None
+    where there is no dialog."""
+    if platform == "darwin":
         script = 'activate\nPOSIX path of (choose folder with prompt "Choose a Session folder")'
         return ["osascript", "-e", script]
+    if platform == "win32":
+        return [sys.executable, "-c", TK_FOLDER_DIALOG]
     if shutil.which("zenity"):
         return ["zenity", "--file-selection", "--directory", "--title=Choose a Session folder"]
     return None

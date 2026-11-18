@@ -29,7 +29,8 @@ function Stop-Setup([string]$Message) {
 }
 
 function Invoke-Native {
-    $command, $arguments = $args
+    $command = $args[0]
+    $arguments = @($args | Select-Object -Skip 1)
     Write-Host "+ $($args -join ' ')"
     & $command @arguments
     if ($LASTEXITCODE -ne 0) {

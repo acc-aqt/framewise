@@ -108,7 +108,8 @@ install_system_packages() {
         stop_on_unsupported_linux
       fi
       ;;
-    *) fail "$platform is not supported. framewise runs on macOS and Linux." ;;
+    MINGW* | MSYS* | CYGWIN*) fail "on Windows, run scripts/setup.ps1 in PowerShell instead." ;;
+    *) fail "$platform is not supported. framewise runs on macOS, Linux and Windows." ;;
   esac
 }
 

@@ -57,7 +57,7 @@ def serve_with_uvicorn(app: ASGIApp, host: str, port: int, on_ready: Callable[[]
 def keep_machine_awake() -> Iterator[None]:
     """Stops idle sleep until the block ends, or until framewise exits if it ends first."""
     if sys.platform == "win32":
-        with _windows_execution_state():
+        with _keep_windows_awake():
             yield
         return
     command = _wake_lock_command()
@@ -83,7 +83,7 @@ ES_SYSTEM_REQUIRED = 0x00000001
 
 
 @contextmanager
-def _windows_execution_state() -> Iterator[None]:
+def _keep_windows_awake() -> Iterator[None]:
     """Asks Windows to stay awake while this thread is in the block. Windows also drops the
     request when the thread ends."""
     import ctypes

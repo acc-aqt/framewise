@@ -12,4 +12,4 @@ What changed in framewise, written for photographers. The Review UI shows this l
 - Trash junk Frames or whole Groups. Their files go to the OS Trash and are never deleted outright.
 - **Rating write-back** writes your Verdicts as stars and color labels that Lightroom Classic reads, after showing a dry run, and can be undone.
 - Runs on macOS with Apple Vision, and on Linux with the portable Providers.
-- The Review UI shows which version of framewise is running, next to its name.
+- The Review UI shows which version of framewise is running, next to its name. Click it, or choose **What's new** in the command palette, to read this list.

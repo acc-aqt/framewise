@@ -42,6 +42,7 @@ import {
 import { Tooltip, TooltipContent } from './tooltip';
 import { TrashApi, TrashResult } from './trash-api';
 import { TrashConfirmation } from './trash-confirmation';
+import { WhatsNew } from './whats-new';
 import { WriteBackView } from './write-back';
 
 export const POLL_INTERVAL_MS = 1000;
@@ -74,6 +75,7 @@ interface PendingTrash {
     SessionSummaryView,
     Tooltip,
     TrashConfirmation,
+    WhatsNew,
     WriteBackView,
   ],
   templateUrl: './app.html',
@@ -183,6 +185,7 @@ export class App {
   private readonly groupGrid = viewChild(GroupGrid);
   protected readonly trashError = signal<string | null>(null);
   protected readonly paletteOpen = signal(false);
+  protected readonly whatsNewOpen = signal(false);
   protected readonly paletteAvailable = computed(
     () => !this.noSession() && !this.writingBack() && this.trashing() === null,
   );
@@ -276,6 +279,9 @@ export class App {
     this.paletteOpen.set(false);
     if (command.shortcut.kind === 'writeBack') {
       return this.openWriteBack();
+    }
+    if (command.shortcut.kind === 'whatsNew') {
+      return this.whatsNewOpen.set(true);
     }
     if (command.shortcut.kind === 'trashGroups') {
       return this.askToTrashGroups(this.selectedGroups());

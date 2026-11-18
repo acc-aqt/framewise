@@ -14,6 +14,7 @@ from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from framewise.analyzer import ProviderLineup
+from framewise.changelog import read_changelog
 from framewise.exiftool import ExifTool
 from framewise.judge import DEFAULT_KEEPER_BUDGET, FaceCheck, Judgement, Proposal, Verdict, judge
 from framewise.lightroom import read_label_set
@@ -67,9 +68,10 @@ def create_app(
     provider_lineup: ProviderLineup,
     config_path: Path,
     move_to_trash: MoveToTrash = send2trash,
+    changelog_path: Path | None = None,
 ) -> FastAPI:
     app = FastAPI(title="framewise")
-    _add_about(app)
+    _add_about(app, changelog_path)
     providers_json = {capability: asdict(lineup) for capability, lineup in provider_lineup.items()}
     write_back = RatingWriteBack(store, ExifTool())
 
@@ -344,13 +346,14 @@ class SessionPicker:
         choose_folder: Callable[[], Path | None],
         start_session: Callable[[Path], FastAPI],
         ui_dir: Path | None = None,
+        changelog_path: Path | None = None,
     ):
         self._choose_folder = choose_folder
         self._start_session = start_session
         self._session_app: FastAPI | None = None
         self._lock = threading.Lock()
         self._picker_app = FastAPI(title="framewise")
-        _add_about(self._picker_app)
+        _add_about(self._picker_app, changelog_path)
 
         @self._picker_app.get("/api/session")
         def no_session() -> None:
@@ -372,10 +375,13 @@ class SessionPicker:
         await (self._session_app or self._picker_app)(scope, receive, send)
 
 
-def _add_about(app: FastAPI) -> None:
+def _add_about(app: FastAPI, changelog_path: Path | None) -> None:
     @app.get("/api/about")
     def about() -> dict:
-        return {"version": version("framewise")}
+        return {
+            "version": version("framewise"),
+            "changelog": [asdict(entry) for entry in read_changelog(changelog_path)],
+        }
 
 
 def _mount_review_ui(app: FastAPI, ui_dir: Path | None) -> None:

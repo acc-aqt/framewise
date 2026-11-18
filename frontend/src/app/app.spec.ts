@@ -46,7 +46,24 @@ const summary: SessionSummary = {
   config_path: '/Users/me/Library/Application Support/framewise/config.toml',
 };
 
-const about: About = { version: '0.1.0' };
+const about: About = {
+  version: '0.1.0',
+  changelog: [
+    {
+      version: null,
+      date: null,
+      sections: [{ heading: null, items: ['Faster grouping'] }],
+    },
+    {
+      version: '0.1.0',
+      date: '2026-11-20',
+      sections: [
+        { heading: null, items: ['**Rating write-back** for Lightroom Classic'] },
+        { heading: 'Fixed', items: ['`framewise review` opens the browser'] },
+      ],
+    },
+  ],
+};
 
 describe('Review UI', () => {
   let fixture: ComponentFixture<App>;
@@ -239,6 +256,94 @@ describe('Review UI', () => {
     expect(text('header [data-testid="version"]')).toBe('0.1.0');
   });
 
+  describe("What's new", () => {
+    const versionButton = () => all('header [data-testid="version"]')[0];
+    const panel = () => all('[data-testid="whats-new"]')[0];
+
+    async function openWhatsNew(): Promise<void> {
+      versionButton().click();
+      await settle();
+    }
+
+    async function restartWith(running: About): Promise<void> {
+      await respond(summary, []);
+      fixture.destroy();
+      startApp(running);
+      await respond(summary, []);
+    }
+
+    function shownVersions(): string[] {
+      return all('[data-testid="changelog-version"]', panel()).map((entry) => text('h3', entry));
+    }
+
+    it('opens the Changelog from the version, newest first', async () => {
+      await respond(summary, []);
+      expect(panel()).toBeUndefined();
+
+      await openWhatsNew();
+
+      expect(versionButton().getAttribute('aria-expanded')).toBe('true');
+      expect(shownVersions()).toEqual(['Unreleased', '0.1.0 2026-11-20']);
+      const [unreleased, released] = all('[data-testid="changelog-version"]', panel());
+      expect(all('li', unreleased).map((item) => item.textContent?.trim())).toEqual([
+        'Faster grouping',
+      ]);
+      expect(all('h4', released).map((heading) => heading.textContent?.trim())).toEqual(['Fixed']);
+      expect(text('li strong', released)).toBe('Rating write-back');
+      expect(text('li code', released)).toBe('framewise review');
+      expect(text('li', released)).toBe('Rating write-back for Lightroom Classic');
+    });
+
+    it('leaves out Unreleased when nothing is in it', async () => {
+      await restartWith({
+        ...about,
+        changelog: [{ version: null, date: null, sections: [] }, about.changelog[1]],
+      });
+
+      await openWhatsNew();
+
+      expect(shownVersions()).toEqual(['0.1.0 2026-11-20']);
+    });
+
+    it('says so when there are no release notes', async () => {
+      await restartWith({ ...about, changelog: [] });
+
+      await openWhatsNew();
+
+      expect(shownVersions()).toEqual([]);
+      expect(text('[data-testid="no-release-notes"]', panel())).toBe('No release notes found.');
+    });
+
+    it('closes on Escape and gives focus back to the version', async () => {
+      await respond(summary, []);
+      await openWhatsNew();
+
+      panel().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await settle();
+
+      expect(panel()).toBeUndefined();
+      expect(document.activeElement).toBe(versionButton());
+    });
+
+    it('closes on a click outside it', async () => {
+      await respond(summary, []);
+      await openWhatsNew();
+
+      document.body.click();
+      await settle();
+
+      expect(panel()).toBeUndefined();
+    });
+
+    it('opens from the command palette', async () => {
+      await respond(summary, []);
+
+      await runFromPalette("What's new");
+
+      expect(shownVersions()).toEqual(['Unreleased', '0.1.0 2026-11-20']);
+    });
+  });
+
   describe('without a Session', () => {
     const notFound = { status: 404, statusText: 'Not Found' };
 
@@ -274,10 +379,15 @@ describe('Review UI', () => {
       expect(all('header .error')).toEqual([]);
     });
 
-    it('shows the running version next to the name', async () => {
+    it("shows the running version next to the name, and opens What's new from it", async () => {
       await respondWithoutSession();
 
       expect(text('header [data-testid="version"]')).toBe('0.1.0');
+
+      all('header [data-testid="version"]')[0].click();
+      await settle();
+
+      expect(all('[data-testid="whats-new"] [data-testid="changelog-version"]').length).toBe(2);
     });
 
     it('opens the chosen Session', async () => {
@@ -1701,7 +1811,8 @@ describe('Review UI', () => {
         expect(rows()).toContain('Trash Frame ⌫');
         expect(rows()).toContain('Trash Group');
         expect(rows()).toContain('Trash selected Groups');
-        expect(rows().length).toBe(32);
+        expect(rows()).toContain("What's new");
+        expect(rows().length).toBe(33);
       });
 
       it('opens from the header button', async () => {

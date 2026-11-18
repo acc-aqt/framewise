@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from starlette.types import ASGIApp
 
 from framewise.analyzer import FrameAnalyzer
+from framewise.changelog import CHANGELOG_PATH
 from framewise.exiftool import ExifTool
 from framewise.lightroom import LIGHTROOM_PREFERENCES
 from framewise.models import MODELS, Model, ModelError, ensure_model
@@ -229,11 +230,12 @@ def main(
             lightroom_preferences=LIGHTROOM_PREFERENCES,
             provider_lineup=analyzer.provider_lineup,
             config_path=resolve_config_path().absolute(),
+            changelog_path=CHANGELOG_PATH,
         )
 
     url = f"http://{HOST}:{args.port}/"
     if args.session_folder is None:
-        app: ASGIApp = SessionPicker(choose_folder, start_session, UI_DIR)
+        app: ASGIApp = SessionPicker(choose_folder, start_session, UI_DIR, CHANGELOG_PATH)
         print(f"framewise: Review UI at {url}, choose a Session folder there")
     else:
         app = start_session(args.session_folder)

@@ -1,4 +1,4 @@
-# ADR-0007: Windows as a native platform
+# ADR-0008: Windows as a native platform
 
 **Status:** Accepted — 2026-11-18
 

@@ -4,6 +4,9 @@ What changed in framewise, written for photographers. The Review UI shows this l
 
 ## Unreleased
 
+- framewise runs on Windows x64 as a preview, with the same portable Providers as on Linux. Set it up with `scripts\setup.ps1`. **Rating write-back** uses the color label names from Lightroom Classic's preferences there too.
+- On Windows and Linux, key hints say `Alt+` and `Delete` instead of the Mac symbols.
+
 ## 0.1.0 — 2026-11-18
 
 - Open a Session folder and framewise groups its Frames into Bursts and Near-duplicates. Everything is analyzed on your own machine; no Frame leaves it.

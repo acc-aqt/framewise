@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -38,18 +38,37 @@ jobs:
         run: shellcheck ../scripts/setup.sh
 
       - name: Set up framewise
+        if: runner.os != 'Windows'
         run: ../scripts/setup.sh
 
       - name: Set up framewise again, to prove re-running is safe
+        if: runner.os != 'Windows'
         run: ../scripts/setup.sh
+
+      - name: Set up framewise (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ../scripts/setup.ps1
+
+      - name: Set up framewise again, to prove re-running is safe (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ../scripts/setup.ps1
+
+      - name: Put ExifTool on the PATH of later steps (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          Split-Path (Get-Command exiftool).Source | Add-Content $env:GITHUB_PATH
 
       - name: Test the Review UI
         if: runner.os == 'Linux'
         working-directory: frontend
         run: npx ng test --watch=false
 
-      - name: Check the portable Providers are available (Linux)
-        if: runner.os == 'Linux'
+      - name: Check the portable Providers are available (Linux and Windows)
+        if: runner.os != 'macOS'
         run: |
           uv run python -c "import framewise.mediapipe_faces as m; assert m.MediaPipeFaceDetection().is_available()"
           uv run python -c "import framewise.dinov2_fingerprint as d; assert d.DinoV2Fingerprint().is_available()"

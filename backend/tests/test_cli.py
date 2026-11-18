@@ -232,6 +232,10 @@ def test_review_without_a_folder_stays_without_a_session_when_the_dialog_is_canc
     assert client.get("/api/session").status_code == 404
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="the review fixture keeps its Session store open, and Windows cannot delete open files",
+)
 def test_reset_restores_the_files_and_deletes_the_session_store(
     session_dir, isolated_data_dir, review, analyzer, capsys
 ):

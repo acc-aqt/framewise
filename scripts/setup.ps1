@@ -43,9 +43,13 @@ function Test-Command([string]$Name) {
 }
 
 function Add-RegistryPathToSession {
-    $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
-    $user = [Environment]::GetEnvironmentVariable('Path', 'User')
-    $env:Path = "$env:Path;$machine;$user"
+    $session = $env:Path -split ';' | Where-Object { $_ }
+    $registry = @(
+        [Environment]::GetEnvironmentVariable('Path', 'Machine')
+        [Environment]::GetEnvironmentVariable('Path', 'User')
+    ) -split ';' | Where-Object { $_ }
+    $missing = $registry | Where-Object { $session -notcontains $_ }
+    $env:Path = (@($session) + @($missing)) -join ';'
 }
 
 function Test-Prerequisites {

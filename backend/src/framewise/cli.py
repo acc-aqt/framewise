@@ -56,6 +56,10 @@ def serve_with_uvicorn(app: ASGIApp, host: str, port: int, on_ready: Callable[[]
 @contextmanager
 def keep_machine_awake() -> Iterator[None]:
     """Stops idle sleep until the block ends, or until framewise exits if it ends first."""
+    if sys.platform == "win32":
+        with _keep_windows_awake():
+            yield
+        return
     command = _wake_lock_command()
     if command is None:
         print("framewise: warning: cannot keep the machine awake here", file=sys.stderr)
@@ -72,6 +76,29 @@ def keep_machine_awake() -> Iterator[None]:
     finally:
         wake_lock.terminate()
         wake_lock.wait()
+
+
+ES_CONTINUOUS = 0x80000000
+ES_SYSTEM_REQUIRED = 0x00000001
+
+
+@contextmanager
+def _keep_windows_awake() -> Iterator[None]:
+    """Asks Windows to stay awake while this thread is in the block. Windows also drops the
+    request when the thread ends."""
+    import ctypes
+
+    set_state = ctypes.windll.kernel32.SetThreadExecutionState
+    set_state.restype = ctypes.c_uint32
+    set_state.argtypes = [ctypes.c_uint32]
+    if set_state(ES_CONTINUOUS | ES_SYSTEM_REQUIRED) == 0:
+        print("framewise: warning: cannot keep the machine awake", file=sys.stderr)
+        yield
+        return
+    try:
+        yield
+    finally:
+        set_state(ES_CONTINUOUS)
 
 
 def _wake_lock_command() -> list[str] | None:

@@ -54,7 +54,7 @@ It installs everything else framewise needs, optional tools included, builds the
 
 - **macOS**: the Apple Vision Providers serve every Capability. `aesthetics` needs macOS 15 or later.
 - **Linux**: the [portable Providers](#providers) serve `fingerprint`, `face-detection` and `eye-state`. There is no `face-quality` or `aesthetics` Provider for Linux yet.
-- **Windows** (preview): x64 only. The portable Providers serve the same Capabilities as on Linux. Windows is tested in CI but not yet checked end to end with Lightroom Classic on a real machine ([ADR-0007](docs/adr/0007-windows-as-a-native-platform.md)).
+- **Windows** (preview): x64 only; Windows on ARM is not supported. The portable Providers serve the same Capabilities as on Linux. Windows is tested in CI but not yet checked end to end with Lightroom Classic on a real machine ([ADR-0007](docs/adr/0007-windows-as-a-native-platform.md)).
 - The portable Providers also run on macOS 14 or later, which onnxruntime needs.
 
 ## Running it
@@ -154,7 +154,7 @@ Details:
 
 - Overrides count: an Override's Verdict replaces framewise's, and stars or a color label set with the shortcuts replace the ones the Verdict maps to.
 - JPGs and DNGs get embedded XMP; other RAWs get an `.xmp` sidecar, merged into any existing one.
-- Label names come from Lightroom Classic's active color label set (for example `Rot` and `Gelb`), read from its preferences on macOS and Windows.
+- Label names come from Lightroom Classic's active color label set (for example `Rot` and `Gelb`), read from its preferences on macOS and, on Windows, from `%APPDATA%\Adobe\Lightroom\Preferences\Lightroom Classic CC 7 Preferences.agprefs`.
 - Writing takes a while for large Sessions, because each DNG is rewritten in full. The screen shows how many files are done, and reloading the page doesn't stop it.
 - Write-back needs [ExifTool](https://exiftool.org), which the [setup script](#install) installs.
 

@@ -10,11 +10,12 @@ import {
   OnDestroy,
   viewChild,
 } from '@angular/core';
-import { Command, CommandContext, commandLabel } from './shortcuts';
+import { Command, CommandContext, commandLabel, PlatformKeyPipe } from './shortcuts';
 
 /** Lists every command with its key, so the photographer can find, run and learn them. */
 @Component({
   selector: 'app-command-palette',
+  imports: [PlatformKeyPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { 'data-testid': 'command-palette', '(click)': 'close.emit()' },
   template: `
@@ -52,7 +53,7 @@ import { Command, CommandContext, commandLabel } from './shortcuts';
           >
             <span class="label">{{ label(command) }}</span>
             @if (command.key) {
-              <kbd class="key">{{ command.key }}</kbd>
+              <kbd class="key">{{ command.key | platformKey }}</kbd>
             }
           </li>
         } @empty {

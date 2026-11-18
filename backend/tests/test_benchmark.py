@@ -143,6 +143,7 @@ def test_copying_the_catalog_takes_its_write_ahead_log_along(catalog, tmp_path):
     assert Path(f"{copy}-wal").exists()
 
 
+@runs_the_benchmark
 def test_reference_ratings_are_read_for_the_session_only_by_file_path(catalog, session_dir):
     rated = session_dir / "DSCF0001.JPG"
     catalog.add_photo(rated, 3.0)

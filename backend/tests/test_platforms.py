@@ -1,6 +1,8 @@
+import sys
 from pathlib import Path
 
 from framewise.benchmark import active_catalog
+from framewise.cli import folder_dialog_command
 from framewise.lightroom import lightroom_preferences
 from framewise.review import default_data_dir
 
@@ -38,3 +40,14 @@ def test_lightroom_classics_preferences_are_only_looked_for_on_macos():
 def test_without_lightroom_classics_preferences_there_is_no_active_catalog(tmp_path):
     assert active_catalog(None) is None
     assert active_catalog(tmp_path / "missing.plist") is None
+
+
+def test_on_macos_the_session_folder_is_chosen_in_the_finder_dialog():
+    assert folder_dialog_command("darwin")[0] == "osascript"
+
+
+def test_on_windows_the_session_folder_is_chosen_in_tks_explorer_dialog():
+    command = folder_dialog_command("win32")
+
+    assert command[:2] == [sys.executable, "-c"]
+    assert "askdirectory" in command[2]

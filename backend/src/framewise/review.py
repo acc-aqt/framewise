@@ -44,7 +44,9 @@ def resolve_config_path() -> Path:
 
 
 def session_database_path(root: Path, data_dir: Path) -> Path:
-    digest = hashlib.sha256(str(root).encode()).hexdigest()[:16]
+    """One store per Session folder. On Windows, where paths ignore case, a folder reached
+    through a differently cased path is the same Session."""
+    digest = hashlib.sha256(os.path.normcase(root).encode()).hexdigest()[:16]
     return data_dir / f"{root.name}-{digest}.sqlite"
 
 

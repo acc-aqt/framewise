@@ -55,6 +55,13 @@ jobs:
         shell: pwsh
         run: ../scripts/setup.ps1
 
+      - name: Put ExifTool on the PATH of later steps (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          Split-Path (Get-Command exiftool).Source | Add-Content $env:GITHUB_PATH
+
       - name: Test the Review UI
         if: runner.os == 'Linux'
         working-directory: frontend

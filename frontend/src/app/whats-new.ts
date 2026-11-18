@@ -7,6 +7,9 @@ import {
   inject,
   input,
   model,
+  OnInit,
+  signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { About } from './about-api';
@@ -16,10 +19,28 @@ interface InlinePart {
   text: string;
 }
 
+const SEEN_VERSION_KEY = 'framewise.whatsNewSeenVersion';
+
+function readSeenVersion(): string | null {
+  try {
+    return localStorage.getItem(SEEN_VERSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeSeenVersion(version: string): void {
+  try {
+    localStorage.setItem(SEEN_VERSION_KEY, version);
+  } catch {
+    // Without browser storage there is no badge, so nothing is lost.
+  }
+}
+
 const INLINE_FORMATTING = /(\*\*[^*]+\*\*|`[^`]+`)/;
 
 /** Splits a Changelog entry into plain text, **bold** and `code`, the only formatting it has. */
-export function inlineParts(item: string): InlinePart[] {
+function inlineParts(item: string): InlinePart[] {
   return item
     .split(INLINE_FORMATTING)
     .filter((part) => part !== '')
@@ -34,7 +55,10 @@ export function inlineParts(item: string): InlinePart[] {
     });
 }
 
-/** The running version, which opens a popover of the Changelog. */
+/**
+ * The running version, which opens a popover of the Changelog. After an upgrade a badge marks
+ * it until the photographer opens the popover.
+ */
 @Component({
   selector: 'app-whats-new',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -50,10 +74,13 @@ export function inlineParts(item: string): InlinePart[] {
       data-testid="version"
       aria-haspopup="dialog"
       [attr.aria-expanded]="open()"
-      [attr.aria-label]="'framewise ' + about().version + ', What\\'s new'"
+      [attr.aria-label]="label()"
       (click)="open.update((isOpen) => !isOpen)"
     >
       {{ about().version }}
+      @if (hasNews()) {
+        <span class="badge" data-testid="whats-new-badge" aria-hidden="true"></span>
+      }
     </button>
     @if (open()) {
       <div
@@ -122,6 +149,17 @@ export function inlineParts(item: string): InlinePart[] {
       font-family: var(--font-mono);
       font-size: var(--text-xs);
       cursor: pointer;
+    }
+    .version {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-1);
+    }
+    .badge {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--color-focus);
     }
     .version:hover,
     .version[aria-expanded='true'] {
@@ -192,9 +230,21 @@ export function inlineParts(item: string): InlinePart[] {
     }
   `,
 })
-export class WhatsNew {
+export class WhatsNew implements OnInit {
   readonly about = input.required<About>();
   readonly open = model(false);
+
+  /** The version at which the photographer last opened What's new. */
+  private readonly seenVersion = signal<string | null>(null);
+  protected readonly hasNews = computed(() => {
+    const seen = this.seenVersion();
+    return seen !== null && seen !== this.about().version;
+  });
+  protected readonly label = computed(
+    () =>
+      `framewise ${this.about().version}, What's new` +
+      (this.hasNews() ? ', new release notes' : ''),
+  );
 
   protected readonly versions = computed(() =>
     this.about().changelog.filter(
@@ -210,6 +260,21 @@ export class WhatsNew {
   constructor() {
     // Moves focus into the popover as it opens, so a screen reader announces the dialog.
     effect(() => this.panel()?.nativeElement.focus());
+    effect(() => {
+      if (this.open()) {
+        untracked(() => this.markSeen());
+      }
+    });
+  }
+
+  ngOnInit(): void {
+    const seen = readSeenVersion();
+    // On the first run no note is new to the photographer, so no badge shows.
+    if (seen === null) {
+      this.markSeen();
+    } else {
+      this.seenVersion.set(seen);
+    }
   }
 
   protected onEscape(event: Event): void {
@@ -224,6 +289,12 @@ export class WhatsNew {
     if (this.open() && !this.host.contains(event.target as Node)) {
       this.close();
     }
+  }
+
+  private markSeen(): void {
+    const version = this.about().version;
+    writeSeenVersion(version);
+    this.seenVersion.set(version);
   }
 
   private close(): void {

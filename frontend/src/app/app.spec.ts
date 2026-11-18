@@ -265,8 +265,8 @@ describe('Review UI', () => {
       await settle();
     }
 
+    /** Reloads the Review UI, which must have answered its first requests already. */
     async function restartWith(running: About): Promise<void> {
-      await respond(summary, []);
       fixture.destroy();
       startApp(running);
       await respond(summary, []);
@@ -295,6 +295,7 @@ describe('Review UI', () => {
     });
 
     it('leaves out Unreleased when nothing is in it', async () => {
+      await respond(summary, []);
       await restartWith({
         ...about,
         changelog: [{ version: null, date: null, sections: [] }, about.changelog[1]],
@@ -306,6 +307,7 @@ describe('Review UI', () => {
     });
 
     it('says so when there are no release notes', async () => {
+      await respond(summary, []);
       await restartWith({ ...about, changelog: [] });
 
       await openWhatsNew();
@@ -341,6 +343,62 @@ describe('Review UI', () => {
       await runFromPalette("What's new");
 
       expect(shownVersions()).toEqual(['Unreleased', '0.1.0 2026-11-20']);
+    });
+
+    describe('after an upgrade', () => {
+      const LAST_SEEN_KEY = 'framewise.whatsNewSeenVersion';
+      const badge = () => all('header [data-testid="whats-new-badge"]')[0];
+
+      afterEach(() => {
+        vi.restoreAllMocks();
+        localStorage.clear();
+      });
+
+      it("marks the version until What's new is opened", async () => {
+        await respond(summary, []);
+        localStorage.setItem(LAST_SEEN_KEY, '0.0.9');
+        await restartWith(about);
+
+        expect(badge()).toBeDefined();
+        expect(versionButton().getAttribute('aria-label')).toContain('new release notes');
+
+        await openWhatsNew();
+
+        expect(badge()).toBeUndefined();
+        expect(localStorage.getItem(LAST_SEEN_KEY)).toBe('0.1.0');
+
+        await restartWith(about);
+
+        expect(badge()).toBeUndefined();
+      });
+
+      it('marks nothing on the first run, and remembers the version from then on', async () => {
+        await respond(summary, []);
+
+        expect(badge()).toBeUndefined();
+        expect(localStorage.getItem(LAST_SEEN_KEY)).toBe('0.1.0');
+
+        await restartWith({ ...about, version: '0.2.0' });
+
+        expect(badge()).toBeDefined();
+      });
+
+      it("marks nothing and still opens What's new without browser storage", async () => {
+        vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+          throw new DOMException('denied', 'SecurityError');
+        });
+        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+          throw new DOMException('denied', 'SecurityError');
+        });
+        await respond(summary, []);
+        await restartWith(about);
+
+        expect(badge()).toBeUndefined();
+
+        await openWhatsNew();
+
+        expect(shownVersions()).toEqual(['Unreleased', '0.1.0 2026-11-20']);
+      });
     });
   });
 

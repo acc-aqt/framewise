@@ -34,6 +34,9 @@ EYES_CLOSED_FROM = 0.5
 SMILES = ("mouthSmileLeft", "mouthSmileRight")
 MIN_OVERLAP = 0.3
 """How much a box from another detector must overlap a landmarked face to be read as it."""
+CROP_SIZE = 2.0
+"""How many times the longer side of a face's box its crop spans, so the whole face and its
+landmarks fit and the face is large enough for the landmarker's detector."""
 
 
 class _MediaPipeProvider:
@@ -49,30 +52,31 @@ class MediaPipeFaceDetection(_MediaPipeProvider):
     id = "mediapipe-face-detection"
 
     def detect_faces(self, jpg_path: Path) -> list[Region]:
-        return [face.box for face in _landmarked_faces(jpg_path)]
+        return [face.box for face in _landmark(_upright_frame(jpg_path))]
 
 
 class MediaPipeEyeState(_MediaPipeProvider):
     capability = EYE_STATE
     id = "mediapipe-eye-state"
+    version = 2
 
     def eyes_open(self, jpg_path: Path, faces: list[Region]) -> list[bool | None]:
-        landmarked = _landmarked_faces(jpg_path)
-        return [_eyes_open(_overlapping_face(face, landmarked)) for face in faces]
+        return [_eyes_open(face) for face in _faces_in_boxes(jpg_path, faces)]
 
 
 class MediaPipeExpression(_MediaPipeProvider):
     capability = EXPRESSION
     id = "mediapipe-expression"
+    version = 2
 
     def expression(self, jpg_path: Path, faces: list[Region]) -> list[Expression | None]:
-        landmarked = _landmarked_faces(jpg_path)
-        return [_expression(_overlapping_face(face, landmarked)) for face in faces]
+        return [_expression(face) for face in _faces_in_boxes(jpg_path, faces)]
 
 
 @dataclass(frozen=True)
 class _LandmarkedFace:
     box: Region
+    """Where the face is, as fractions of the Frame or crop the landmarker ran on."""
     blink: float
     """The mean of both eyes' blink blendshapes."""
     smile: float
@@ -82,20 +86,66 @@ class _LandmarkedFace:
 _this_thread = threading.local()
 
 
-def _landmarked_faces(jpg_path: Path) -> list[_LandmarkedFace]:
-    """The faces in the Analysis source this thread analyzes. The Providers share them, so the
-    landmarker runs once per Frame."""
-    key = (jpg_path, jpg_path.stat().st_mtime_ns)
-    if getattr(_this_thread, "key", None) != key:
-        result = _landmarker().detect(_mediapipe_image(jpg_path))
-        _this_thread.faces = [
-            _landmarked_face(landmarks, blendshapes)
-            for landmarks, blendshapes in zip(
-                result.face_landmarks, result.face_blendshapes, strict=True
-            )
-        ]
-        _this_thread.key = key
-    return _this_thread.faces
+def _faces_in_boxes(jpg_path: Path, boxes: list[Region]) -> list[_LandmarkedFace | None]:
+    """The landmarked face in each box, read from a crop around it, so a face too small for the
+    landmarker's own detector in the whole Frame is large in its crop. The eye state and
+    expression Providers get the same boxes and share the result, so the landmarker runs once
+    per face per Frame."""
+    key = (jpg_path, jpg_path.stat().st_mtime_ns, tuple(boxes))
+    if getattr(_this_thread, "boxes_key", None) != key:
+        frame = _upright_frame(jpg_path)
+        _this_thread.faces_in_boxes = [_face_in_box(frame, box) for box in boxes]
+        _this_thread.boxes_key = key
+    return _this_thread.faces_in_boxes
+
+
+def _upright_frame(jpg_path: Path) -> Image.Image:
+    """The Frame as it is displayed, after its EXIF orientation, which the detector's boxes are
+    fractions of."""
+    with Image.open(jpg_path) as image:
+        return ImageOps.exif_transpose(image).convert("RGB")
+
+
+def _face_in_box(frame: Image.Image, box: Region) -> _LandmarkedFace | None:
+    crop = _crop_around(box, frame.width, frame.height)
+    left, top, right, bottom = crop
+    if right <= left or bottom <= top:
+        return None
+    return _overlapping_face(_box_in_crop(box, crop, frame), _landmark(frame.crop(crop)))
+
+
+def _crop_around(box: Region, frame_width: int, frame_height: int) -> tuple[int, int, int, int]:
+    """A square around the box, CROP_SIZE times its longer side, within the Frame."""
+    x, y, width, height = box
+    center_x, center_y = (x + width / 2) * frame_width, (y + height / 2) * frame_height
+    half = CROP_SIZE * max(width * frame_width, height * frame_height) / 2
+    return (
+        max(0, round(center_x - half)),
+        max(0, round(center_y - half)),
+        min(frame_width, round(center_x + half)),
+        min(frame_height, round(center_y + half)),
+    )
+
+
+def _box_in_crop(box: Region, crop: tuple[int, int, int, int], frame: Image.Image) -> Region:
+    left, top, right, bottom = crop
+    x, y, width, height = box
+    return (
+        (x * frame.width - left) / (right - left),
+        (y * frame.height - top) / (bottom - top),
+        width * frame.width / (right - left),
+        height * frame.height / (bottom - top),
+    )
+
+
+def _landmark(image: Image.Image) -> list[_LandmarkedFace]:
+    result = _landmarker().detect(mediapipe.Image(mediapipe.ImageFormat.SRGB, numpy.asarray(image)))
+    return [
+        _landmarked_face(landmarks, blendshapes)
+        for landmarks, blendshapes in zip(
+            result.face_landmarks, result.face_blendshapes, strict=True
+        )
+    ]
 
 
 def _landmarker():
@@ -113,13 +163,6 @@ def _landmarker():
         landmarker = FaceLandmarker.create_from_options(options)
         _this_thread.landmarker = landmarker
     return landmarker
-
-
-def _mediapipe_image(jpg_path: Path):
-    """The Frame as it is displayed, after its EXIF orientation, so the landmarks are too."""
-    with Image.open(jpg_path) as image:
-        upright = ImageOps.exif_transpose(image).convert("RGB")
-    return mediapipe.Image(mediapipe.ImageFormat.SRGB, numpy.asarray(upright))
 
 
 def _box(landmarks) -> Region:

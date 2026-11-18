@@ -63,7 +63,12 @@ function Test-Prerequisites {
     }
 }
 
+# winget's exit code when the package is already installed and has no upgrade.
+$WingetAlreadyInstalled = -1978335189
+
 function Install-ExifTool {
+    # A terminal opened before an earlier run does not see the PATH winget changed.
+    Add-RegistryPathToSession
     if (Test-Command 'exiftool') {
         Write-Host 'ExifTool is already installed.'
         return
@@ -71,7 +76,11 @@ function Install-ExifTool {
     if (-not (Test-Command 'winget')) {
         Stop-Setup 'ExifTool is not installed and winget is not available to install it. Install winget (App Installer, from the Microsoft Store) or ExifTool from https://exiftool.org, then run this script again.'
     }
-    Invoke-Native winget install --id OliverBetz.ExifTool --exact --silent --accept-source-agreements --accept-package-agreements
+    Write-Host '+ winget install --id OliverBetz.ExifTool'
+    winget install --id OliverBetz.ExifTool --exact --silent --accept-source-agreements --accept-package-agreements
+    if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $WingetAlreadyInstalled) {
+        Stop-Setup "installing ExifTool with winget failed with exit code $LASTEXITCODE."
+    }
     Add-RegistryPathToSession
     if (-not (Test-Command 'exiftool')) {
         Stop-Setup 'ExifTool was installed but is not on PATH yet. Open a new terminal and run this script again.'

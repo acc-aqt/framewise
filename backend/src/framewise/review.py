@@ -24,9 +24,12 @@ LOWEST_PRIORITY_NICENESS = 19
 
 
 def default_data_dir(platform: str, environ: Mapping[str, str], home: Path) -> Path:
-    """Application Support on macOS, the XDG data directory elsewhere."""
+    """Application Support on macOS, local application data on Windows, the XDG data directory
+    elsewhere."""
     if platform == "darwin":
         return home / "Library" / "Application Support" / "framewise"
+    if platform == "win32":
+        return Path(environ.get("LOCALAPPDATA") or home / "AppData" / "Local") / "framewise"
     return Path(environ.get("XDG_DATA_HOME") or home / ".local" / "share") / "framewise"
 
 

@@ -221,6 +221,21 @@ class SessionAnalysis:
             return
         if sys.platform == "darwin":
             os.setpriority(os.PRIO_DARWIN_THREAD, 0, os.PRIO_DARWIN_BG)
+        elif sys.platform == "win32":
+            _enter_windows_background_mode()
         elif sys.platform == "linux":
             # Linux keeps a niceness per thread, addressed by its thread id.
             os.setpriority(os.PRIO_PROCESS, threading.get_native_id(), LOWEST_PRIORITY_NICENESS)
+
+
+THREAD_MODE_BACKGROUND_BEGIN = 0x00010000
+
+
+def _enter_windows_background_mode() -> None:
+    """Lowers this thread's CPU and I/O priority, like macOS's background thread priority."""
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32
+    kernel32.GetCurrentThread.restype = ctypes.c_void_p
+    kernel32.SetThreadPriority.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    kernel32.SetThreadPriority(kernel32.GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN)

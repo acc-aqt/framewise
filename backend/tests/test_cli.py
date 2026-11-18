@@ -156,7 +156,7 @@ def test_review_lets_the_machine_sleep_when_asked(session_dir, isolated_data_dir
 
 @pytest.mark.skipif(
     sys.platform not in BACKGROUND_PRIORITY_PLATFORMS,
-    reason="Background priority needs macOS or Linux",
+    reason="Background priority needs macOS, Linux or Windows",
 )
 def test_review_in_background_mode_analyses_at_background_priority(session_dir, isolated_data_dir):
     analyzer = FakeAnalyzer()

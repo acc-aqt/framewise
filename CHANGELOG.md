@@ -4,6 +4,8 @@ What changed in framewise, written for photographers. The Review UI shows this l
 
 ## Unreleased
 
+## 0.1.0 — 2026-11-18
+
 - Open a Session folder and framewise groups its Frames into Bursts and Near-duplicates. Everything is analyzed on your own machine; no Frame leaves it.
 - Each Frame gets a proposed Verdict (Winner, Keeper, Reject or Unsure) with Reasons such as "eyes closed" or "motion blur". The Keeper budget slider sets roughly what share of the Session to keep.
 - Faces are checked for closed eyes and sharpness, and a Frame with faces is judged by its faces rather than the whole image.

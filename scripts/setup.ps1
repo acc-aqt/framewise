@@ -42,10 +42,10 @@ function Test-Command([string]$Name) {
     [bool](Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
-function Update-PathFromRegistry {
+function Add-RegistryPathToSession {
     $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
     $user = [Environment]::GetEnvironmentVariable('Path', 'User')
-    $env:Path = "$machine;$user"
+    $env:Path = "$env:Path;$machine;$user"
 }
 
 function Test-Prerequisites {
@@ -72,7 +72,7 @@ function Install-ExifTool {
         Stop-Setup 'ExifTool is not installed and winget is not available to install it. Install winget (App Installer, from the Microsoft Store) or ExifTool from https://exiftool.org, then run this script again.'
     }
     Invoke-Native winget install --id OliverBetz.ExifTool --exact --silent --accept-source-agreements --accept-package-agreements
-    Update-PathFromRegistry
+    Add-RegistryPathToSession
     if (-not (Test-Command 'exiftool')) {
         Stop-Setup 'ExifTool was installed but is not on PATH yet. Open a new terminal and run this script again.'
     }

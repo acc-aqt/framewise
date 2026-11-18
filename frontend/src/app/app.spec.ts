@@ -87,7 +87,15 @@ describe('Review UI', () => {
   afterEach(() => {
     http.verify();
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
+
+  const MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 15_0) AppleWebKit/605.1.15';
+  const WINDOWS = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+
+  function onPlatform(userAgent: string): void {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(userAgent);
+  }
 
   function text(selector: string, root?: HTMLElement): string {
     return (
@@ -1857,6 +1865,7 @@ describe('Review UI', () => {
       }
 
       it('opens with Command-K and lists every command with its key', async () => {
+        onPlatform(MAC);
         await openFirstGroup();
 
         await openPalette();
@@ -1871,6 +1880,16 @@ describe('Review UI', () => {
         expect(rows()).toContain('Trash selected Groups');
         expect(rows()).toContain("What's new");
         expect(rows().length).toBe(33);
+      });
+
+      it('names keys the Windows way outside macOS', async () => {
+        onPlatform(WINDOWS);
+        await openFirstGroup();
+
+        await press('k', { ctrlKey: true });
+
+        expect(rows()).toContain('Next Frame in Group Alt+→');
+        expect(rows()).toContain('Trash Frame Delete');
       });
 
       it('opens from the header button', async () => {

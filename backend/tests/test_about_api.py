@@ -46,7 +46,8 @@ def test_about_lists_the_changelog_newest_first(review, tmp_path):
         "\n"
         "## 0.1.0 — 2026-11-20\n"
         "\n"
-        "- First Release\n"
+        "- First Release\n",
+        encoding="utf-8",
     )
 
     assert changelog(review(changelog_path=path)) == [
@@ -114,14 +115,14 @@ def test_about_has_no_changelog_when_the_file_is_missing(review, tmp_path):
 )
 def test_about_has_no_changelog_when_it_is_out_of_shape(review, tmp_path, body):
     path = tmp_path / "CHANGELOG.md"
-    path.write_text("# Changelog\n\n" + body)
+    path.write_text("# Changelog\n\n" + body, encoding="utf-8")
 
     assert changelog(review(changelog_path=path)) == []
 
 
 def test_about_has_no_changelog_without_its_title(review, tmp_path):
     path = tmp_path / "CHANGELOG.md"
-    path.write_text("## 0.1.0 — 2026-11-20\n\n- First Release\n")
+    path.write_text("## 0.1.0 — 2026-11-20\n\n- First Release\n", encoding="utf-8")
 
     assert changelog(review(changelog_path=path)) == []
 

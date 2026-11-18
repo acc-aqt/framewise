@@ -42,12 +42,19 @@ Then run the setup script:
 scripts/setup.sh
 ```
 
-It installs everything else framewise needs, optional tools included, builds the Review UI and installs the backend. `scripts/setup.sh --help` says what it does and on which platforms it runs. Re-running it is safe: after pulling new changes, run it again to update framewise.
+On Windows, run its PowerShell counterpart instead, which installs ExifTool with winget:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
+```
+
+It installs everything else framewise needs, optional tools included, builds the Review UI and installs the backend. `--help` (`-Help` on Windows) says what it does and on which platforms it runs. Re-running it is safe: after pulling new changes, run it again to update framewise.
 
 ## Platform support
 
 - **macOS**: the Apple Vision Providers serve every Capability. `aesthetics` needs macOS 15 or later.
 - **Linux**: the [portable Providers](#providers) serve `fingerprint`, `face-detection` and `eye-state`. There is no `face-quality` or `aesthetics` Provider for Linux yet.
+- **Windows** (preview): x64 only; Windows on ARM is not supported. The portable Providers serve the same Capabilities as on Linux. Windows is tested in CI but not yet checked end to end with Lightroom Classic on a real machine ([ADR-0008](docs/adr/0008-windows-as-a-native-platform.md)).
 - The portable Providers also run on macOS 14 or later, which onnxruntime needs.
 
 ## Running it
@@ -61,9 +68,9 @@ uv run framewise review /path/to/session-folder
 
 This scans the folder, starts the server on `http://127.0.0.1:8765/` and opens the browser straight away. The Review UI shows progress and fills in with Groups as analysis runs, which uses every core.
 
-- Leave out the folder (`uv run framewise review`) to choose it in the Review UI: **Choose Session folder…** opens the Finder folder dialog (on Linux, zenity's). To review another Session, restart framewise.
+- Leave out the folder (`uv run framewise review`) to choose it in the Review UI: **Choose Session folder…** opens the Finder folder dialog (on Windows, the Explorer one; on Linux, zenity's). To review another Session, restart framewise.
 - framewise scans subfolders too. Put an empty `.framewise-ignore` file in a folder to leave it and everything under it out of the Session.
-- Results are kept in the Session store under `~/Library/Application Support/framewise/` (on Linux, `$XDG_DATA_HOME/framewise/`, by default `~/.local/share/framewise/`), so a re-run only analyzes new or changed Frames. `FRAMEWISE_DATA_DIR` overrides that folder.
+- Results are kept in the Session store under `~/Library/Application Support/framewise/` (on Windows, `%LOCALAPPDATA%\framewise\`; on Linux, `$XDG_DATA_HOME/framewise/`, by default `~/.local/share/framewise/`), so a re-run only analyzes new or changed Frames. `FRAMEWISE_DATA_DIR` overrides that folder.
 - To review from another machine, such as when framewise runs on a headless Linux box, forward the port over SSH (`ssh -L 8765:127.0.0.1:8765 <host>`) and open `http://127.0.0.1:8765/` on your machine.
 
 Options:
@@ -88,7 +95,7 @@ The Review UI filters by Verdict and by Reason.
 
 ## Reviewing
 
-In an open Group, review with Lightroom Classic's shortcuts:
+In an open Group, review with Lightroom Classic's shortcuts. On Windows and Linux, the Review UI names the keys `Ctrl`, `Alt` and `Delete`:
 
 | Key | Action |
 | --- | --- |
@@ -98,7 +105,7 @@ In an open Group, review with Lightroom Classic's shortcuts:
 | `W` | Make the current Frame the Group's Winner |
 | `⌫` / `Delete` | Move the current Frame to the Trash, after you confirm |
 | `←` / `→` | Previous or next Frame |
-| `⌥←` / `⌥→` | Previous or next Frame in the current Group |
+| `⌥←` / `⌥→` (`Alt+←` / `Alt+→`) | Previous or next Frame in the current Group |
 | `E` | Open the loupe |
 | `C` | Compare with the Winner |
 | `Z` | Zoom between fit and 100% |
@@ -111,7 +118,7 @@ Overrides are saved in the Session store as you go ([ADR-0003](docs/adr/0003-ove
 
 To fix wrong grouping in an open Group, split it at a Frame or split off the selected Frames, move a Frame to the previous or next Group, or merge the Group with its neighbor. Fixed Groups are kept on later re-runs ([ADR-0004](docs/adr/0004-group-overrides.md)). **Reset grouping** hands a fixed Group back to framewise's grouping.
 
-To get rid of Frames for good, trash the current Frame, the selected Frames or the whole Group. To trash several junk Groups at once, select them in All Groups with their checkboxes, `⌘`-click or `Shift`-click, then choose **Trash N Groups** or press `⌫`. framewise asks first, then moves every file of each Frame (RAW, JPG and any `.xmp` sidecar) to the OS Trash and takes the Frame out of the Session. Nothing is deleted outright: restore the files from the Trash and run `framewise review` again to bring a Frame back with its Overrides ([ADR-0006](docs/adr/0006-trashing-frames.md)). Trash before you import into Lightroom, because Lightroom shows trashed Frames it already imported as missing.
+To get rid of Frames for good, trash the current Frame, the selected Frames or the whole Group. To trash several junk Groups at once, select them in All Groups with their checkboxes, `⌘`-click (`Ctrl`-click on Windows and Linux) or `Shift`-click, then choose **Trash N Groups** or press `⌫` (`Delete`). framewise asks first, then moves every file of each Frame (RAW, JPG and any `.xmp` sidecar) to the OS Trash and takes the Frame out of the Session. Nothing is deleted outright: restore the files from the Trash and run `framewise review` again to bring a Frame back with its Overrides ([ADR-0006](docs/adr/0006-trashing-frames.md)). Trash before you import into Lightroom, because Lightroom shows trashed Frames it already imported as missing.
 
 ## Providers
 
@@ -149,7 +156,7 @@ Details:
 
 - Overrides count: an Override's Verdict replaces framewise's, and stars or a color label set with the shortcuts replace the ones the Verdict maps to.
 - JPGs and DNGs get embedded XMP; other RAWs get an `.xmp` sidecar, merged into any existing one.
-- Label names come from Lightroom Classic's active color label set (for example `Rot` and `Gelb`).
+- Label names come from Lightroom Classic's active color label set (for example `Rot` and `Gelb`), read from its preferences on macOS and, on Windows, from `%APPDATA%\Adobe\Lightroom\Preferences\Lightroom Classic CC 7 Preferences.agprefs`.
 - Writing takes a while for large Sessions, because each DNG is rewritten in full. The screen shows how many files are done, and reloading the page doesn't stop it.
 - Write-back needs [ExifTool](https://exiftool.org), which the [setup script](#install) installs.
 

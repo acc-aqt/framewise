@@ -1,4 +1,5 @@
 import io
+import sys
 from pathlib import Path
 
 import pytest
@@ -213,6 +214,7 @@ def test_symbolic_links_are_not_frames(session_dir, review, tmp_path):
     assert [frame["jpg_path"] for frame in client.get("/api/frames").json()] == ["DSCF0001.JPG"]
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows file names cannot hold a line break")
 def test_files_with_a_line_break_in_their_name_are_not_frames(session_dir, review):
     make_jpg(session_dir / "DSCF0001.JPG")
     make_jpg(session_dir / "DSCF\r0002.JPG")

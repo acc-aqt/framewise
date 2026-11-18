@@ -24,7 +24,7 @@ SOFT = {"sharpness": 0.3}
 
 def exiftool(*args: str | Path) -> str:
     return subprocess.run(
-        [EXIFTOOL, *map(str, args)], check=True, capture_output=True, text=True
+        [EXIFTOOL, *map(str, args)], check=True, capture_output=True, encoding="utf-8"
     ).stdout
 
 

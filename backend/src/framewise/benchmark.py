@@ -15,21 +15,32 @@ import sys
 import tempfile
 import time
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
+from itertools import combinations
 from pathlib import Path
 
 from framewise.analyzer import FrameAnalyzer
-from framewise.judge import KEPT, Proposal, Verdict, judge
+from framewise.judge import KEPT, WEIGHTS, Proposal, Scores, Verdict, judge
 from framewise.lightroom import LIGHTROOM_PREFERENCES
 from framewise.providers import Provider, ProviderError, resolve_analyzer
 from framewise.review import SessionAnalysis, open_session, resolve_config_path
-from framewise.store import Frame
+from framewise.store import AnalyzedFrame, Frame
+from framewise.weight_fit import fit_weights
 
 ACTIVE_CATALOG_KEY = "libraryToLoad20"
 # ADR-0002: 15 minutes for a 200-Frame Session on the first pass.
 BUDGET_SECONDS_PER_FRAME = 15 * 60 / 200
 NOT_KEPT = {Verdict.REJECT, Verdict.UNSURE}
+FOLDS = 5
+FIT_WEIGHTS_HELP = """\
+Also fit the Score weights to the Reference ratings and print them; nothing is changed. Two
+Frames of a Group with different Reference ratings (none counts as 0 stars) make a pair, the
+higher rated one preferred. The proposed weights are fitted to every pair, on the scale of
+today's. Held-out figures come from cross-validation by Group: each Group is judged with weights
+fitted to the other Groups only, next to the current weights. "Pairs ranked as rated" is how
+often the preferred Frame gets the higher total Score; "Winners among their Group's top-rated
+Frames" is Winner agreement. Copy the proposed weights into judge.py only if they do better."""
 
 REFERENCE_RATINGS_QUERY = """
 SELECT root.absolutePath || folder.pathFromRoot || file.baseName || '.' || file.extension AS path,
@@ -59,6 +70,25 @@ class WinnerAgreement:
     agreeing: int
     groups: int
     share: float | None
+
+
+@dataclass(frozen=True)
+class HeldOut:
+    ranked_as_rated: int
+    pairs: int
+    winners: WinnerAgreement
+
+
+@dataclass(frozen=True)
+class WeightFit:
+    pairs: int
+    folds: int
+    proposed: dict[str, float] | None
+    """Fitted to every pair, or None when the pairs favor no Score component."""
+    current: HeldOut | None
+    """The current weights on the held-out Groups, or None with fewer than two Groups."""
+    fitted: HeldOut | None
+    """Weights fitted without each held-out Group, on that Group."""
 
 
 @dataclass(frozen=True)
@@ -168,6 +198,74 @@ def _winner_is_top_rated(proposal: Proposal, group: list[int], references: dict[
     )
 
 
+def weight_fit(
+    groups: list[list[AnalyzedFrame]], references: dict[int, int], folds: int = FOLDS
+) -> WeightFit:
+    """Fits the Score weights to the Reference ratings and cross-validates them by Group, so
+    no Group is used for fitting and testing at once. A fold whose training pairs favor no
+    Score component is judged with the current weights."""
+    scores = {frame_id: j.scores for frame_id, j in judge(groups).items()}
+    proposed = fit_weights(_score_pairs(groups, references, scores))
+    pairs = len(_preference_pairs(groups, references))
+    folds = min(folds, len(groups))
+    if folds < 2:
+        return WeightFit(pairs, folds, proposed, current=None, fitted=None)
+    current, fitted = [], []
+    for fold in range(folds):
+        held_out = groups[fold::folds]
+        training = [group for index, group in enumerate(groups) if index % folds != fold]
+        weights = fit_weights(_score_pairs(training, references, scores)) or WEIGHTS
+        current.append(_held_out(held_out, references, WEIGHTS))
+        fitted.append(_held_out(held_out, references, weights))
+    return WeightFit(pairs, folds, proposed, _sum_held_out(current), _sum_held_out(fitted))
+
+
+def _preference_pairs(
+    groups: list[list[AnalyzedFrame]], references: dict[int, int]
+) -> list[tuple[int, int]]:
+    """Pairs of Frame ids in the same Group with different Reference ratings, the higher rated
+    first. An unrated Frame counts as 0 stars."""
+    pairs = []
+    for group in groups:
+        for first, second in combinations([analyzed.frame.id for analyzed in group], 2):
+            first_stars, second_stars = references.get(first, 0), references.get(second, 0)
+            if first_stars > second_stars:
+                pairs.append((first, second))
+            elif second_stars > first_stars:
+                pairs.append((second, first))
+    return pairs
+
+
+def _score_pairs(
+    groups: list[list[AnalyzedFrame]], references: dict[int, int], scores: dict[int, Scores]
+) -> list[tuple[Scores, Scores]]:
+    return [
+        (scores[better], scores[worse]) for better, worse in _preference_pairs(groups, references)
+    ]
+
+
+def _held_out(
+    groups: list[list[AnalyzedFrame]], references: dict[int, int], weights: Mapping[str, float]
+) -> HeldOut:
+    proposal = judge(groups, weights=weights)
+    pairs = _preference_pairs(groups, references)
+    ranked = sum(
+        proposal[better].scores.total > proposal[worse].scores.total for better, worse in pairs
+    )
+    group_ids = [[analyzed.frame.id for analyzed in group] for group in groups]
+    return HeldOut(ranked, len(pairs), winner_agreement(proposal, group_ids, references))
+
+
+def _sum_held_out(parts: list[HeldOut]) -> HeldOut:
+    agreeing = sum(part.winners.agreeing for part in parts)
+    groups = sum(part.winners.groups for part in parts)
+    return HeldOut(
+        ranked_as_rated=sum(part.ranked_as_rated for part in parts),
+        pairs=sum(part.pairs for part in parts),
+        winners=WinnerAgreement(agreeing, groups, agreeing / groups if groups else None),
+    )
+
+
 def timing(frames: int, seconds: float) -> Timing:
     budget = frames * BUDGET_SECONDS_PER_FRAME
     return Timing(
@@ -205,6 +303,7 @@ def main(
         default=[],
         help="Use this Provider for the Capability, over config.toml's choice (repeatable)",
     )
+    parser.add_argument("--fit-weights", action="store_true", help=FIT_WEIGHTS_HELP)
     args = parser.parse_args(argv)
 
     session_root = args.session_folder.resolve()
@@ -224,7 +323,9 @@ def main(
     with tempfile.TemporaryDirectory(prefix="framewise-benchmark-") as temp:
         catalog_copy = copy_catalog(catalog, Path(temp))
         ratings = read_reference_ratings(catalog_copy, session_root)
-        report = _run(session_root, Path(temp) / "session-store", analyzer, ratings, clock)
+        report = _run(
+            session_root, Path(temp) / "session-store", analyzer, ratings, clock, args.fit_weights
+        )
 
     args.report.write_text(json.dumps(report, indent=2))
     print(_summary(report, catalog, args.report))
@@ -236,6 +337,7 @@ def _run(
     analyzer: FrameAnalyzer,
     ratings: dict[Path, int],
     clock: Callable[[], float],
+    fit: bool,
 ) -> dict:
     """A cold first pass: a fresh Session store, so every Frame is analyzed."""
     started = clock()
@@ -250,7 +352,7 @@ def _run(
     frames = store.frames()
     references = match_references(frames, session_root, ratings)
     group_ids = [[analyzed.frame.id for analyzed in group] for group in groups]
-    return {
+    report = {
         "session": str(session_root),
         "frames": len(frames),
         "frames_analysed": sum(len(group) for group in groups),
@@ -264,6 +366,9 @@ def _run(
             _frame_result(frame, proposal, references) for frame in frames if frame.id in proposal
         ],
     }
+    if fit:
+        report["weight_fit"] = asdict(weight_fit(groups, references))
+    return report
 
 
 def _frame_result(frame: Frame, proposal: Proposal, references: dict[int, int]) -> dict:
@@ -321,10 +426,40 @@ def _summary(report: dict, catalog: Path, report_path: Path) -> str:
             f"  Budget: {time_taken['budget_seconds']:.0f} s "
             f"({time_taken['budget_seconds'] / 60:.1f} min, "
             f"{BUDGET_SECONDS_PER_FRAME:.2f} s per Frame): {budget_verdict}",
+            *(_weight_fit_summary(report["weight_fit"]) if "weight_fit" in report else []),
             "",
             f"Report: {report_path}",
         ]
     )
+
+
+def _weight_fit_summary(fit: dict) -> list[str]:
+    proposed = fit["proposed"]
+    lines = [
+        "",
+        "Score weights fitted to the Reference ratings (nothing changed)",
+        f"  Pairs of differently rated Frames in a Group: {fit['pairs']}",
+        f"  Current weights: {_weights(WEIGHTS)}",
+        "  Proposed weights: "
+        + (_weights(proposed) if proposed else "none, the pairs favor no Score component"),
+    ]
+    if fit["current"] is None:
+        return [*lines, "  Held-out figures need at least 2 Groups"]
+    current, fitted = fit["current"], fit["fitted"]
+    return [
+        *lines,
+        f"  {fit['folds']}-fold cross-validation by Group",
+        "  Held-out pairs ranked as rated: "
+        f"current {_share(current['ranked_as_rated'], current['pairs'])}, "
+        f"proposed {_share(fitted['ranked_as_rated'], fitted['pairs'])}",
+        "  Held-out Winners among their Group's top-rated Frames: "
+        f"current {_share(current['winners']['agreeing'], current['winners']['groups'])}, "
+        f"proposed {_share(fitted['winners']['agreeing'], fitted['winners']['groups'])}",
+    ]
+
+
+def _weights(weights: Mapping[str, float]) -> str:
+    return ", ".join(f"{name} {weight:.2f}" for name, weight in weights.items())
 
 
 def _share(part: int, whole: int) -> str:

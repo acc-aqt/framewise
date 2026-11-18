@@ -151,16 +151,18 @@ def judge(
     groups: list[list[AnalyzedFrame]],
     verdict_overrides: Mapping[str, Verdict] | None = None,
     keeper_budget: float = DEFAULT_KEEPER_BUDGET,
+    weights: Mapping[str, float] = WEIGHTS,
 ) -> Proposal:
     """Judges each Group, then keeps roughly `keeper_budget` of the Frames as Winners and
     Keepers. `verdict_overrides` holds the photographer's Verdict Overrides by JPG path; the
-    Frames they kept count towards the budget and those they overrode are never re-judged by it."""
+    Frames they kept count towards the budget and those they overrode are never re-judged by it.
+    `weights` weigh the Score components into the total; only the benchmark tries others."""
     overrides = verdict_overrides or {}
     proposal: Proposal = {}
     candidates: list[tuple[_Assessment, _Assessment]] = []
     kept = 0
     for group in groups:
-        assessments = [_assess(analyzed) for analyzed in group]
+        assessments = [_assess(analyzed, weights) for analyzed in group]
         winner = _pick_winner(assessments, overrides)
         for assessment in assessments:
             override = _non_winner_override(assessment, overrides)
@@ -244,12 +246,12 @@ def _judge_flaws_against_winner(assessment: _Assessment, winner: _Assessment) ->
     return None
 
 
-def _assess(analyzed: AnalyzedFrame) -> _Assessment:
+def _assess(analyzed: AnalyzedFrame, weights: Mapping[str, float]) -> _Assessment:
     flaws = [flaw for check in FLAW_CHECKS for flaw in check(analyzed)]
-    return _Assessment(analyzed, _scores(analyzed), flaws)
+    return _Assessment(analyzed, _scores(analyzed, weights), flaws)
 
 
-def _scores(analyzed: AnalyzedFrame) -> Scores:
+def _scores(analyzed: AnalyzedFrame, weights: Mapping[str, float]) -> Scores:
     signals = analyzed.signals
     components = {
         "sharpness": _sharpness_score(signals),
@@ -259,8 +261,9 @@ def _scores(analyzed: AnalyzedFrame) -> Scores:
         "face_quality": _face_quality(signals.faces),
     }
     available = {name: value for name, value in components.items() if value is not None}
-    total_weight = sum(WEIGHTS[name] for name in available)
-    weighted = sum(WEIGHTS[name] * value for name, value in available.items()) / total_weight
+    total_weight = sum(weights[name] for name in available)
+    weighted = sum(weights[name] * value for name, value in available.items())
+    weighted = weighted / total_weight if total_weight else 0.0
     hint = _camera_rating_hint(analyzed.frame.camera_rating)
     return Scores(**components, camera_rating=hint, total=weighted + hint)
 

@@ -78,7 +78,7 @@ function inlineParts(item: string): InlinePart[] {
       (click)="open.update((isOpen) => !isOpen)"
     >
       {{ about().version }}
-      @if (hasNews()) {
+      @if (hasUnseenChanges()) {
         <span class="badge" data-testid="whats-new-badge" aria-hidden="true"></span>
       }
     </button>
@@ -149,8 +149,6 @@ function inlineParts(item: string): InlinePart[] {
       font-family: var(--font-mono);
       font-size: var(--text-xs);
       cursor: pointer;
-    }
-    .version {
       display: inline-flex;
       align-items: center;
       gap: var(--space-1);
@@ -236,14 +234,14 @@ export class WhatsNew implements OnInit {
 
   /** The version at which the photographer last opened What's new. */
   private readonly seenVersion = signal<string | null>(null);
-  protected readonly hasNews = computed(() => {
+  protected readonly hasUnseenChanges = computed(() => {
     const seen = this.seenVersion();
     return seen !== null && seen !== this.about().version;
   });
   protected readonly label = computed(
     () =>
       `framewise ${this.about().version}, What's new` +
-      (this.hasNews() ? ', new release notes' : ''),
+      (this.hasUnseenChanges() ? ', unseen changes' : ''),
   );
 
   protected readonly versions = computed(() =>

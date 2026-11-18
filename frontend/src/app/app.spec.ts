@@ -360,7 +360,7 @@ describe('Review UI', () => {
         await restartWith(about);
 
         expect(badge()).toBeDefined();
-        expect(versionButton().getAttribute('aria-label')).toContain('new release notes');
+        expect(versionButton().getAttribute('aria-label')).toContain('unseen changes');
 
         await openWhatsNew();
 

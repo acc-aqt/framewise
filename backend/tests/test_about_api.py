@@ -89,6 +89,11 @@ def test_about_has_no_changelog_when_the_file_is_missing(review, tmp_path):
         "## 0.1.0 — 2026-11-20\n\nA paragraph instead of a bullet.\n",
         "## 0.1.0 — 2026-11-20\n\n- See [the README](README.md)\n",
         "## 0.1.0 — 2026-11-20\n\n- <b>First</b> Release\n",
+        "## 0.1.0 — 2026-11-20\n\n- *First* Release\n",
+        "## 0.1.0 — 2026-11-20\n\n- _First_ Release\n",
+        "## 0.1.0 — 2026-11-20\n\n- **First Release\n",
+        "- A bullet above the first version\n\n## 0.1.0 — 2026-11-20\n\n- First Release\n",
+        "### A subheading above the first version\n\n## 0.1.0 — 2026-11-20\n\n- First\n",
     ],
     ids=[
         "unknown heading",
@@ -100,11 +105,23 @@ def test_about_has_no_changelog_when_the_file_is_missing(review, tmp_path):
         "paragraph",
         "link",
         "HTML",
+        "italic",
+        "underscore emphasis",
+        "unclosed bold",
+        "bullet above the first version",
+        "subheading above the first version",
     ],
 )
 def test_about_has_no_changelog_when_it_is_out_of_shape(review, tmp_path, body):
     path = tmp_path / "CHANGELOG.md"
     path.write_text("# Changelog\n\n" + body)
+
+    assert changelog(review(changelog_path=path)) == []
+
+
+def test_about_has_no_changelog_without_its_title(review, tmp_path):
+    path = tmp_path / "CHANGELOG.md"
+    path.write_text("## 0.1.0 — 2026-11-20\n\n- First Release\n")
 
     assert changelog(review(changelog_path=path)) == []
 

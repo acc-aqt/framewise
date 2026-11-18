@@ -2,6 +2,7 @@ import hashlib
 import json
 import plistlib
 import sqlite3
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -35,6 +36,10 @@ CREATE TABLE Adobe_images (
 );
 """
 DUPLICATE = [1.0] + [0.0] * 63
+
+runs_the_benchmark = pytest.mark.skipif(
+    sys.platform == "win32", reason="framewise-benchmark does not run on Windows"
+)
 
 
 class FakeCatalog:
@@ -197,6 +202,7 @@ def test_timing_is_measured_against_15_minutes_per_200_frames():
     assert result.within_budget
 
 
+@runs_the_benchmark
 def test_benchmark_reports_agreement_and_timing_without_touching_session_or_catalog(
     session_dir, catalog, tmp_path, monkeypatch, capsys
 ):
@@ -231,6 +237,7 @@ def test_benchmark_reports_agreement_and_timing_without_touching_session_or_cata
     assert not data_dir.exists()
 
 
+@runs_the_benchmark
 def test_benchmark_refuses_to_write_its_report_into_the_session_folder(
     session_dir, catalog, tmp_path
 ):
@@ -275,6 +282,7 @@ def run_benchmark(session_dir, catalog, tmp_path, *options, providers) -> dict:
     return json.loads(report.read_text())
 
 
+@runs_the_benchmark
 def test_a_provider_override_serves_its_capability_and_the_report_names_it(
     session_dir, catalog, tmp_path, isolated_data_dir, capsys
 ):
@@ -288,6 +296,7 @@ def test_a_provider_override_serves_its_capability_and_the_report_names_it(
     assert "fingerprint: chosen@1" in capsys.readouterr().out
 
 
+@runs_the_benchmark
 def test_a_provider_override_wins_over_the_config_file(
     session_dir, catalog, tmp_path, isolated_data_dir
 ):
@@ -302,6 +311,7 @@ def test_a_provider_override_wins_over_the_config_file(
     assert report["providers"] == {"fingerprint": "chosen@1"}
 
 
+@runs_the_benchmark
 @pytest.mark.parametrize(
     ("override", "error"),
     [
@@ -331,6 +341,7 @@ def test_an_override_without_a_capability_and_id_is_a_usage_error(
     assert exit_info.value.code == 2
 
 
+@runs_the_benchmark
 def test_a_provider_override_replaces_a_config_choice_that_cannot_be_honoured(
     session_dir, catalog, tmp_path, isolated_data_dir
 ):

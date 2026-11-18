@@ -343,3 +343,15 @@ def test_a_provider_override_replaces_a_config_choice_that_cannot_be_honoured(
     )
 
     assert report["providers"] == {"fingerprint": "chosen@1"}
+
+
+def test_benchmark_refuses_to_run_on_windows(session_dir, catalog, tmp_path, capsys):
+    with pytest.raises(SystemExit) as exit_info:
+        main(
+            [str(session_dir), "--catalog", str(catalog.path), "--report", str(tmp_path / "r")],
+            analyzer=FakeAnalyzer(),
+            platform="win32",
+        )
+
+    assert exit_info.value.code == 2
+    assert "does not run on Windows" in capsys.readouterr().err

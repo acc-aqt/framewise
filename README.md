@@ -112,6 +112,8 @@ In an open Group, review with Lightroom Classic's shortcuts. On Windows and Linu
 | `Esc` | Close |
 | `⌘K` (`Ctrl+K`) | Command palette, with every command and its shortcut |
 
+The version next to framewise's name opens **What's new**, the [Changelog](CHANGELOG.md) of what changed in each Release; the command palette lists it too.
+
 Overrides are saved in the Session store as you go ([ADR-0003](docs/adr/0003-overrides.md)). The Keeper budget never changes them, and the Frames you keep count towards it.
 
 To fix wrong grouping in an open Group, split it at a Frame or split off the selected Frames, move a Frame to the previous or next Group, or merge the Group with its neighbor. Fixed Groups are kept on later re-runs ([ADR-0004](docs/adr/0004-group-overrides.md)). **Reset grouping** hands a fixed Group back to framewise's grouping.

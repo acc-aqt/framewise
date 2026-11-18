@@ -126,3 +126,13 @@ _Avoid_: Delete, remove, discard
 **Rating write-back**:
 The explicit, opt-in and reversible step that writes the reviewed Verdicts into the Frames' files so Lightroom Classic can read them.
 _Avoid_: Export, sync, apply
+
+## Releases
+
+**Release**:
+A numbered version of framewise, such as `0.1.0`: a `vX.Y.Z` tag on `main` with its release notes on GitHub. Photographers still update from `main`; a Release names what they have.
+_Avoid_: Build, drop, ship
+
+**Changelog**:
+The hand-written list of user-visible changes in each Release, newest first, with changes not yet in a Release under Unreleased. The Review UI shows it under What's new.
+_Avoid_: Release log, history, news

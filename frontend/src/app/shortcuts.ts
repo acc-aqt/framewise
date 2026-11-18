@@ -25,7 +25,8 @@ export type Shortcut =
   | { kind: 'trash' }
   | { kind: 'trashGroup' }
   | { kind: 'trashGroups' }
-  | { kind: 'writeBack' };
+  | { kind: 'writeBack' }
+  | { kind: 'whatsNew' };
 
 /** What the Review UI is showing, which decides the commands that apply. */
 export interface CommandContext {
@@ -190,6 +191,7 @@ export const COMMANDS: readonly Command[] = [
     { kind: 'writeBack' },
     (context) => context.writeBackAvailable,
   ),
+  paletteCommand('whats-new', "What's new", { kind: 'whatsNew' }, () => true),
 ];
 
 export function commandById(id: string): Command {

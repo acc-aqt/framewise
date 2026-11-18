@@ -7,11 +7,6 @@ Cull a photo shoot on your own machine: framewise groups bursts and near-duplica
 
 ![Opening a Session of 221 photos, analysis, merging Groups, comparing a Frame with the Winner and making it the new Winner, then Rating write-back and the result in Lightroom Classic](docs/images/workflow.gif)
 
-- [**How it judges**](#how-it-judges): what framewise checks in each Frame.
-- [**Reviewing**](#reviewing): the Review UI and its keyboard shortcuts.
-- [**Rating write-back**](#rating-write-back): how the result reaches Lightroom Classic.
-- [**Providers**](#providers): which analysis runs on which machine, and how to add your own.
-
 Everything runs locally; no photo leaves the machine. Terms such as Frame, Group and Verdict are defined in the [Glossary](GLOSSARY.md).
 
 Built with AI coding agents; design, calibration and review by me.
@@ -80,38 +75,21 @@ framewise analyzes each Frame's JPG with the installed analysis Providers; which
 
 - **Groups**: near-duplicate and burst Frames are grouped together.
 - **Verdicts**: each Frame gets a proposed Verdict (Winner, Keeper, Reject or Unsure) with Reasons, judged from its sharpness, motion blur, exposure and, where an `aesthetics` Provider is available, an aesthetics score.
-- **Faces**: in Frames with faces, every face is checked for closed eyes, sharpness and, where a `face-quality` Provider is available, face quality. Sharpness is then judged on the faces rather than the whole image. An open Group and the loupe show a badge on each face.
+- **Faces**: in Frames with faces, every face is checked for closed eyes, sharpness and, where a `face-quality` Provider is available, face quality. Sharpness is then judged on the faces rather than the whole image.
 - **Camera rating**: a rating already on the file, such as in-camera stars, nudges a Frame up a little but never past a technical flaw.
-- **Keeper budget**: the slider sets roughly what share of the Session's Frames to keep (40% to start, stored per Session). Each Group's Winner always stays, then the best Frames without flaws become Keepers until the budget is spent. The slider shows how many Keepers result.
-
-The Review UI filters by Verdict and by Reason.
+- **Keeper budget**: the slider sets roughly what share of the Session's Frames to keep (40% to start, stored per Session). Each Group's Winner always stays, then the best Frames without flaws become Keepers until the budget is spent.
 
 ## Reviewing
 
-In an open Group, review with Lightroom Classic's shortcuts:
-
-| Key | Action |
-| --- | --- |
-| `1`–`5`, `0` | Set stars, clear them |
-| `6`–`9` | Red, yellow, green, blue color label |
-| `P` / `X` / `U` | Keep, reject, clear the Override |
-| `W` | Make the current Frame the Group's Winner |
-| `⌫` / `Delete` | Move the current Frame to the Trash, after you confirm |
-| `←` / `→` | Previous or next Frame |
-| `⌥←` / `⌥→` | Previous or next Frame in the current Group |
-| `E` | Open the loupe |
-| `C` | Compare with the Winner |
-| `Z` | Zoom between fit and 100% |
-| `Esc` | Close |
-| `⌘K` (`Ctrl+K`) | Command palette, with every command and its shortcut |
+In an open Group, review with Lightroom Classic's keys. The main ones are shown at the bottom, and `⌘K` (`Ctrl+K`) lists every command with its shortcut.
 
 The version next to framewise's name opens **What's new**, the [Changelog](CHANGELOG.md) of what changed in each Release; the command palette lists it too.
 
 Overrides are saved in the Session store as you go ([ADR-0003](docs/adr/0003-overrides.md)). The Keeper budget never changes them, and the Frames you keep count towards it.
 
-To fix wrong grouping in an open Group, split it at a Frame or split off the selected Frames, move a Frame to the previous or next Group, or merge the Group with its neighbor. Fixed Groups are kept on later re-runs ([ADR-0004](docs/adr/0004-group-overrides.md)). **Reset grouping** hands a fixed Group back to framewise's grouping.
+Fix wrong grouping from an open Group. Fixed Groups are kept on later re-runs ([ADR-0004](docs/adr/0004-group-overrides.md)).
 
-To get rid of Frames for good, trash the current Frame, the selected Frames or the whole Group. To trash several junk Groups at once, select them in All Groups with their checkboxes, `⌘`-click or `Shift`-click, then choose **Trash N Groups** or press `⌫`. framewise asks first, then moves every file of each Frame (RAW, JPG and any `.xmp` sidecar) to the OS Trash and takes the Frame out of the Session. Nothing is deleted outright: restore the files from the Trash and run `framewise review` again to bring a Frame back with its Overrides ([ADR-0006](docs/adr/0006-trashing-frames.md)). Trash before you import into Lightroom, because Lightroom shows trashed Frames it already imported as missing.
+Trashing a Frame moves every file of each Frame (RAW, JPG and any `.xmp` sidecar) to the OS Trash and takes the Frame out of the Session. Nothing is deleted outright: restore the files from the Trash and run `framewise review` again to bring a Frame back with its Overrides ([ADR-0006](docs/adr/0006-trashing-frames.md)). Trash before you import into Lightroom, because Lightroom shows trashed Frames it already imported as missing.
 
 ## Providers
 
@@ -141,21 +119,19 @@ To write your own Provider, such as another face detector or eye-state check, se
 
 Nothing is written to the photos until you ask ([ADR-0001](docs/adr/0001-frames-jpg-analysis-and-rating-write-back.md)). Write back before importing into Lightroom.
 
-1. Once analysis has finished, **Rating write-back…** in the Review UI shows a dry run: every file with its current and new rating and color label.
-2. Only after you confirm does framewise write the Verdicts: Winner 3★, Keeper 2★, Reject 0★ with the red label, Unsure 0★ with the yellow label.
-3. **Undo write-back** restores the previous values, which are kept in the Session store, and removes sidecars framewise created.
+**Rating write-back…** shows a dry run first and writes only after you confirm: Winner 3★, Keeper 2★, Reject 0★ with the red label, Unsure 0★ with the yellow label. **Undo write-back** restores the previous values, which are kept in the Session store, and removes sidecars framewise created.
 
 Details:
 
 - Overrides count: an Override's Verdict replaces framewise's, and stars or a color label set with the shortcuts replace the ones the Verdict maps to.
 - JPGs and DNGs get embedded XMP; other RAWs get an `.xmp` sidecar, merged into any existing one.
 - Label names come from Lightroom Classic's active color label set (for example `Rot` and `Gelb`).
-- Writing takes a while for large Sessions, because each DNG is rewritten in full. The screen shows how many files are done, and reloading the page doesn't stop it.
+- Writing takes a while for large Sessions, because each DNG is rewritten in full. Reloading the page doesn't stop it.
 - Write-back needs [ExifTool](https://exiftool.org), which the [setup script](#install) installs.
 
 **Reset Session…** on the same screen starts the review over: it undoes the write-back and clears all Overrides, fixed Groups and the Keeper budget. The analysis is kept, so nothing is analyzed again. Stars and labels framewise didn't write, such as in-camera ratings, stay as they are.
 
-For development and demos, `uv run framewise reset /path/to/session-folder` resets harder: it undoes the write-back, then deletes the Session store, so the next `framewise review` analyzes every Frame again. Quit `framewise review` first. If a file can't be restored, the store is kept so you can retry.
+`uv run framewise reset /path/to/session-folder` also deletes the Session store, so the next `framewise review` analyzes every Frame again.
 
 ## Architecture
 
@@ -169,8 +145,6 @@ Set up the checkout as under [Install](#install), then run from the repo root:
 (cd backend && uv run pytest && uv run ruff check .)
 (cd frontend && npx ng test --watch=false)
 ```
-
-Most backend tests use a fake Frame analyzer. `tests/test_providers.py` composes analysis from fake Providers. `tests/test_apple_vision.py` runs the real Apple Vision Providers on generated images and the public-domain reference faces in `tests/fixtures/faces/`, and is skipped on other platforms. `tests/test_mediapipe_faces.py` runs the MediaPipe Providers on the same faces and `tests/test_dinov2_fingerprint.py` the DINOv2 fingerprint on generated images and a Session analyzed only by portable Providers; both are skipped unless the `portable` extra is installed and `framewise models download` has run.
 
 ## License
 

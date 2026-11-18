@@ -150,6 +150,7 @@ def main(
     analyzer: FrameAnalyzer | None = None,
     clock: Callable[[], float] = time.perf_counter,
     providers: list[Provider] | None = None,
+    platform: str = sys.platform,
 ) -> None:
     parser = argparse.ArgumentParser(
         prog="framewise-benchmark",
@@ -172,6 +173,8 @@ def main(
         help="Use this Provider for the Capability, over config.toml's choice (repeatable)",
     )
     args = parser.parse_args(argv)
+    if platform == "win32":
+        parser.error("does not run on Windows, where Lightroom's catalog paths are not read yet")
 
     session_root = args.session_folder.resolve()
     if not session_root.is_dir():

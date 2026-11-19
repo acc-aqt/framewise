@@ -37,11 +37,14 @@ SOFT_BELOW = 0.4
 FACE_BLURRY_BELOW = 0.25
 FACE_SOFT_BELOW = 0.5
 FACE_SHARP_FROM = 0.67
-# The area a camera focused on and a subject mask are measured on their own like a face, and start
-# out with the face thresholds until they are calibrated on the reference benchmark (#175).
+# The area a camera focused on and a subject mask are measured on their own like a face, and keep
+# the face's blurry and soft thresholds: on 34 Fujifilm Frames the soft ones measure below 0.5 at
+# the focus point, and smooth subjects that are sharp measure as low as 0.61 (#175). Unlike faces,
+# most sharp subjects measure 0.9 or more (22 of 34 Fujifilm focus points, 292 of 343 Leica subject
+# masks), so full sharpness starts there, leaving room to rank sharp Frames within a Burst.
 FOCUS_BLURRY_BELOW = FACE_BLURRY_BELOW
 FOCUS_SOFT_BELOW = FACE_SOFT_BELOW
-FOCUS_SHARP_FROM = FACE_SHARP_FROM
+FOCUS_SHARP_FROM = 0.9
 MOTION_BLUR_FROM = 0.5
 POSSIBLE_MOTION_BLUR_FROM = 0.35
 EXPOSURE_TOLERANCE_STOPS = 0.7

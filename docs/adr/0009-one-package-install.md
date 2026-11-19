@@ -26,3 +26,4 @@ framewise was installed from a clone with `scripts/setup.sh` or `scripts/setup.p
 - Nothing publishes the wheel yet, so photographers still build it from a checkout or receive one.
 - On Linux, MediaPipe's face checks need the OpenGL, EGL and OpenGL ES libraries, which `scripts/setup.sh` installs and a machine with only ExifTool lacks. The CI smoke test checks that a Frame is still analyzed without them, but not that its faces are checked.
 - The Review UI build runs inside the wheel build, so building a wheel needs Node.js.
+- `uvx` runs the newest Python the package allows, so the package allows only Python versions the `portable` extra has wheels for: below 3.15 for now, because onnxruntime has no Python 3.15 wheels yet.

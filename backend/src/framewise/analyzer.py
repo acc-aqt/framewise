@@ -59,6 +59,13 @@ class Expression:
     smile: float | None
     """From 0 for a neutral or downturned mouth to 1 for a broad smile, or None where the
     Provider cannot tell."""
+    looking: float | None = None
+    """From 0 for eyes looking fully aside to 1 for eyes looking into the lens, or None where the
+    Provider cannot tell. A Provider that reads gaze relative to the head, as MediaPipe's does,
+    measures looking into the lens only while the head faces the camera."""
+    facing: float | None = None
+    """From 0 for a head turned fully away to 1 for a head facing the camera, or None where the
+    Provider cannot tell."""
 
 
 @dataclass(frozen=True)

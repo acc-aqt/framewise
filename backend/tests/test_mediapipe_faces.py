@@ -15,7 +15,7 @@ from test_apple_vision import (
 from test_groups_api import BEACH, ScriptedFingerprint
 from test_verdicts_api import frames_by_name, reasons
 
-from framewise.analyzer import SimilarityThresholds
+from framewise.analyzer import Expression, SimilarityThresholds
 from framewise.apple_vision import PRIORITY
 from framewise.mediapipe_faces import (
     MediaPipeExpression,
@@ -53,14 +53,34 @@ def test_eye_state_tells_open_from_closed_eyes():
     assert eyes_open(FACES / "eyes-closed.jpg") == [False]
 
 
-def smile(jpg_path: Path) -> float | None:
+def expression(jpg_path: Path) -> Expression:
     faces = MediaPipeFaceDetection().detect_faces(jpg_path)
     [expression] = MediaPipeExpression().expression(jpg_path, faces)
-    return expression.smile
+    return expression
+
+
+def smile(jpg_path: Path) -> float | None:
+    return expression(jpg_path).smile
 
 
 def test_a_smiling_face_scores_a_higher_smile_than_a_neutral_one():
     assert smile(FACES / "eyes-open.jpg") > 0.5 > smile(FACES / "neutral.jpg")
+
+
+def test_a_face_turned_away_scores_lower_facing_than_one_facing_the_camera():
+    assert (
+        expression(FACES / "turned-away.jpg").facing
+        < 0.5
+        < expression(FACES / "eyes-open.jpg").facing
+    )
+
+
+def test_a_face_looking_aside_scores_lower_looking_than_one_looking_into_the_lens():
+    assert (
+        expression(FACES / "looking-aside.jpg").looking
+        < 0.5
+        < expression(FACES / "eyes-open.jpg").looking
+    )
 
 
 def test_a_frame_without_faces_has_none(tmp_path):

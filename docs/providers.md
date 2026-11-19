@@ -31,9 +31,13 @@ The face detection Provider alone decides which faces a Frame has. The eye state
 
 `Expression`, from `framewise.analyzer`, holds what an expression Provider reads from a face:
 
-- `smile`: from 0 for a neutral or downturned mouth to 1 for a broad smile, or `None` where your Provider cannot tell.
+- `smile`: from 0 for a neutral or downturned mouth to 1 for a broad smile.
+- `looking`: from 0 for eyes looking fully aside to 1 for eyes looking into the lens.
+- `facing`: from 0 for a head turned fully away to 1 for a head facing the camera.
 
-framewise ranks a Frame by its least smiling face. A missing smile never counts as a flaw.
+framewise's MediaPipe Provider reads `looking` relative to the head, not the camera: a head turned away whose eyes look back into the lens scores low on both `looking` and `facing`.
+
+Leave any part your Provider cannot tell as `None`; `looking` and `facing` default to it. framewise weighs the parts a face has into one expression, the smile 0.4 and the other two 0.3 each, and ranks a Frame by its weakest face's expression. Expression never counts as a flaw.
 
 ### Scales
 

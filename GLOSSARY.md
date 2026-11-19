@@ -21,6 +21,10 @@ A Frame backed by a single JPG file.
 A Frame backed by a RAW file and the JPG the camera saved alongside it.
 _Avoid_: Pair, twin, stack
 
+**Main file**:
+The file that identifies a Frame. It is the JPG of a JPG-only or RAW+JPG Frame. The photographer's Overrides and fixed Groups follow a Frame by its main file, which need not be its Analysis source.
+_Avoid_: Master, primary, JPG path
+
 **Analysis source**:
 The file whose pixels framewise judges a Frame by. It is always the Frame's JPG.
 _Avoid_: Preview

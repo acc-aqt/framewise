@@ -36,7 +36,7 @@ def mountain(session_dir, analyzer) -> None:
 
 def groups(client) -> list[list[tuple[str, str]]]:
     return [
-        [(frame["jpg_path"], frame["verdict"]) for frame in group["frames"]]
+        [(frame["main_path"], frame["verdict"]) for frame in group["frames"]]
         for group in client.get("/api/groups").json()
     ]
 
@@ -51,7 +51,7 @@ def winner_counts(client) -> list[int]:
 
 def ids(client, *names: str) -> list[int]:
     by_name = {
-        frame["jpg_path"]: frame["id"]
+        frame["main_path"]: frame["id"]
         for group in client.get("/api/groups").json()
         for frame in group["frames"]
     }
@@ -202,7 +202,7 @@ def test_verdict_overrides_still_win_after_group_fixes(session_dir, review, anal
         [("DSCF0004.JPG", "winner"), ("DSCF0009.JPG", "keeper")],
     ]
     frames = {
-        frame["jpg_path"]: frame
+        frame["main_path"]: frame
         for group in client.get("/api/groups").json()
         for frame in group["frames"]
     }
@@ -355,7 +355,7 @@ def test_resetting_a_group_keeps_verdict_overrides(session_dir, review, analyzer
     reset(client, "DSCF0003.JPG")
 
     frames = {
-        frame["jpg_path"]: frame
+        frame["main_path"]: frame
         for group in client.get("/api/groups").json()
         for frame in group["frames"]
     }

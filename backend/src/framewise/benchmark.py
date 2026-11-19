@@ -98,12 +98,12 @@ def read_reference_ratings(catalog_copy: Path, session_root: Path) -> dict[Path,
 def match_references(
     frames: list[Frame], session_root: Path, ratings: dict[Path, int]
 ) -> dict[int, int]:
-    """Each Frame's Reference rating, by Frame id, matched on its JPG's path. Paths compare
+    """Each Frame's Reference rating, by Frame id, matched on its main file's path. Paths compare
     case-insensitively, as macOS file systems do."""
     by_path = {_path_key(path): stars for path, stars in ratings.items()}
     references = {}
     for frame in frames:
-        stars = by_path.get(_path_key(session_root / frame.jpg_path))
+        stars = by_path.get(_path_key(session_root / frame.main_path))
         if stars is not None:
             references[frame.id] = stars
     return references
@@ -242,7 +242,7 @@ def _frame_result(
     judgement = proposal[frame.id]
     measured_on, sharpness = judged_sharpness(signals)
     return {
-        "jpg_path": frame.jpg_path,
+        "main_path": frame.main_path,
         "reference_stars": references.get(frame.id),
         "verdict": judgement.verdict.value,
         "reasons": [reason.code for reason in judgement.reasons],

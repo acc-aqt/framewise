@@ -15,7 +15,7 @@ from framewise.capture_time import read_capture_time
 from framewise.exiftool import ExifTool
 from framewise.grouper import group_frames
 from framewise.scan import scan_session
-from framewise.store import AnalyzedFrame, SessionStore
+from framewise.store import AnalyzedFrame, Frame, SessionStore
 from framewise.thumbnails import make_thumbnail
 from framewise.write_back import RatingWriteBack, WriteBackResult
 
@@ -93,14 +93,16 @@ class AnalysisProgress:
 
 @dataclass(frozen=True)
 class _FrameWork:
-    jpg_path: Path
+    frame: Frame
+    source: Path
+    """The Frame's Analysis source."""
     needs_thumbnail: bool
     needs_analysis: bool
 
 
 @dataclass(frozen=True)
 class _FrameResult:
-    jpg_path: Path
+    frame: Frame
     thumbnail: bytes | None
     signals: FrameSignals | None
     captured_at: datetime | None
@@ -123,12 +125,12 @@ class SessionAnalysis:
         self._clock = clock
         self._workers = self._worker_count()
         self._lock = threading.Lock()
-        work = [self._work_for(store.root / frame.jpg_path) for frame in store.frames()]
+        work = [self._work_for(frame) for frame in store.frames()]
         self._pending = [item for item in work if item.needs_thumbnail or item.needs_analysis]
         self._frames_total = len(work)
         self._frames_done = len(work) - len(self._pending)
         self._analyses_left = sum(item.needs_analysis for item in self._pending)
-        self._analyses_started_at: dict[Path, float] = {}
+        self._analyses_started_at: dict[str, float] = {}
         self._analysis_seconds_total = 0.0
         self._analyses_done = 0
 
@@ -143,9 +145,9 @@ class SessionAnalysis:
                     self._save(future.result())
                 except Exception as error:
                     # A Frame trashed while it was analyzed fails quietly.
-                    if item.jpg_path.exists():
+                    if item.source.exists():
                         print(
-                            f"framewise: warning: could not analyze {item.jpg_path}: {error}",
+                            f"framewise: warning: could not analyze {item.source}: {error}",
                             file=sys.stderr,
                         )
                 self._count_done(item)
@@ -179,37 +181,38 @@ class SessionAnalysis:
         work_left = self._analyses_left * seconds_per_analysis - head_start
         return work_left / min(self._workers, self._analyses_left)
 
-    def _work_for(self, jpg_path: Path) -> _FrameWork:
+    def _work_for(self, frame: Frame) -> _FrameWork:
         return _FrameWork(
-            jpg_path=jpg_path,
-            needs_thumbnail=not self._store.has_current_thumbnail(jpg_path),
-            needs_analysis=not self._store.has_current_analysis(jpg_path, self._analyzer.signature),
+            frame=frame,
+            source=self._store.root / frame.analysis_source,
+            needs_thumbnail=not self._store.has_current_thumbnail(frame),
+            needs_analysis=not self._store.has_current_analysis(frame, self._analyzer.signature),
         )
 
     def _process(self, item: _FrameWork) -> _FrameResult:
         if item.needs_analysis:
             with self._lock:
-                self._analyses_started_at[item.jpg_path] = self._clock()
+                self._analyses_started_at[item.frame.main_path] = self._clock()
         return _FrameResult(
-            jpg_path=item.jpg_path,
-            thumbnail=make_thumbnail(item.jpg_path) if item.needs_thumbnail else None,
-            signals=self._analyzer.analyze(item.jpg_path) if item.needs_analysis else None,
-            captured_at=read_capture_time(item.jpg_path) if item.needs_analysis else None,
+            frame=item.frame,
+            thumbnail=make_thumbnail(item.source) if item.needs_thumbnail else None,
+            signals=self._analyzer.analyze(item.source) if item.needs_analysis else None,
+            captured_at=read_capture_time(item.source) if item.needs_analysis else None,
         )
 
     def _save(self, result: _FrameResult) -> None:
         if result.thumbnail is not None:
-            self._store.save_thumbnail(result.jpg_path, result.thumbnail)
+            self._store.save_thumbnail(result.frame, result.thumbnail)
         if result.signals is not None:
             self._store.save_analysis(
-                result.jpg_path, result.signals, result.captured_at, self._analyzer.signature
+                result.frame, result.signals, result.captured_at, self._analyzer.signature
             )
 
     def _count_done(self, item: _FrameWork) -> None:
         with self._lock:
             self._frames_done += 1
             if item.needs_analysis:
-                started_at = self._analyses_started_at.pop(item.jpg_path)
+                started_at = self._analyses_started_at.pop(item.frame.main_path)
                 self._analysis_seconds_total += self._clock() - started_at
                 self._analyses_done += 1
                 self._analyses_left -= 1

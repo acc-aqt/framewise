@@ -12,6 +12,11 @@ class ScannedFrame:
     jpg_path: Path
     raw_path: Path | None = None
 
+    @property
+    def main_path(self) -> Path:
+        """The file that identifies the Frame: its JPG."""
+        return self.jpg_path
+
 
 @dataclass(frozen=True)
 class Scan:

@@ -29,7 +29,7 @@ class TrashResult:
 
 
 def files_to_trash(frame: Frame) -> list[str]:
-    """The Frame's files relative to the Session folder, the JPG last. A RAW's sidecar belongs
+    """The Frame's files relative to the Session folder, its main file last. A RAW's sidecar belongs
     to the Frame, so it is trashed with it."""
     if frame.raw_path is None:
         return [frame.jpg_path]
@@ -40,7 +40,7 @@ def files_to_trash(frame: Frame) -> list[str]:
 def trash_frames(
     store: SessionStore, frames: list[Frame], move_to_trash: MoveToTrash = send2trash
 ) -> TrashResult:
-    """Trashes each Frame's files. A Frame leaves the Session once its JPG is in the Trash;
+    """Trashes each Frame's files. A Frame leaves the Session once its main file is in the Trash;
     its Overrides are kept, as for any Frame that vanishes, so they come back if it is
     restored."""
     trashed, failed = [], []
@@ -51,9 +51,9 @@ def trash_frames(
             if (error := _trash(store.root, path, move_to_trash)) is not None
         ]
         failed.extend(errors)
-        if not (store.root / frame.jpg_path).exists():
+        if not (store.root / frame.main_path).exists():
             trashed.append(frame)
-    store.remove_frames([frame.jpg_path for frame in trashed])
+    store.remove_frames([frame.main_path for frame in trashed])
     return TrashResult([frame.id for frame in trashed], failed)
 
 

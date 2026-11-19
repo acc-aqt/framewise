@@ -18,7 +18,7 @@ import { CameraRating, ColorLabel, Frame } from './session-api';
       <app-frame-picture
         class="picture"
         [src]="frame().thumbnail_url"
-        [alt]="frame().jpg_path"
+        [alt]="frame().main_path"
         [faces]="showFaces() ? frame().faces : null"
         [lazy]="true"
       />
@@ -54,7 +54,7 @@ import { CameraRating, ColorLabel, Frame } from './session-api';
       <ng-content />
     </div>
     <span class="caption">
-      <span class="file">{{ frame().jpg_path }}</span>
+      <span class="file">{{ frame().main_path }}</span>
       <ng-content select="[tile-caption]" />
     </span>
   `,

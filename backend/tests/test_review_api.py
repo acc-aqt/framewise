@@ -86,7 +86,7 @@ def test_subfolders_are_scanned_and_pairing_stays_within_one_folder(session_dir,
     assert summary["raw_jpg_count"] == 1
     assert summary["jpg_only_count"] == 1
     assert summary["skipped"] == ["day2/DSCF0002.RAF"]
-    assert [(frame["jpg_path"], frame["raw_path"], frame["kind"]) for frame in frames] == [
+    assert [(frame["main_path"], frame["raw_path"], frame["kind"]) for frame in frames] == [
         ("day1/DSCF0001.JPG", "day1/DSCF0001.RAF", "raw+jpg"),
         ("day2/evening/DSCF0002.JPG", None, "jpg-only"),
     ]
@@ -104,7 +104,7 @@ def test_folders_containing_a_framewise_ignore_file_are_not_scanned(session_dir,
 
     assert summary["total_frames"] == 1
     assert summary["skipped"] == []
-    assert [frame["jpg_path"] for frame in frames] == ["keep/DSCF0001.JPG"]
+    assert [frame["main_path"] for frame in frames] == ["keep/DSCF0001.JPG"]
 
 
 def test_each_frame_has_a_reduced_size_jpeg_thumbnail(session_dir, review):
@@ -157,7 +157,7 @@ def test_re_running_on_the_same_folder_reuses_the_session_store(session_dir, dat
     second_run = review().get("/api/frames").json()
 
     assert len(list(data_dir.glob("*.sqlite"))) == 1
-    assert [frame["jpg_path"] for frame in second_run] == ["DSCF0001.JPG", "DSCF0003.JPG"]
+    assert [frame["main_path"] for frame in second_run] == ["DSCF0001.JPG", "DSCF0003.JPG"]
     assert second_run[0]["id"] == first_run[0]["id"]
 
 
@@ -175,7 +175,9 @@ def test_the_review_ui_build_is_served_at_the_root(session_dir, data_dir, tmp_pa
 
 
 def camera_ratings(client) -> dict[str, dict]:
-    return {frame["jpg_path"]: frame["camera_rating"] for frame in client.get("/api/frames").json()}
+    return {
+        frame["main_path"]: frame["camera_rating"] for frame in client.get("/api/frames").json()
+    }
 
 
 def test_camera_ratings_and_labels_are_read_from_jpg_xmp_and_exif(session_dir, review):
@@ -211,7 +213,7 @@ def test_symbolic_links_are_not_frames(session_dir, review, tmp_path):
 
     client = review()
 
-    assert [frame["jpg_path"] for frame in client.get("/api/frames").json()] == ["DSCF0001.JPG"]
+    assert [frame["main_path"] for frame in client.get("/api/frames").json()] == ["DSCF0001.JPG"]
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows file names cannot hold a line break")

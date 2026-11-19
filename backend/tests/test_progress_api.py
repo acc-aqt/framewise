@@ -15,7 +15,7 @@ def progress(client) -> dict:
 
 def group_paths(client) -> list[list[str]]:
     return [
-        [frame["jpg_path"] for frame in group["frames"]]
+        [frame["main_path"] for frame in group["frames"]]
         for group in client.get("/api/groups").json()
     ]
 
@@ -92,10 +92,8 @@ def test_time_remaining_ignores_frames_that_only_needed_a_thumbnail(
     analyzer.hold(make_jpg(session_dir / "DSCF0004.JPG"))
     analyzer.hold(make_jpg(session_dir / "DSCF0005.JPG"))
     store = open_session(session_dir, data_dir)
-    for number in range(1, 4):
-        store.save_analysis(
-            session_dir / f"DSCF{number:04d}.JPG", clean_signals([1.0]), None, analyzer.signature
-        )
+    for frame in store.frames()[:3]:
+        store.save_analysis(frame, clean_signals([1.0]), None, analyzer.signature)
 
     analysis = SessionAnalysis(store, analyzer, clock=clock)
     threading.Thread(target=analysis.run, daemon=True).start()
@@ -183,8 +181,8 @@ def test_the_review_ui_gets_each_frames_own_image_while_frames_are_saved(session
             while progress(browser)["frames_left"] > 0:
                 for frame in frames:
                     image = browser.get(f"/api/frames/{frame['id']}/image").content
-                    if image != (session_dir / frame["jpg_path"]).read_bytes():
-                        problems.append(f"wrong image for {frame['jpg_path']}")
+                    if image != (session_dir / frame["main_path"]).read_bytes():
+                        problems.append(f"wrong image for {frame['main_path']}")
                     browser.get(f"/api/frames/{frame['id']}/thumbnail")
                 browser.get("/api/groups")
         except Exception as error:

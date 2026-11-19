@@ -94,7 +94,7 @@ export interface Face {
 
 export interface Frame {
   id: number;
-  jpg_path: string;
+  main_path: string;
   raw_path: string | null;
   kind: 'jpg-only' | 'raw+jpg';
   camera_rating: CameraRating;

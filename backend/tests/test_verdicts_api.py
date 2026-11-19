@@ -16,7 +16,7 @@ def seconds(count: float) -> datetime:
 
 def frames_by_name(client) -> dict[str, dict]:
     return {
-        frame["jpg_path"]: frame
+        frame["main_path"]: frame
         for group in client.get("/api/groups").json()
         for frame in group["frames"]
     }
@@ -59,7 +59,7 @@ def test_every_group_has_exactly_one_winner(session_dir, review, analyzer):
     groups = review().get("/api/groups").json()
 
     winners = [
-        [frame["jpg_path"] for frame in group["frames"] if frame["verdict"] == "winner"]
+        [frame["main_path"] for frame in group["frames"] if frame["verdict"] == "winner"]
         for group in groups
     ]
     assert winners == [["DSCF0002.JPG"], ["DSCF0009.JPG"]]

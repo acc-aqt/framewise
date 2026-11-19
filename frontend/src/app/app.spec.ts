@@ -3179,7 +3179,7 @@ function group(id: number, frames: Frame[], fixed = false): Group {
 function frame(id: number, kind: Frame['kind'], overrides: Partial<Frame> = {}): Frame {
   return {
     id,
-    jpg_path: `DSCF000${id}.JPG`,
+    main_path: `DSCF000${id}.JPG`,
     raw_path: kind === 'raw+jpg' ? `DSCF000${id}.RAF` : null,
     kind,
     camera_rating: { stars: null, label: null },

@@ -323,7 +323,7 @@ export class GroupGrid {
   }
 
   protected tileName({ frame, group }: GridTile): string {
-    return `${frame.jpg_path}, ${VERDICT_LABELS[frame.verdict]}, Group of ${group.frames.length}`;
+    return `${frame.main_path}, ${VERDICT_LABELS[frame.verdict]}, Group of ${group.frames.length}`;
   }
 
   protected makeup(group: Group): string {

@@ -27,7 +27,7 @@ def burst(session_dir, analyzer, *frames: tuple[str, dict]) -> None:
 
 def frames_by_name(client) -> dict[str, dict]:
     return {
-        frame["jpg_path"]: frame
+        frame["main_path"]: frame
         for group in client.get("/api/groups").json()
         for frame in group["frames"]
     }
@@ -202,7 +202,7 @@ def test_choosing_a_winner_twice_keeps_exactly_one_winner_per_group(session_dir,
 
     groups = client.get("/api/groups").json()
     winners = [
-        [frame["jpg_path"] for frame in group["frames"] if frame["verdict"] == "winner"]
+        [frame["main_path"] for frame in group["frames"] if frame["verdict"] == "winner"]
         for group in groups
     ]
     assert winners == [["DSCF0003.JPG"], ["DSCF0009.JPG"]]

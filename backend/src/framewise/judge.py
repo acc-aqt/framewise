@@ -211,7 +211,7 @@ def judge(
     keeper_budget: float = DEFAULT_KEEPER_BUDGET,
 ) -> Proposal:
     """Judges each Group, then keeps roughly `keeper_budget` of the Frames as Winners and
-    Keepers. `verdict_overrides` holds the photographer's Verdict Overrides by JPG path; the
+    Keepers. `verdict_overrides` holds the photographer's Verdict Overrides by main file; the
     Frames they kept count towards the budget and those they overrode are never re-judged by it."""
     overrides = verdict_overrides or {}
     proposal: Proposal = {}
@@ -243,7 +243,7 @@ def _non_winner_override(
 ) -> Verdict | None:
     """The photographer's Verdict Override of the Frame unless it is Winner, which only steers
     the Winner and falls back to framewise's Verdict when it lost to another one."""
-    override = overrides.get(assessment.analyzed.frame.jpg_path)
+    override = overrides.get(assessment.analyzed.frame.main_path)
     return None if override == Verdict.WINNER else override
 
 
@@ -258,7 +258,7 @@ def _judge_by_keeper_budget(
         if index < keeper_slots:
             judgement = assessment.judgement(Verdict.KEEPER, [])
         else:
-            winner_name = PurePosixPath(winner.analyzed.frame.jpg_path).stem
+            winner_name = PurePosixPath(winner.analyzed.frame.main_path).stem
             reason = Reason(
                 "weaker-duplicate", "Weaker duplicate", f"Weaker duplicate of {winner_name}"
             )
@@ -268,7 +268,7 @@ def _judge_by_keeper_budget(
 
 
 def _keeper_rank(assessment: _Assessment) -> tuple[float, str]:
-    return -assessment.scores.total, assessment.analyzed.frame.jpg_path
+    return -assessment.scores.total, assessment.analyzed.frame.main_path
 
 
 def _pick_winner(assessments: list[_Assessment], overrides: Mapping[str, Verdict]) -> _Assessment:
@@ -276,19 +276,19 @@ def _pick_winner(assessments: list[_Assessment], overrides: Mapping[str, Verdict
     those without a Verdict Override. If every Frame has one, framewise's best Frame is the
     Winner only for the others to be judged against."""
     for assessment in assessments:
-        if overrides.get(assessment.analyzed.frame.jpg_path) == Verdict.WINNER:
+        if overrides.get(assessment.analyzed.frame.main_path) == Verdict.WINNER:
             return assessment
     candidates = [
         assessment
         for assessment in assessments
-        if assessment.analyzed.frame.jpg_path not in overrides
+        if assessment.analyzed.frame.main_path not in overrides
     ]
     return min(candidates or assessments, key=_winner_rank)
 
 
 def _winner_rank(assessment: _Assessment) -> tuple[int, float, str]:
     flaw_rank = {None: 0, Verdict.UNSURE: 1, Verdict.REJECT: 2}[assessment.worst]
-    return flaw_rank, -assessment.scores.total, assessment.analyzed.frame.jpg_path
+    return flaw_rank, -assessment.scores.total, assessment.analyzed.frame.main_path
 
 
 def _judge_flaws_against_winner(assessment: _Assessment, winner: _Assessment) -> Judgement | None:

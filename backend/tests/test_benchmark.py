@@ -119,8 +119,8 @@ def judgement(verdict: Verdict) -> Judgement:
     return Judgement(verdict, [], scores, faces=[], sharpness_measured_on="frame")
 
 
-def frame(frame_id: int, jpg_path: str) -> Frame:
-    return Frame(frame_id, jpg_path, None, CameraRating(None, None))
+def frame(frame_id: int, main_path: str) -> Frame:
+    return Frame(frame_id, main_path, main_path, None, CameraRating(None, None))
 
 
 def test_the_active_catalog_is_the_one_lightroom_classic_loads(tmp_path):
@@ -163,7 +163,7 @@ def test_virtual_copies_carry_no_reference_rating(catalog, session_dir):
     assert read_reference_ratings(catalog.path, session_dir) == {}
 
 
-def test_frames_match_reference_ratings_by_their_jpg_path(session_dir):
+def test_frames_match_reference_ratings_by_their_main_file(session_dir):
     frames = [frame(1, "DSCF0001.JPG"), frame(2, "sub/DSCF0002.JPG"), frame(3, "DSCF0003.JPG")]
     ratings = {session_dir / "DSCF0001.JPG": 2, session_dir / "sub" / "dscf0002.jpg": 3}
 
@@ -373,7 +373,7 @@ def test_each_frame_result_names_what_its_sharpness_was_measured_on_and_the_meas
     )
 
     results = {
-        Path(result["jpg_path"]).name: result
+        Path(result["main_path"]).name: result
         for result in json.loads(report.read_text())["frame_results"]
     }
     assert results["DSCF0001.JPG"]["sharpness_measured_on"] == "focus-point"

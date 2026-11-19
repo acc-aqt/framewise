@@ -69,7 +69,7 @@ function group(id: number): Group {
 function frame(id: number): Frame {
   return {
     id,
-    jpg_path: `DSCF${String(id).padStart(4, '0')}.JPG`,
+    main_path: `DSCF${String(id).padStart(4, '0')}.JPG`,
     raw_path: null,
     kind: 'jpg-only',
     camera_rating: { stars: null, label: null },

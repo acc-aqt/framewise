@@ -454,7 +454,7 @@ def test_after_undo_and_a_re_run_the_camera_rating_is_read_from_the_files_again(
 
 def override(client, name: str, **change) -> None:
     frames = client.get("/api/frames").json()
-    frame_id = next(frame["id"] for frame in frames if frame["jpg_path"] == name)
+    frame_id = next(frame["id"] for frame in frames if frame["main_path"] == name)
     assert client.patch(f"/api/frames/{frame_id}/override", json=change).status_code == 200
 
 

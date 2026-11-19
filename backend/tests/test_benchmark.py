@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from conftest import FakeAnalyzer, make_jpg
 
-from framewise.analyzer import SimilarityThresholds
+from framewise.analyzer import SimilarityThresholds, Subject
 from framewise.benchmark import (
     active_catalog,
     agreement,
@@ -116,7 +116,7 @@ def judgement(verdict: Verdict) -> Judgement:
         camera_rating=0,
         total=1,
     )
-    return Judgement(verdict, [], scores, faces=[])
+    return Judgement(verdict, [], scores, faces=[], sharpness_measured_on="frame")
 
 
 def frame(frame_id: int, jpg_path: str) -> Frame:
@@ -355,6 +355,31 @@ def test_a_provider_override_replaces_a_config_choice_that_cannot_be_honoured(
     )
 
     assert report["providers"] == {"fingerprint": "chosen@1"}
+
+
+@runs_the_benchmark
+def test_each_frame_result_names_what_its_sharpness_was_measured_on_and_the_measure(
+    session_dir, catalog, tmp_path, isolated_data_dir
+):
+    analyzer = FakeAnalyzer()
+    focused = Subject(0.4, 0.4, 0.2, 0.2, sharpness=0.8, found_by="focus-point")
+    analyzer.script(make_jpg(session_dir / "DSCF0001.JPG"), sharpness=0.3, subject=focused)
+    analyzer.script(make_jpg(session_dir / "DSCF0002.JPG"), sharpness=0.3)
+    report = tmp_path / "report.json"
+
+    main(
+        [str(session_dir), "--catalog", str(catalog.path), "--report", str(report)],
+        analyzer=analyzer,
+    )
+
+    results = {
+        Path(result["jpg_path"]).name: result
+        for result in json.loads(report.read_text())["frame_results"]
+    }
+    assert results["DSCF0001.JPG"]["sharpness_measured_on"] == "focus-point"
+    assert results["DSCF0001.JPG"]["sharpness"] == pytest.approx(0.8)
+    assert results["DSCF0002.JPG"]["sharpness_measured_on"] == "frame"
+    assert results["DSCF0002.JPG"]["sharpness"] == pytest.approx(0.3)
 
 
 def test_benchmark_refuses_to_run_on_windows(session_dir, catalog, tmp_path, capsys):

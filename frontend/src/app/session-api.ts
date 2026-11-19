@@ -107,6 +107,8 @@ export interface Frame {
   reasons: Reason[];
   scores: Scores;
   signals: Signals;
+  /** What framewise judged the Frame's sharpness on: its softest face, the area its camera focused on, the mask of its main subject, or the whole Frame. */
+  sharpness_measured_on: 'faces' | 'focus-point' | 'subject-mask' | 'frame';
   faces: Face[];
 }
 

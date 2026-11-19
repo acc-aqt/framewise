@@ -8,6 +8,7 @@ What changed in framewise, written for photographers. The Review UI shows this l
 - On Windows and Linux, key hints say `Alt+` and `Delete` instead of the Mac symbols.
 - framewise can be installed as one package with the Review UI built in. A machine that runs it from that package with `uvx` needs only ExifTool, with no git clone, Node.js or setup script.
 - Without ExifTool, framewise stops at start-up with one message that says how to install it, instead of failing later at **Rating write-back**.
+- A Frame without faces is judged on the sharpness of its subject rather than the whole Frame: the area the camera focused on where it recorded one (Fujifilm for now), else the main subject Apple Vision finds (macOS 14 or later). A sharp subject in front of a blurred background is no longer marked soft, and within a Burst the Frame with the sharper subject wins. The score breakdown says what sharpness was measured on.
 
 ## 0.1.0 — 2026-11-18
 

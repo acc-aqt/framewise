@@ -6,7 +6,7 @@ from typing import Literal, Protocol
 # Bump whenever the built-in image maths or the shape of FrameSignals changes, so a re-run
 # re-analyzes Frames whose saved analysis predates it. A Provider's own changes are covered by
 # its version, in the ProviderSignature.
-ANALYSIS_VERSION = 5
+ANALYSIS_VERSION = 7
 
 ProviderSignature = Mapping[str, str]
 """The Provider that served each Capability of an analysis, as "<id>@<version>" by Capability."""
@@ -69,6 +69,26 @@ class Face:
     """The face quality Provider's score from 0 to 1, or None where it is unavailable."""
 
 
+SubjectSource = Literal["focus-point", "subject-mask"]
+
+
+@dataclass(frozen=True)
+class Subject:
+    """The part of a Frame that matters most, as a box measured like a face's. Frames without
+    faces are judged on it rather than on the whole Frame."""
+
+    x: float
+    y: float
+    width: float
+    height: float
+    sharpness: float
+    """Like the Frame's sharpness, measured on the subject alone."""
+    found_by: SubjectSource
+    """"focus-point" where the camera recorded the area it focused on, else "subject-mask" where
+    the subject Provider found the Frame's main subject. A subject mask's box is the box around
+    it, but its sharpness is measured on the mask alone."""
+
+
 @dataclass(frozen=True)
 class FrameSignals:
     fingerprint: list[float]
@@ -88,6 +108,8 @@ class FrameSignals:
     aesthetics: float | None
     """The aesthetics Provider's score from 0 to 1, or None where it is unavailable."""
     faces: list[Face]
+    subject: Subject | None = None
+    """None where framewise can't tell where the subject is."""
 
 
 class FrameAnalyzer(Protocol):

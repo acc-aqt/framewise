@@ -25,7 +25,7 @@ needs_portable_models = pytest.mark.skipif(
         and MediaPipeFaceDetection().is_available()
         and all(is_verified(model, resolve_data_dir()) for model in (DINOV2_SMALL, FACE_LANDMARKER))
     ),
-    reason="needs framewise[portable] and its models, from `framewise models download`",
+    reason="needs framewise-cull[portable] and its models, from `framewise models download`",
 )
 
 

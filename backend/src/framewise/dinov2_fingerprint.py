@@ -1,5 +1,5 @@
 """framewise's portable fingerprint Provider, built on DINOv2-small run by onnxruntime. It needs
-the framewise[portable] extra and reports itself unavailable without it."""
+the framewise-cull[portable] extra and reports itself unavailable without it."""
 
 import platform
 import sys

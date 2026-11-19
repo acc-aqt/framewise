@@ -130,7 +130,7 @@ _Avoid_: Export, sync, apply
 ## Releases
 
 **Release**:
-A numbered version of framewise, such as `0.1.0`: a `vX.Y.Z` tag on `main` with its release notes on GitHub. Photographers still update from `main`; a Release names what they have.
+A numbered version of framewise, such as `0.1.0`: a `vX.Y.Z` tag on `main` with its release notes on GitHub. Each Release publishes its wheel to PyPI, as `framewise-cull`, and to its GitHub Release, and photographers install and update from there.
 _Avoid_: Build, drop, ship
 
 **Changelog**:

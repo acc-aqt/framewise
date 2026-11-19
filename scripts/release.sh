@@ -14,8 +14,14 @@
 #   5. shows the commit and the release notes, and only after you confirm
 #      pushes main and the tag and creates the GitHub Release with gh.
 #
-# --dry-run shows the Changelog change and the release notes and changes
-# nothing. It only warns when you are not on a clean, up-to-date main.
+# Creating the GitHub Release starts .github/workflows/release.yml, which
+# builds the wheel from the tag, attaches it to the GitHub Release and
+# uploads it to PyPI as framewise-cull (ADR-0010).
+#
+# --dry-run shows the Changelog change, the release notes and the wheel that
+# would be published, and changes nothing. It only warns when you are not on
+# a clean, up-to-date main. To build and test that wheel without publishing
+# it, run the Release workflow by hand: gh workflow run release.yml
 #
 # Usage: scripts/release.sh X.Y.Z [--dry-run] | --help
 
@@ -57,6 +63,7 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 changelog="$repo_root/CHANGELOG.md"
 pyproject="$repo_root/backend/pyproject.toml"
 tag="v$version"
+wheel="framewise_cull-$version-py3-none-any.whl"
 today="$(date +%Y-%m-%d)"
 heading="## $version — $today"
 
@@ -159,6 +166,10 @@ if $dry_run; then
   echo
   echo "release: the GitHub Release $tag would say:"
   cat "$notes"
+  echo
+  echo "release: the Release workflow would build $wheel from $tag,"
+  echo "attach it to the GitHub Release and upload it to PyPI as framewise-cull $version."
+  echo "To build and test the wheel now without publishing it: gh workflow run release.yml"
   exit 0
 fi
 
@@ -187,3 +198,5 @@ fi
 
 git -C "$repo_root" push --atomic origin main "$tag"
 gh release create "$tag" --title "framewise $version" --notes-from-tag
+echo "release: the Release workflow now publishes $wheel to the GitHub Release and PyPI."
+echo "Follow it with: gh run watch"

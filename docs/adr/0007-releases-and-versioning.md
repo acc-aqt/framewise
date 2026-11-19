@@ -1,6 +1,6 @@
 # ADR-0007: Releases and versioning
 
-**Status:** Accepted — 2026-11-18. Amended by ADR-0009 — 2026-11-19.
+**Status:** Accepted — 2026-11-18. Amended by ADR-0009 and ADR-0010 — 2026-11-19.
 
 ## Context
 
@@ -9,7 +9,7 @@ framewise changes daily, and photographers update it with `git pull` and `script
 ## Decision
 
 1. **A Release is a `vX.Y.Z` tag on `main` plus a GitHub Release carrying the same notes.**
-   - Photographers keep installing and updating from `main`. A Release marks which notes apply; it does not change the update flow.
+   - Photographers keep installing and updating from `main`. A Release marks which notes apply; it does not change the update flow. ADR-0010 replaces this: photographers install and update from the wheel each Release publishes.
    - The `v` prefix keeps Release tags apart from other tags in the repo.
 2. **The Changelog is the one source of the release notes.**
    - It is hand-written, at the repo root, for photographers, in Glossary terms. Changes they cannot notice, such as refactors, tests or CI, get no entry.

@@ -97,6 +97,7 @@ function frame(id: number): Frame {
       high_key: false,
       aesthetics: 0,
     },
+    sharpness_measured_on: 'frame',
     faces: [],
   };
 }

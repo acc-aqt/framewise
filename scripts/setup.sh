@@ -63,7 +63,7 @@ check_prerequisites() {
 
 install_macos_packages() {
   local packages=(
-    exiftool # Optional: ExifTool, for Rating write-back.
+    exiftool # ExifTool, which framewise needs for Rating write-back and focus points.
   )
   echo "+ brew install ${packages[*]}"
   brew install "${packages[@]}"
@@ -84,7 +84,7 @@ install_debian_packages() {
     libgl1                 # OpenGL, which MediaPipe's portable Providers load.
     libegl1                # EGL, which MediaPipe's portable Providers load.
     libgles2               # OpenGL ES, which MediaPipe's portable Providers load.
-    libimage-exiftool-perl # Optional: ExifTool, for Rating write-back.
+    libimage-exiftool-perl # ExifTool, which framewise needs for Rating write-back and focus points.
     zenity                 # Optional: the dialog for choosing the Session folder.
   )
   run_as_root apt-get update
@@ -94,7 +94,7 @@ install_debian_packages() {
 stop_on_unsupported_linux() {
   fail "this Linux distro is not supported. Install the equivalents of these packages, then run this script again:
   - the OpenGL, EGL and OpenGL ES libraries, which MediaPipe's portable Providers load
-  - ExifTool (optional), for Rating write-back
+  - ExifTool, which framewise needs for Rating write-back and focus points
   - zenity (optional), for choosing the Session folder in a dialog"
 }
 
@@ -108,7 +108,8 @@ install_system_packages() {
         stop_on_unsupported_linux
       fi
       ;;
-    *) fail "$platform is not supported. framewise runs on macOS and Linux." ;;
+    MINGW* | MSYS* | CYGWIN*) fail "on Windows, run scripts/setup.ps1 in PowerShell instead." ;;
+    *) fail "$platform is not supported. framewise runs on macOS, Linux and Windows." ;;
   esac
 }
 

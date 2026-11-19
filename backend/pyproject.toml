@@ -1,12 +1,12 @@
 [project]
-name = "framewise"
-version = "0.1.0"
+name = "framewise-cull"
+version = "0.2.0"
 description = "Cull a photo Session: scan Frames and review them locally."
 authors = [
     { name = "alexander-carrels" }
 ]
 license = "MIT"
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.15"
 dependencies = [
     "fastapi>=0.162.7",
     "pillow>=13.0.0",
@@ -31,14 +31,20 @@ apple-vision-face-detection = "framewise.apple_vision:AppleFaceDetection"
 apple-vision-eye-state = "framewise.apple_vision:AppleEyeState"
 apple-vision-face-quality = "framewise.apple_vision:AppleFaceQuality"
 apple-vision-aesthetics = "framewise.apple_vision:AppleAesthetics"
+apple-vision-subject = "framewise.apple_vision:AppleSubject"
 mediapipe-face-detection = "framewise.mediapipe_faces:MediaPipeFaceDetection"
 mediapipe-eye-state = "framewise.mediapipe_faces:MediaPipeEyeState"
 mediapipe-expression = "framewise.mediapipe_faces:MediaPipeExpression"
 dinov2-small-fingerprint = "framewise.dinov2_fingerprint:DinoV2Fingerprint"
 
 [build-system]
-requires = ["uv_build>=0.13.8,<0.14.0"]
-build-backend = "uv_build"
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/framewise"]
+
+[tool.hatch.build.hooks.custom]
 
 [dependency-groups]
 dev = [

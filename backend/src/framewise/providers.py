@@ -3,10 +3,13 @@ FrameAnalyzer with the built-in image maths."""
 
 import sys
 import tomllib
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
+from functools import partial
 from importlib.metadata import EntryPoint, entry_points
 from pathlib import Path
 from typing import Protocol
+
+from PIL import Image
 
 from framewise.analyzer import (
     ActiveProvider,
@@ -18,8 +21,11 @@ from framewise.analyzer import (
     ProviderLineup,
     ProviderSignature,
     SimilarityThresholds,
+    Subject,
 )
-from framewise.image_measures import Region, measure_image
+from framewise.exiftool import ExifTool, find_exiftool
+from framewise.focus_point import read_focus_area
+from framewise.image_measures import ImageMeasures, Region, measure_image
 
 FINGERPRINT = "fingerprint"
 FACE_DETECTION = "face-detection"
@@ -27,8 +33,23 @@ EYE_STATE = "eye-state"
 FACE_QUALITY = "face-quality"
 EXPRESSION = "expression"
 AESTHETICS = "aesthetics"
-CAPABILITIES = (FINGERPRINT, FACE_DETECTION, EYE_STATE, FACE_QUALITY, EXPRESSION, AESTHETICS)
+SUBJECT = "subject"
+CAPABILITIES = (
+    FINGERPRINT,
+    FACE_DETECTION,
+    EYE_STATE,
+    FACE_QUALITY,
+    EXPRESSION,
+    AESTHETICS,
+    SUBJECT,
+)
 ENTRY_POINT_GROUP = "framewise.providers"
+
+FOCUS_POINT = "focus-point"
+FOCUS_POINT_READER = "exiftool@1"
+"""Names the focus point reader in the signature, so installing ExifTool re-analyzes Frames."""
+FocusAreaReader = Callable[[Path], Region | None]
+"""The area the camera focused on in a JPG, as displayed, or None where it recorded none."""
 
 
 class ProviderError(RuntimeError):
@@ -94,10 +115,20 @@ class AestheticsProvider(Provider, Protocol):
         ...
 
 
+class SubjectProvider(Provider, Protocol):
+    def subject_mask(self, jpg_path: Path) -> Image.Image | None:
+        """A greyscale mask of the Frame's main subject, of any size, covering the Frame as it is
+        displayed, after its EXIF orientation: 255 inside the subject, 0 outside it. None where
+        it finds no subject."""
+        ...
+
+
 class ProviderAnalyzer:
     """Analyzes a Frame's Analysis source with one Provider per Capability and the built-in
     image maths. The face detection Provider alone decides which faces a Frame has; the eye
-    state, face quality and expression Providers and the image maths look inside its boxes."""
+    state, face quality and expression Providers and the image maths look inside its boxes. The
+    image maths also measure the subject: the area the camera focused on, where `focus_area`
+    finds one, else the subject Provider's mask."""
 
     def __init__(
         self,
@@ -107,8 +138,10 @@ class ProviderAnalyzer:
         face_quality: FaceQualityProvider | None = None,
         expression: ExpressionProvider | None = None,
         aesthetics: AestheticsProvider | None = None,
+        subject: SubjectProvider | None = None,
         *,
         provider_lineup: ProviderLineup,
+        focus_area: FocusAreaReader | None = None,
     ):
         self.fingerprint = fingerprint
         self.face_detection = face_detection
@@ -116,7 +149,9 @@ class ProviderAnalyzer:
         self.face_quality = face_quality
         self.expression = expression
         self.aesthetics = aesthetics
+        self.subject = subject
         self.provider_lineup = provider_lineup
+        self.focus_area = focus_area
 
     @property
     def similarity(self) -> SimilarityThresholds:
@@ -131,16 +166,24 @@ class ProviderAnalyzer:
             self.face_quality,
             self.expression,
             self.aesthetics,
+            self.subject,
         )
-        return {
+        signature = {
             provider.capability: f"{provider.id}@{provider.version}"
             for provider in providers
             if provider is not None
         }
+        if self.focus_area is not None:
+            signature[FOCUS_POINT] = FOCUS_POINT_READER
+        return signature
 
     def analyze(self, jpg_path: Path) -> FrameSignals:
         boxes = self.face_detection.detect_faces(jpg_path) if self.face_detection else []
-        measures = measure_image(jpg_path, boxes)
+        focus_area = self.focus_area(jpg_path) if self.focus_area else None
+        measures = measure_image(jpg_path, boxes, focus_area)
+        if self._needs_subject_mask(focus_area, measures):
+            subject_mask = self.subject.subject_mask(jpg_path)
+            measures = measure_image(jpg_path, boxes, focus_area, subject_mask)
         return FrameSignals(
             fingerprint=self.fingerprint.fingerprint(jpg_path),
             sharpness=measures.sharpness,
@@ -150,7 +193,14 @@ class ProviderAnalyzer:
             high_key=measures.high_key,
             aesthetics=self.aesthetics.aesthetics(jpg_path) if self.aesthetics else None,
             faces=self._faces(jpg_path, boxes, measures.face_sharpness),
+            subject=_subject(focus_area, measures),
         )
+
+    def _needs_subject_mask(self, focus_area: Region | None, measures: ImageMeasures) -> bool:
+        """Only a Frame without a focus point or a face to judge it on is judged on its subject
+        mask, so other Frames skip asking for one."""
+        has_measurable_face = any(sharpness is not None for sharpness in measures.face_sharpness)
+        return self.subject is not None and focus_area is None and not has_measurable_face
 
     def _faces(
         self, jpg_path: Path, boxes: list[Region], sharpness: list[float | None]
@@ -187,6 +237,14 @@ class ProviderAnalyzer:
         ]
 
 
+def _subject(focus_area: Region | None, measures: ImageMeasures) -> Subject | None:
+    if focus_area is not None and measures.focus_sharpness is not None:
+        return Subject(*focus_area, measures.focus_sharpness, found_by="focus-point")
+    if measures.subject is not None:
+        return Subject(*measures.subject.box, measures.subject.sharpness, found_by="subject-mask")
+    return None
+
+
 def resolve_analyzer(
     config_path: Path | None = None,
     overrides: Mapping[str, str] | None = None,
@@ -207,7 +265,9 @@ def resolve_analyzer(
         _select(installed, still_configured)
     except ProviderConfigError as error:
         raise ProviderConfigError(f"{config_path}: {error}") from error
-    return _compose(installed, still_configured | overrides)
+    exiftool = find_exiftool()
+    focus_area = None if exiftool is None else partial(read_focus_area, ExifTool(exiftool))
+    return _compose(installed, still_configured | overrides, focus_area)
 
 
 def read_provider_overrides(config_path: Path) -> dict[str, str]:
@@ -255,9 +315,11 @@ raises warns only once."""
 
 
 def compose_analyzer(
-    providers: Iterable[Provider], overrides: Mapping[str, str] | None = None
+    providers: Iterable[Provider],
+    overrides: Mapping[str, str] | None = None,
+    focus_area: FocusAreaReader | None = None,
 ) -> ProviderAnalyzer:
-    return _compose(_check_availability(providers), overrides or {})
+    return _compose(_check_availability(providers), overrides or {}, focus_area)
 
 
 def select_providers(
@@ -272,7 +334,11 @@ def _check_availability(providers: Iterable[Provider]) -> _Installed:
     return [(provider, _is_available(provider)) for provider in providers]
 
 
-def _compose(installed: _Installed, overrides: Mapping[str, str]) -> ProviderAnalyzer:
+def _compose(
+    installed: _Installed,
+    overrides: Mapping[str, str],
+    focus_area: FocusAreaReader | None = None,
+) -> ProviderAnalyzer:
     chosen = _select(installed, overrides)
     if FINGERPRINT not in chosen:
         raise MissingCapabilityError(
@@ -286,7 +352,9 @@ def _compose(installed: _Installed, overrides: Mapping[str, str]) -> ProviderAna
         face_quality=chosen.get(FACE_QUALITY),
         expression=chosen.get(EXPRESSION),
         aesthetics=chosen.get(AESTHETICS),
+        subject=chosen.get(SUBJECT),
         provider_lineup=_describe_provider_lineup(installed, chosen, overrides),
+        focus_area=focus_area,
     )
 
 

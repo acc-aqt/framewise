@@ -1,3 +1,4 @@
+import { Pipe, PipeTransform } from '@angular/core';
 import { pluralize } from './pluralize';
 import { ColorLabel, Group } from './session-api';
 
@@ -24,7 +25,8 @@ export type Shortcut =
   | { kind: 'trash' }
   | { kind: 'trashGroup' }
   | { kind: 'trashGroups' }
-  | { kind: 'writeBack' };
+  | { kind: 'writeBack' }
+  | { kind: 'whatsNew' };
 
 /** What the Review UI is showing, which decides the commands that apply. */
 export interface CommandContext {
@@ -189,6 +191,7 @@ export const COMMANDS: readonly Command[] = [
     { kind: 'writeBack' },
     (context) => context.writeBackAvailable,
   ),
+  paletteCommand('whats-new', "What's new", { kind: 'whatsNew' }, () => true),
 ];
 
 export function commandById(id: string): Command {
@@ -205,10 +208,27 @@ export function commandLabel(command: Command, context: CommandContext): string 
     : command.label;
 }
 
-const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent);
+function isMac(): boolean {
+  return typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent);
+}
+
+/** A key as the photographer's platform names it: Mac symbols on macOS, words elsewhere. */
+export function platformKey(key: string): string {
+  if (isMac()) {
+    return key;
+  }
+  return key.replace('⌘', 'Ctrl+').replace('⌥', 'Alt+').replace('⌫', 'Delete');
+}
+
+@Pipe({ name: 'platformKey' })
+export class PlatformKeyPipe implements PipeTransform {
+  transform(key: string): string {
+    return platformKey(key);
+  }
+}
 
 /** The key that opens the command palette, as the photographer sees it. */
-export const PALETTE_KEY = IS_MAC ? '⌘K' : 'Ctrl+K';
+export const PALETTE_KEY = platformKey('⌘K');
 
 export function isPaletteKey(event: KeyboardEvent): boolean {
   return (event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'k';

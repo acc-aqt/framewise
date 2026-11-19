@@ -56,6 +56,7 @@ def test_the_session_lists_every_capability_in_the_fixed_order(review):
         "face-quality",
         "expression",
         "aesthetics",
+        "subject",
     ]
 
 

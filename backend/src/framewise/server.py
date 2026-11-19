@@ -117,7 +117,8 @@ def create_app(
             "total_frames": summary.total_frames,
             "jpg_only_count": summary.jpg_only_count,
             "raw_jpg_count": summary.raw_jpg_count,
-            "skipped": summary.skipped,
+            "raw_only_count": summary.raw_only_count,
+            "skipped": [asdict(skipped) for skipped in summary.skipped],
             "keeper_budget": _keeper_budget(),
             "providers": providers_json,
             "config_path": str(config_path),
@@ -181,8 +182,12 @@ def create_app(
 
     @app.get("/api/frames/{frame_id}/image")
     def frame_image(frame_id: int) -> FileResponse:
-        path = store.root / _known_frame(frame_id).jpg_path
-        if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(store.root):
+        """The JPG the Frame is judged by: its JPG, or a RAW-only Frame's embedded preview."""
+        path = store.analysis_image(_known_frame(frame_id))
+        inside = path.resolve().is_relative_to(store.root) or path.resolve().is_relative_to(
+            store.preview_dir.resolve()
+        )
+        if path.is_symlink() or not path.is_file() or not inside:
             raise HTTPException(status_code=404, detail="JPG not found")
         return FileResponse(path, media_type="image/jpeg")
 
@@ -255,12 +260,13 @@ def create_app(
     @app.get("/api/write-back")
     def write_back_dry_run() -> dict:
         label_set = read_label_set(lightroom_preferences)
+        reviewed = reviewed_frames()
         return {
             "label_set": asdict(label_set),
             "notice": None if label_set.from_lightroom else ENGLISH_DEFAULTS_NOTICE,
+            "raw_only_notice": _raw_only_notice(reviewed),
             "files": [
-                _file_change_json(change)
-                for change in write_back.dry_run(reviewed_frames(), label_set)
+                _file_change_json(change) for change in write_back.dry_run(reviewed, label_set)
             ],
             "can_undo": write_back.can_undo(),
         }
@@ -419,6 +425,15 @@ def _frame_json(frame: Frame) -> dict:
         "thumbnail_url": f"/api/frames/{frame.id}/thumbnail",
         "image_url": f"/api/frames/{frame.id}/image",
     }
+
+
+def _raw_only_notice(reviewed: list[ReviewedFrame]) -> str | None:
+    """Says that Rating write-back leaves RAW-only Frames out, until it supports them (#151)."""
+    count = sum(1 for item in reviewed if item.frame.kind == "raw-only")
+    if count == 0:
+        return None
+    frames = "1 RAW-only Frame is" if count == 1 else f"{count} RAW-only Frames are"
+    return f"{frames} left out: framewise can't write ratings into RAW-only Frames yet."
 
 
 def _file_change_json(change: FileChange) -> dict:

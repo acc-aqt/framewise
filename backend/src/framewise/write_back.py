@@ -264,6 +264,10 @@ class RatingWriteBack:
 
 
 def _files_of(frame: Frame) -> list[str]:
+    """The files write-back writes. RAW-only Frames are left out until write-back supports them
+    (#151)."""
+    if frame.jpg_path is None:
+        return []
     return [frame.jpg_path] if frame.raw_path is None else [frame.jpg_path, frame.raw_path]
 
 

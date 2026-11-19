@@ -38,27 +38,6 @@ def test_a_raw_and_jpg_with_the_same_base_name_become_one_raw_jpg_frame(
     assert summary["skipped"] == []
 
 
-def test_a_raw_without_a_matching_jpg_is_reported_as_skipped(session_dir, review):
-    make_raw(session_dir / "L1000001.DNG")
-    make_jpg(session_dir / "L1000001.JPG")
-    make_raw(session_dir / "L1000001-Pano.dng")
-
-    summary = review().get("/api/session").json()
-
-    assert summary["total_frames"] == 1
-    assert summary["skipped"] == ["L1000001-Pano.dng"]
-
-
-def test_raws_sharing_a_base_name_without_a_jpg_are_all_reported_as_skipped(session_dir, review):
-    make_raw(session_dir / "DSCF0001.RAF")
-    make_raw(session_dir / "DSCF0001.DNG")
-
-    summary = review().get("/api/session").json()
-
-    assert summary["total_frames"] == 0
-    assert summary["skipped"] == ["DSCF0001.DNG", "DSCF0001.RAF"]
-
-
 def test_only_one_of_several_raws_sharing_a_base_name_pairs_with_the_jpg(session_dir, review):
     make_raw(session_dir / "DSCF0001.RAF")
     make_raw(session_dir / "DSCF0001.DNG")
@@ -66,10 +45,10 @@ def test_only_one_of_several_raws_sharing_a_base_name_pairs_with_the_jpg(session
 
     client = review()
     summary = client.get("/api/session").json()
-    [frame] = client.get("/api/frames").json()
+    frames = client.get("/api/frames").json()
 
-    assert summary["raw_jpg_count"] == 1
-    assert sorted([frame["raw_path"], *summary["skipped"]]) == ["DSCF0001.DNG", "DSCF0001.RAF"]
+    assert (summary["raw_jpg_count"], summary["raw_only_count"]) == (1, 1)
+    assert sorted(frame["raw_path"] for frame in frames) == ["DSCF0001.DNG", "DSCF0001.RAF"]
 
 
 def test_subfolders_are_scanned_and_pairing_stays_within_one_folder(session_dir, review):
@@ -82,12 +61,13 @@ def test_subfolders_are_scanned_and_pairing_stays_within_one_folder(session_dir,
     summary = client.get("/api/session").json()
     frames = client.get("/api/frames").json()
 
-    assert summary["total_frames"] == 2
+    assert summary["total_frames"] == 3
     assert summary["raw_jpg_count"] == 1
     assert summary["jpg_only_count"] == 1
-    assert summary["skipped"] == ["day2/DSCF0002.RAF"]
+    assert summary["raw_only_count"] == 1
     assert [(frame["main_path"], frame["raw_path"], frame["kind"]) for frame in frames] == [
         ("day1/DSCF0001.JPG", "day1/DSCF0001.RAF", "raw+jpg"),
+        ("day2/DSCF0002.RAF", "day2/DSCF0002.RAF", "raw-only"),
         ("day2/evening/DSCF0002.JPG", None, "jpg-only"),
     ]
 

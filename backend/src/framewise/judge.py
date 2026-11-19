@@ -48,9 +48,14 @@ FOCUS_SHARP_FROM = 0.9
 MOTION_BLUR_FROM = 0.5
 POSSIBLE_MOTION_BLUR_FROM = 0.35
 EXPOSURE_TOLERANCE_STOPS = 0.7
-# Beyond these, a Frame is a Reject; between the tolerance and these, it is Unsure. A RAW+JPG
-# Frame is judged more leniently because its RAW holds detail its JPG has clipped.
-EXPOSURE_REJECT_BEYOND_STOPS: dict[FrameKind, float] = {"jpg-only": 1.25, "raw+jpg": 2.0}
+# Beyond these, a Frame is a Reject; between the tolerance and these, it is Unsure. A RAW+JPG or
+# RAW-only Frame is judged more leniently because its RAW holds detail its JPG or embedded
+# preview has clipped.
+EXPOSURE_REJECT_BEYOND_STOPS: dict[FrameKind, float] = {
+    "jpg-only": 1.25,
+    "raw+jpg": 2.0,
+    "raw-only": 2.0,
+}
 # The share of a Session's Frames kept as Winners or Keepers until the photographer moves it.
 DEFAULT_KEEPER_BUDGET = 0.4
 # Added to the total Score of a Frame with in-camera stars.

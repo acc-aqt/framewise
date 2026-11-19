@@ -1,3 +1,4 @@
+import hashlib
 import json
 import sqlite3
 import threading
@@ -40,7 +41,16 @@ CREATE TABLE IF NOT EXISTS analyses (
     source_path TEXT
 );
 CREATE TABLE IF NOT EXISTS skipped_files (
-    path TEXT PRIMARY KEY
+    path TEXT PRIMARY KEY,
+    reason TEXT
+);
+CREATE TABLE IF NOT EXISTS previews (
+    main_path TEXT PRIMARY KEY,
+    source_path TEXT NOT NULL,
+    source_size INTEGER NOT NULL,
+    source_mtime_ns INTEGER NOT NULL,
+    width INTEGER NOT NULL,
+    height INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS group_overrides (
     main_path TEXT PRIMARY KEY,
@@ -67,7 +77,10 @@ CREATE TABLE IF NOT EXISTS settings (
 # Columns added to tables after the first release. Adding them to an existing Session store keeps
 # its rows; analyses saved before then have no version or Providers, so they no longer count as
 # current.
-ADDED_COLUMNS = {"analyses": {"version": "INTEGER", "signals": "TEXT", "providers": "TEXT"}}
+ADDED_COLUMNS = {
+    "analyses": {"version": "INTEGER", "signals": "TEXT", "providers": "TEXT"},
+    "skipped_files": {"reason": "TEXT"},
+}
 
 SCHEMA_VERSION = 1
 """Bumped whenever an upgrade must change a Session store's existing tables, not just add to them.
@@ -98,7 +111,9 @@ FILLED_COLUMNS = {
     "analyses": "source_path",
 }
 
-FrameKind = Literal["jpg-only", "raw+jpg"]
+FrameKind = Literal["jpg-only", "raw+jpg", "raw-only"]
+FRAME_TABLES = ("frames", "thumbnails", "analyses", "previews")
+"""The tables holding a Frame's own rows, which go when it leaves the Session."""
 
 
 @dataclass(frozen=True)
@@ -107,19 +122,23 @@ class Frame:
     main_path: str
     """The file that identifies the Frame, relative to the Session folder. Its Overrides, fixed
     Group, thumbnail and analysis are keyed by it. It is the JPG of a JPG-only or RAW+JPG
-    Frame."""
-    jpg_path: str
+    Frame, and the RAW of a RAW-only Frame."""
+    jpg_path: str | None
     raw_path: str | None
     camera_rating: CameraRating
 
     @property
     def kind(self) -> FrameKind:
+        if self.jpg_path is None:
+            return "raw-only"
         return "jpg-only" if self.raw_path is None else "raw+jpg"
 
     @property
     def analysis_source(self) -> str:
-        """The file whose pixels the Frame is judged by: its JPG."""
-        return self.jpg_path
+        """The file holding the pixels the Frame is judged by: its JPG, or the RAW whose embedded
+        preview a RAW-only Frame is judged by. Thumbnails and analyses are current while this file
+        is unchanged."""
+        return self.jpg_path or self.raw_path
 
 
 @dataclass(frozen=True)
@@ -156,11 +175,25 @@ class WrittenFileOriginal:
 
 
 @dataclass(frozen=True)
+class SkippedFile:
+    path: str
+    """Relative to the Session folder."""
+    reason: str
+    """Why framewise skipped the file."""
+
+
+@dataclass(frozen=True)
 class SessionSummary:
     total_frames: int
     jpg_only_count: int
     raw_jpg_count: int
-    skipped: list[str]
+    raw_only_count: int
+    skipped: list[SkippedFile]
+
+
+def preview_cache_dir(database_path: Path) -> Path:
+    """The folder next to a Session store that holds its RAW-only Frames' embedded previews."""
+    return database_path.with_name(f"{database_path.stem}-previews")
 
 
 BUSY_TIMEOUT_SECONDS = 30
@@ -171,6 +204,7 @@ class SessionStore:
         self.root = root
         database_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         self._database_path = database_path
+        self.preview_dir = preview_cache_dir(database_path)
         self._connections = threading.local()
         self._db.execute("PRAGMA journal_mode=WAL")
         self._upgrade()
@@ -214,23 +248,58 @@ class SessionStore:
 
     def remove_frames_except(self, frames: list[ScannedFrame]) -> None:
         current = json.dumps([self._relative(frame.main_path) for frame in frames])
-        with self._db:
-            for table in ("frames", "thumbnails", "analyses"):
-                self._db.execute(
-                    f"DELETE FROM {table} WHERE main_path NOT IN (SELECT value FROM json_each(?))",
-                    (current,),
-                )
+        self._remove_frames_where("NOT IN", current)
 
     def remove_frames(self, main_paths: list[str]) -> None:
         """Takes these Frames out of the Session, keeping their Overrides and Group Overrides
         as for Frames that vanish from the Session folder."""
-        paths = json.dumps(main_paths)
+        self._remove_frames_where("IN", json.dumps(main_paths))
+
+    def _remove_frames_where(self, operator: str, paths: str) -> None:
+        condition = f"main_path {operator} (SELECT value FROM json_each(?))"
+        previews = self._db.execute(f"SELECT main_path FROM previews WHERE {condition}", (paths,))
+        for row in previews.fetchall():
+            self.preview_file(row["main_path"]).unlink(missing_ok=True)
         with self._db:
-            for table in ("frames", "thumbnails", "analyses"):
-                self._db.execute(
-                    f"DELETE FROM {table} WHERE main_path IN (SELECT value FROM json_each(?))",
-                    (paths,),
-                )
+            for table in FRAME_TABLES:
+                self._db.execute(f"DELETE FROM {table} WHERE {condition}", (paths,))
+
+    def has_current_preview(self, frame: ScannedFrame) -> bool:
+        """Whether the RAW-only Frame's cached preview was extracted from its RAW as it is now."""
+        main_path = self._relative(frame.main_path)
+        if not self.preview_file(main_path).is_file():
+            return False
+        row = self._db.execute(
+            "SELECT 1 FROM previews WHERE main_path = ? AND source_path = ? AND source_size = ? "
+            "AND source_mtime_ns = ?",
+            (main_path, *self._file_key(frame.raw_path)),
+        ).fetchone()
+        return row is not None
+
+    def new_preview_file(self, frame: ScannedFrame) -> Path:
+        """Where to extract the RAW-only Frame's preview to, in the preview cache."""
+        self.preview_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        return self.preview_file(self._relative(frame.main_path))
+
+    def save_preview(self, frame: ScannedFrame, width: int, height: int) -> None:
+        with self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO previews (main_path, source_path, source_size, "
+                "source_mtime_ns, width, height) VALUES (?, ?, ?, ?, ?, ?)",
+                (self._relative(frame.main_path), *self._file_key(frame.raw_path), width, height),
+            )
+
+    def preview_file(self, main_path: str) -> Path:
+        """The cached preview of the RAW-only Frame with this main file."""
+        digest = hashlib.sha256(main_path.encode()).hexdigest()[:32]
+        return self.preview_dir / f"{digest}.jpg"
+
+    def analysis_image(self, frame: Frame) -> Path:
+        """The JPG the Frame's Analysis source is read from: its JPG, or a RAW-only Frame's cached
+        preview."""
+        if frame.jpg_path is None:
+            return self.preview_file(frame.main_path)
+        return self.root / frame.jpg_path
 
     def has_current_thumbnail(self, frame: Frame) -> bool:
         return self._has_current_row("thumbnails", frame)
@@ -275,12 +344,13 @@ class SessionStore:
                 (*self._source_key(frame), image),
             )
 
-    def save_skipped_files(self, paths: list[Path]) -> None:
+    def save_skipped_files(self, reasons: dict[Path, str]) -> None:
+        """Replaces the skipped files with these, each with the reason it was skipped."""
         with self._db:
             self._db.execute("DELETE FROM skipped_files")
             self._db.executemany(
-                "INSERT INTO skipped_files (path) VALUES (?)",
-                [(self._relative(path),) for path in paths],
+                "INSERT INTO skipped_files (path, reason) VALUES (?, ?)",
+                [(self._relative(path), reason) for path, reason in reasons.items()],
             )
 
     def save_override(self, main_path: str, override: Override) -> None:
@@ -356,7 +426,7 @@ class SessionStore:
         metadata leaves the image data that they were made from unchanged."""
         relative, new_size, new_mtime_ns = self._file_key(path)
         with self._db:
-            for table in ("thumbnails", "analyses"):
+            for table in ("thumbnails", "analyses", "previews"):
                 self._db.execute(
                     f"UPDATE {table} SET source_size = ?, source_mtime_ns = ? "
                     "WHERE source_path = ? AND source_size = ? AND source_mtime_ns = ?",
@@ -417,12 +487,12 @@ class SessionStore:
         ]
 
     def summary(self) -> SessionSummary:
-        frames = self.frames()
-        raw_jpg_count = sum(1 for frame in frames if frame.kind == "raw+jpg")
+        kinds = [frame.kind for frame in self.frames()]
         return SessionSummary(
-            total_frames=len(frames),
-            jpg_only_count=len(frames) - raw_jpg_count,
-            raw_jpg_count=raw_jpg_count,
+            total_frames=len(kinds),
+            jpg_only_count=kinds.count("jpg-only"),
+            raw_jpg_count=kinds.count("raw+jpg"),
+            raw_only_count=kinds.count("raw-only"),
             skipped=self.skipped_files(),
         )
 
@@ -434,9 +504,9 @@ class SessionStore:
         ).fetchone()
         return None if row is None else row["image"]
 
-    def skipped_files(self) -> list[str]:
-        rows = self._db.execute("SELECT path FROM skipped_files ORDER BY path")
-        return [row["path"] for row in rows]
+    def skipped_files(self) -> list[SkippedFile]:
+        rows = self._db.execute("SELECT path, reason FROM skipped_files ORDER BY path")
+        return [SkippedFile(row["path"], row["reason"]) for row in rows]
 
     def _upgrade(self) -> None:
         """Brings a Session store from an earlier release up to SCHEMA_VERSION, after copying it

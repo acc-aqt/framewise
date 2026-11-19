@@ -16,10 +16,11 @@ import {
 
 const summary: SessionSummary = {
   root: '/Volumes/card/DCIM',
-  total_frames: 3,
+  total_frames: 4,
   jpg_only_count: 1,
   raw_jpg_count: 2,
-  skipped: ['100LEICA/L1000009-Pano.dng'],
+  raw_only_count: 1,
+  skipped: [{ path: '100LEICA/L1000009-Pano.dng', reason: 'The RAW holds no embedded preview' }],
   keeper_budget: 0.4,
   providers: {
     fingerprint: {
@@ -221,13 +222,13 @@ describe('Review UI', () => {
   it('names the Frames disclosure File details for assistive technology', async () => {
     await respond(summary, []);
 
-    expect(text('summary', fileDetails())).toBe('File details: 3 Frames');
+    expect(text('summary', fileDetails())).toBe('File details: 4 Frames');
   });
 
   it('shows the Frame count in the header, and opens it to the file kinds and Skipped files', async () => {
     await respond(summary, []);
 
-    expect(visibleText(fileDetails().querySelector('summary')!)).toBe('3 Frames');
+    expect(visibleText(fileDetails().querySelector('summary')!)).toBe('4 Frames');
     expect(fileDetails().open).toBe(false);
 
     const details = await openFileDetails();
@@ -235,14 +236,17 @@ describe('Review UI', () => {
     expect(details.open).toBe(true);
     expect(text('[data-testid="raw-jpg-count"]', details)).toBe('2');
     expect(text('[data-testid="jpg-only-count"]', details)).toBe('1');
+    expect(text('[data-testid="raw-only-count"]', details)).toBe('1');
     expect(text('[data-testid="skipped-count"]', details)).toBe('1');
-    expect(text('[data-testid="skipped-files"]', details)).toContain('100LEICA/L1000009-Pano.dng');
+    expect(text('[data-testid="skipped-files"]', details)).toBe(
+      '100LEICA/L1000009-Pano.dng: The RAW holds no embedded preview',
+    );
   });
 
   it('keeps the file kind counts out of the header row', async () => {
     await respond(summary, []);
 
-    for (const id of ['raw-jpg-count', 'jpg-only-count', 'skipped-count']) {
+    for (const id of ['raw-jpg-count', 'jpg-only-count', 'raw-only-count', 'skipped-count']) {
       const counts = all(`[data-testid="${id}"]`);
       expect(counts.length).toBe(1);
       expect(fileDetails().contains(counts[0])).toBe(true);
@@ -815,15 +819,16 @@ describe('Review UI', () => {
     ).toEqual(['2 kept · 3 out', '']);
   });
 
-  it('marks only JPG-only Frames with their kind on the grid', async () => {
+  it('marks JPG-only and RAW-only Frames with their kind on the grid', async () => {
     await respond(summary, [
       group(1, [frame(1, 'raw+jpg', { verdict: 'winner' })]),
       group(2, [frame(2, 'jpg-only', { verdict: 'winner' })]),
+      group(3, [frame(3, 'raw-only', { verdict: 'winner' })]),
     ]);
 
     expect(
       all('[data-testid="group-tile"]').map((tile) => text('[data-testid="kind-badge"]', tile)),
-    ).toEqual(['', 'JPG-only']);
+    ).toEqual(['', 'JPG-only', 'RAW-only']);
   });
 
   it("names each tile after its Frame's file, Verdict and Group size", async () => {
@@ -1428,7 +1433,7 @@ describe('Review UI', () => {
     expect(all('[data-testid="open-write-back"]').length).toBe(1);
   });
 
-  it('names how many files the write-back screen reads, one per JPG and two per RAW+JPG Frame', async () => {
+  it('names how many files the write-back screen reads, one per JPG and two per RAW+JPG Frame, leaving out RAW-only Frames', async () => {
     await respond(summary, []);
     all('[data-testid="open-write-back"]')[0].click();
     await settle();
@@ -3179,8 +3184,8 @@ function group(id: number, frames: Frame[], fixed = false): Group {
 function frame(id: number, kind: Frame['kind'], overrides: Partial<Frame> = {}): Frame {
   return {
     id,
-    main_path: `DSCF000${id}.JPG`,
-    raw_path: kind === 'raw+jpg' ? `DSCF000${id}.RAF` : null,
+    main_path: kind === 'raw-only' ? `DSCF000${id}.RAF` : `DSCF000${id}.JPG`,
+    raw_path: kind === 'jpg-only' ? null : `DSCF000${id}.RAF`,
     kind,
     camera_rating: { stars: null, label: null },
     thumbnail_url: `/api/frames/${id}/thumbnail`,

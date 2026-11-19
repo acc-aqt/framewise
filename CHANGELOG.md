@@ -4,6 +4,9 @@ What changed in framewise, written for photographers. The Review UI shows this l
 
 ## Unreleased
 
+- A RAW with no JPG of the same name is now a **RAW-only Frame** instead of being skipped, so a Session shot in RAW only, or a merge such as a `-Pano.dng`, is grouped, judged and reviewed like any other. framewise judges it by the largest preview JPG embedded in the RAW and marks it RAW-only in the Review UI. **Rating write-back** and Trash leave RAW-only Frames alone for now.
+- Skipped files are listed with the reason, such as a RAW without an embedded preview framewise can read.
+
 ## 0.2.0 — 2026-11-19
 
 - framewise runs on Windows x64 as a preview, with the same portable Providers as on Linux. Set it up with `scripts\setup.ps1`. **Rating write-back** uses the color label names from Lightroom Classic's preferences there too.

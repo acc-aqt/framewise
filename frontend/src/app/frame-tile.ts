@@ -24,6 +24,8 @@ import { CameraRating, ColorLabel, Frame } from './session-api';
       />
       @if (showKind() && frame().kind === 'jpg-only') {
         <span class="badge kind" data-testid="kind-badge">JPG-only</span>
+      } @else if (showKind() && frame().kind === 'raw-only') {
+        <span class="badge kind" data-testid="kind-badge">RAW-only</span>
       }
       @if (ratingText(frame().camera_rating); as rating) {
         <span class="badge rating" data-testid="camera-rating">{{ rating }}</span>

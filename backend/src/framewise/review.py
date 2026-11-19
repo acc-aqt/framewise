@@ -1,5 +1,6 @@
 import hashlib
 import os
+import shutil
 import sys
 import threading
 import time
@@ -14,8 +15,9 @@ from framewise.camera_rating import CameraRating, read_camera_rating
 from framewise.capture_time import read_capture_time
 from framewise.exiftool import ExifTool
 from framewise.grouper import group_frames
+from framewise.previews import ExifToolPreviews, ExtractPreview, cache_previews
 from framewise.scan import scan_session
-from framewise.store import AnalyzedFrame, Frame, SessionStore
+from framewise.store import AnalyzedFrame, Frame, SessionStore, preview_cache_dir
 from framewise.thumbnails import make_thumbnail
 from framewise.write_back import RatingWriteBack, WriteBackResult
 
@@ -51,9 +53,9 @@ def session_database_path(root: Path, data_dir: Path) -> Path:
 
 
 def hard_reset_session(folder: Path, data_dir: Path, exiftool: ExifTool) -> WriteBackResult | None:
-    """Undoes Rating write-back, then deletes the Session store, so the next review analyzes
-    every Frame again. Keeps the store if a file fails to restore, so the reset can be retried.
-    None if the folder has no Session store."""
+    """Undoes Rating write-back, then deletes the Session store and its preview cache, so the next
+    review analyzes every Frame again. Keeps the store if a file fails to restore, so the reset
+    can be retried. None if the folder has no Session store."""
     root = folder.resolve()
     database = session_database_path(root, data_dir)
     if not database.exists():
@@ -66,21 +68,33 @@ def hard_reset_session(folder: Path, data_dir: Path, exiftool: ExifTool) -> Writ
     if not result.failed:
         for suffix in ("", "-wal", "-shm"):
             database.with_name(database.name + suffix).unlink(missing_ok=True)
+        shutil.rmtree(preview_cache_dir(database), ignore_errors=True)
     return result
 
 
-def open_session(folder: Path, data_dir: Path) -> SessionStore:
+def open_session(
+    folder: Path, data_dir: Path, extract_preview: ExtractPreview | None = None
+) -> SessionStore:
+    """Scans the Session folder into its Session store. RAW-only Frames get their embedded
+    preview cached first, with ExifTool unless `extract_preview` is given; a RAW without a usable
+    preview is skipped."""
     root = folder.resolve()
     store = SessionStore(session_database_path(root, data_dir), root)
-    scan = scan_session(root)
-    store.remove_frames_except(scan.frames)
+    exiftool = ExifTool()
+    try:
+        frames, skipped = cache_previews(
+            store, scan_session(root), extract_preview or ExifToolPreviews(exiftool)
+        )
+    finally:
+        exiftool.close()
+    store.remove_frames_except(frames)
     originals = {
         root / original.path: CameraRating(original.stars, original.label)
         for original in store.write_back_originals()
     }
-    for frame in scan.frames:
+    for frame in frames:
         store.save_frame(frame, read_camera_rating(frame.jpg_path, frame.raw_path, originals))
-    store.save_skipped_files(scan.skipped)
+    store.save_skipped_files(skipped)
     return store
 
 
@@ -95,7 +109,7 @@ class AnalysisProgress:
 class _FrameWork:
     frame: Frame
     source: Path
-    """The Frame's Analysis source."""
+    """The JPG the Frame's Analysis source is read from."""
     needs_thumbnail: bool
     needs_analysis: bool
 
@@ -184,7 +198,7 @@ class SessionAnalysis:
     def _work_for(self, frame: Frame) -> _FrameWork:
         return _FrameWork(
             frame=frame,
-            source=self._store.root / frame.analysis_source,
+            source=self._store.analysis_image(frame),
             needs_thumbnail=not self._store.has_current_thumbnail(frame),
             needs_analysis=not self._store.has_current_analysis(frame, self._analyzer.signature),
         )

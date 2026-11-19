@@ -104,6 +104,8 @@ If the Review UI has not been built, `framewise review` warns you.
 
 framewise analyzes each Frame's JPG with the installed analysis Providers; which ones a machine gets is under [Platform support](#platform-support).
 
+A RAW with no JPG of the same name in its folder, from a RAW-only shoot or a merge such as a `-Pano.dng`, is a RAW-only Frame. framewise judges it by the largest preview JPG embedded in the RAW, extracted with [ExifTool](https://exiftool.org) into a folder next to the Session store, never into the Session folder, and extracted again only when the RAW changes. A RAW-only Frame is judged as leniently on exposure as a RAW+JPG Frame, since its RAW holds the detail its preview clipped. A RAW without a preview framewise can read is listed under **Skipped** with the reason ([ADR-0011](docs/adr/0011-raw-only-frames-from-the-embedded-preview.md)).
+
 - **Groups**: near-duplicate and burst Frames are grouped together.
 - **Verdicts**: each Frame gets a proposed Verdict (Winner, Keeper, Reject or Unsure) with Reasons, judged from its sharpness, motion blur, exposure and, where an `aesthetics` Provider is available, an aesthetics score.
 - **Faces**: in Frames with faces, every face is checked for closed eyes, sharpness and, where a `face-quality` Provider is available, face quality. Sharpness is then judged on the faces rather than the whole image.
@@ -121,7 +123,7 @@ Overrides are saved in the Session store as you go ([ADR-0003](docs/adr/0003-ove
 
 Fix wrong grouping from an open Group. Fixed Groups are kept on later re-runs ([ADR-0004](docs/adr/0004-group-overrides.md)).
 
-Trashing a Frame moves every file of it (RAW, JPG and any `.xmp` sidecar) to the OS Trash and takes the Frame out of the Session. Nothing is deleted outright: restore the files from the Trash and run `framewise review` again to bring a Frame back with its Overrides ([ADR-0006](docs/adr/0006-trashing-frames.md)). Trash before you import into Lightroom, because Lightroom shows trashed Frames it already imported as missing.
+Trashing a Frame moves every file of it (RAW, JPG and any `.xmp` sidecar) to the OS Trash and takes the Frame out of the Session. RAW-only Frames can't be trashed yet. Nothing is deleted outright: restore the files from the Trash and run `framewise review` again to bring a Frame back with its Overrides ([ADR-0006](docs/adr/0006-trashing-frames.md)). Trash before you import into Lightroom, because Lightroom shows trashed Frames it already imported as missing.
 
 ## Providers
 
@@ -157,13 +159,14 @@ Details:
 
 - Overrides count: an Override's Verdict replaces framewise's, and stars or a color label set with the shortcuts replace the ones the Verdict maps to.
 - JPGs and DNGs get embedded XMP; other RAWs get an `.xmp` sidecar, merged into any existing one.
+- RAW-only Frames are left out for now, and the dry run says how many.
 - Label names come from Lightroom Classic's active color label set (for example `Rot` and `Gelb`), read from its preferences on macOS and, on Windows, from `%APPDATA%\Adobe\Lightroom\Preferences\Lightroom Classic CC 7 Preferences.agprefs`.
 - Writing takes a while for large Sessions, because each DNG is rewritten in full. Reloading the page doesn't stop it.
 - framewise needs [ExifTool](https://exiftool.org), which the [setup script](#from-a-checkout) installs and [Install](#install) says how to get. Without it, framewise stops at start-up and says how to install it.
 
 **Reset Session…** on the same screen starts the review over: it undoes the write-back and clears all Overrides, fixed Groups and the Keeper budget. The analysis is kept, so nothing is analyzed again. Stars and labels framewise didn't write, such as in-camera ratings, stay as they are.
 
-`uv run framewise reset /path/to/session-folder` also deletes the Session store, so the next `framewise review` analyzes every Frame again.
+`uv run framewise reset /path/to/session-folder` also deletes the Session store and its cached previews, so the next `framewise review` analyzes every Frame again.
 
 ## Architecture
 

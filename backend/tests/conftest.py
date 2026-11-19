@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from framewise.analyzer import FrameSignals, SimilarityThresholds
+from framewise.previews import Preview, PreviewError
 from framewise.review import SessionAnalysis, open_session
 from framewise.server import create_app
 
@@ -138,6 +139,8 @@ class FakeAnalyzer:
         self._held: dict[Path, threading.Event] = {}
         self._failing: set[Path] = set()
         self._lock = threading.Lock()
+        self.raw_of_preview: dict[Path, Path] = {}
+        """The RAW each cached preview came from, so a RAW-only Frame is scripted by its RAW."""
 
     def script(self, jpg_path: Path, fingerprint: list[float] | None = None, **signals) -> Path:
         if fingerprint is not None:
@@ -161,6 +164,7 @@ class FakeAnalyzer:
             gate.set()
 
     def analyze(self, jpg_path: Path) -> FrameSignals:
+        jpg_path = self.raw_of_preview.get(jpg_path.resolve(), jpg_path)
         with self._lock:
             self.in_flight += 1
             self.peak_in_flight = max(self.peak_in_flight, self.in_flight)
@@ -231,6 +235,35 @@ def analyzer():
     fake.release_all()
 
 
+class FakePreviews:
+    """Stands in for extracting a RAW's embedded preview with ExifTool: writes a small JPG as the
+    preview, or fails for the RAWs it is told have none. Tells the FakeAnalyzer which RAW each
+    preview came from."""
+
+    def __init__(self, analyzer: FakeAnalyzer):
+        self.extracted: list[Path] = []
+        self.size = (64, 48)
+        self._analyzer = analyzer
+        self._without_preview: set[Path] = set()
+
+    def without_preview(self, raw: Path) -> Path:
+        self._without_preview.add(raw.resolve())
+        return raw
+
+    def __call__(self, raw: Path, destination: Path) -> Preview:
+        self.extracted.append(raw)
+        if raw.resolve() in self._without_preview:
+            raise PreviewError("The RAW holds no embedded preview")
+        make_jpg(destination, size=self.size)
+        self._analyzer.raw_of_preview[destination.resolve()] = raw
+        return Preview(*self.size)
+
+
+@pytest.fixture
+def previews(analyzer: FakeAnalyzer) -> FakePreviews:
+    return FakePreviews(analyzer)
+
+
 class FakeTrash:
     """Stands in for the OS Trash: moves files into a folder outside the Session, or refuses
     like a volume without a Trash for the paths it is told to refuse."""
@@ -274,11 +307,11 @@ def review_app(store, analysis: SessionAnalysis, *args, **app_options) -> TestCl
 
 
 @pytest.fixture
-def review(session_dir: Path, data_dir: Path, analyzer: FakeAnalyzer):
+def review(session_dir: Path, data_dir: Path, analyzer: FakeAnalyzer, previews: FakePreviews):
     """Opens the Review UI after analysis has finished."""
 
     def start(**app_options) -> TestClient:
-        store = open_session(session_dir, data_dir)
+        store = open_session(session_dir, data_dir, previews)
         analysis = SessionAnalysis(store, analyzer)
         analysis.run()
         return review_app(store, analysis, **app_options)
@@ -287,11 +320,17 @@ def review(session_dir: Path, data_dir: Path, analyzer: FakeAnalyzer):
 
 
 @pytest.fixture
-def live_review(session_dir: Path, data_dir: Path, analyzer: FakeAnalyzer, clock: FakeClock):
+def live_review(
+    session_dir: Path,
+    data_dir: Path,
+    analyzer: FakeAnalyzer,
+    previews: FakePreviews,
+    clock: FakeClock,
+):
     """Opens the Review UI while analysis runs in the background."""
 
     def start(background: bool = False, **app_options) -> TestClient:
-        store = open_session(session_dir, data_dir)
+        store = open_session(session_dir, data_dir, previews)
         analysis = SessionAnalysis(store, analyzer, background=background, clock=clock)
         threading.Thread(target=analysis.run, daemon=True).start()
         return review_app(store, analysis, **app_options)

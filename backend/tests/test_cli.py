@@ -156,7 +156,7 @@ def test_review_lets_the_machine_sleep_when_asked(session_dir, isolated_data_dir
 
 @pytest.mark.skipif(
     sys.platform not in BACKGROUND_PRIORITY_PLATFORMS,
-    reason="Background priority needs macOS or Linux",
+    reason="Background priority needs macOS, Linux or Windows",
 )
 def test_review_in_background_mode_analyses_at_background_priority(session_dir, isolated_data_dir):
     analyzer = FakeAnalyzer()
@@ -232,6 +232,10 @@ def test_review_without_a_folder_stays_without_a_session_when_the_dialog_is_canc
     assert client.get("/api/session").status_code == 404
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="the review fixture keeps its Session store open, and Windows cannot delete open files",
+)
 def test_reset_restores_the_files_and_deletes_the_session_store(
     session_dir, isolated_data_dir, review, analyzer, capsys
 ):
@@ -435,3 +439,34 @@ def test_review_without_a_folder_refuses_another_site_opening_the_folder_dialog(
 
     assert response.status_code == 403
     assert dialogs == []
+
+
+@pytest.mark.parametrize(
+    ("platform", "install_command"),
+    [
+        ("darwin", "brew install exiftool"),
+        ("linux", "sudo apt install libimage-exiftool-perl"),
+        ("win32", "winget install --id OliverBetz.ExifTool"),
+    ],
+)
+@pytest.mark.parametrize("command", ["review", "reset"])
+def test_refuses_to_start_without_exiftool_and_says_how_to_install_it(
+    session_dir, isolated_data_dir, capsys, monkeypatch, platform, install_command, command
+):
+    monkeypatch.setattr(sys, "platform", platform)
+
+    with pytest.raises(SystemExit) as exit_info:
+        main(
+            [command, str(session_dir)],
+            serve=FakeServer(),
+            open_browser=print,
+            analyzer=FakeAnalyzer(),
+            keep_awake=FakeWakeLock(),
+            find_exiftool=lambda: None,
+        )
+
+    assert exit_info.value.code == 1
+    error = capsys.readouterr().err
+    assert error.startswith("framewise: error: ExifTool is not installed")
+    assert install_command in error
+    assert "Traceback" not in error

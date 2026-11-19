@@ -1,6 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { About } from './about-api';
 import { App, POLL_INTERVAL_MS } from './app';
 import { TOOLTIP_DELAY_MS } from './tooltip';
 import {
@@ -45,6 +46,25 @@ const summary: SessionSummary = {
   config_path: '/Users/me/Library/Application Support/framewise/config.toml',
 };
 
+const about: About = {
+  version: '0.1.0',
+  changelog: [
+    {
+      version: null,
+      date: null,
+      sections: [{ heading: null, items: ['Faster grouping'] }],
+    },
+    {
+      version: '0.1.0',
+      date: '2026-11-20',
+      sections: [
+        { heading: null, items: ['**Rating write-back** for Lightroom Classic'] },
+        { heading: 'Fixed', items: ['`framewise review` opens the browser'] },
+      ],
+    },
+  ],
+};
+
 describe('Review UI', () => {
   let fixture: ComponentFixture<App>;
   let http: HttpTestingController;
@@ -55,14 +75,27 @@ describe('Review UI', () => {
       providers: [provideHttpClient(), provideHttpClientTesting()],
     });
     http = TestBed.inject(HttpTestingController);
+    startApp();
+  });
+
+  function startApp(running: About = about): void {
     fixture = TestBed.createComponent(App);
     TestBed.tick();
-  });
+    http.expectOne('/api/about').flush(running);
+  }
 
   afterEach(() => {
     http.verify();
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
+
+  const MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 15_0) AppleWebKit/605.1.15';
+  const WINDOWS = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+
+  function onPlatform(userAgent: string): void {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(userAgent);
+  }
 
   function text(selector: string, root?: HTMLElement): string {
     return (
@@ -225,6 +258,158 @@ describe('Review UI', () => {
     expect(all('[data-testid="skipped-files"]')).toEqual([]);
   });
 
+  it('shows the running version next to the name', async () => {
+    await respond(summary, []);
+
+    expect(text('header [data-testid="version"]')).toBe('0.1.0');
+  });
+
+  describe("What's new", () => {
+    const versionButton = () => all('header [data-testid="version"]')[0];
+    const panel = () => all('[data-testid="whats-new"]')[0];
+
+    async function openWhatsNew(): Promise<void> {
+      versionButton().click();
+      await settle();
+    }
+
+    /** Reloads the Review UI, which must have answered its first requests already. */
+    async function restartWith(running: About): Promise<void> {
+      fixture.destroy();
+      startApp(running);
+      await respond(summary, []);
+    }
+
+    function shownVersions(): string[] {
+      return all('[data-testid="changelog-version"]', panel()).map((entry) => text('h3', entry));
+    }
+
+    it('opens the Changelog from the version, newest first', async () => {
+      await respond(summary, []);
+      expect(panel()).toBeUndefined();
+
+      await openWhatsNew();
+
+      expect(versionButton().getAttribute('aria-expanded')).toBe('true');
+      expect(shownVersions()).toEqual(['Unreleased', '0.1.0 2026-11-20']);
+      const [unreleased, released] = all('[data-testid="changelog-version"]', panel());
+      expect(all('li', unreleased).map((item) => item.textContent?.trim())).toEqual([
+        'Faster grouping',
+      ]);
+      expect(all('h4', released).map((heading) => heading.textContent?.trim())).toEqual(['Fixed']);
+      expect(text('li strong', released)).toBe('Rating write-back');
+      expect(text('li code', released)).toBe('framewise review');
+      expect(text('li', released)).toBe('Rating write-back for Lightroom Classic');
+    });
+
+    it('leaves out Unreleased when nothing is in it', async () => {
+      await respond(summary, []);
+      await restartWith({
+        ...about,
+        changelog: [{ version: null, date: null, sections: [] }, about.changelog[1]],
+      });
+
+      await openWhatsNew();
+
+      expect(shownVersions()).toEqual(['0.1.0 2026-11-20']);
+    });
+
+    it('says so when there are no release notes', async () => {
+      await respond(summary, []);
+      await restartWith({ ...about, changelog: [] });
+
+      await openWhatsNew();
+
+      expect(shownVersions()).toEqual([]);
+      expect(text('[data-testid="no-release-notes"]', panel())).toBe('No release notes found.');
+    });
+
+    it('closes on Escape and gives focus back to the version', async () => {
+      await respond(summary, []);
+      await openWhatsNew();
+
+      panel().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await settle();
+
+      expect(panel()).toBeUndefined();
+      expect(document.activeElement).toBe(versionButton());
+    });
+
+    it('closes on a click outside it', async () => {
+      await respond(summary, []);
+      await openWhatsNew();
+
+      document.body.click();
+      await settle();
+
+      expect(panel()).toBeUndefined();
+    });
+
+    it('opens from the command palette', async () => {
+      await respond(summary, []);
+
+      await runFromPalette("What's new");
+
+      expect(shownVersions()).toEqual(['Unreleased', '0.1.0 2026-11-20']);
+    });
+
+    describe('after an upgrade', () => {
+      const LAST_SEEN_KEY = 'framewise.whatsNewSeenVersion';
+      const badge = () => all('header [data-testid="whats-new-badge"]')[0];
+
+      afterEach(() => {
+        vi.restoreAllMocks();
+        localStorage.clear();
+      });
+
+      it("marks the version until What's new is opened", async () => {
+        await respond(summary, []);
+        localStorage.setItem(LAST_SEEN_KEY, '0.0.9');
+        await restartWith(about);
+
+        expect(badge()).toBeDefined();
+        expect(versionButton().getAttribute('aria-label')).toContain('unseen changes');
+
+        await openWhatsNew();
+
+        expect(badge()).toBeUndefined();
+        expect(localStorage.getItem(LAST_SEEN_KEY)).toBe('0.1.0');
+
+        await restartWith(about);
+
+        expect(badge()).toBeUndefined();
+      });
+
+      it('marks nothing on the first run, and remembers the version from then on', async () => {
+        await respond(summary, []);
+
+        expect(badge()).toBeUndefined();
+        expect(localStorage.getItem(LAST_SEEN_KEY)).toBe('0.1.0');
+
+        await restartWith({ ...about, version: '0.2.0' });
+
+        expect(badge()).toBeDefined();
+      });
+
+      it("marks nothing and still opens What's new without browser storage", async () => {
+        vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+          throw new DOMException('denied', 'SecurityError');
+        });
+        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+          throw new DOMException('denied', 'SecurityError');
+        });
+        await respond(summary, []);
+        await restartWith(about);
+
+        expect(badge()).toBeUndefined();
+
+        await openWhatsNew();
+
+        expect(shownVersions()).toEqual(['Unreleased', '0.1.0 2026-11-20']);
+      });
+    });
+  });
+
   describe('without a Session', () => {
     const notFound = { status: 404, statusText: 'Not Found' };
 
@@ -258,6 +443,17 @@ describe('Review UI', () => {
       expect(chooseButton()).not.toBeNull();
       expect(all('[data-testid="open-write-back"]')).toEqual([]);
       expect(all('header .error')).toEqual([]);
+    });
+
+    it("shows the running version next to the name, and opens What's new from it", async () => {
+      await respondWithoutSession();
+
+      expect(text('header [data-testid="version"]')).toBe('0.1.0');
+
+      all('header [data-testid="version"]')[0].click();
+      await settle();
+
+      expect(all('[data-testid="whats-new"] [data-testid="changelog-version"]').length).toBe(2);
     });
 
     it('opens the chosen Session', async () => {
@@ -1687,6 +1883,7 @@ describe('Review UI', () => {
       }
 
       it('opens with Command-K and lists every command with its key', async () => {
+        onPlatform(MAC);
         await openFirstGroup();
 
         await openPalette();
@@ -1699,7 +1896,18 @@ describe('Review UI', () => {
         expect(rows()).toContain('Trash Frame ⌫');
         expect(rows()).toContain('Trash Group');
         expect(rows()).toContain('Trash selected Groups');
-        expect(rows().length).toBe(32);
+        expect(rows()).toContain("What's new");
+        expect(rows().length).toBe(33);
+      });
+
+      it('names keys the Windows way outside macOS', async () => {
+        onPlatform(WINDOWS);
+        await openFirstGroup();
+
+        await press('k', { ctrlKey: true });
+
+        expect(rows()).toContain('Next Frame in Group Alt+→');
+        expect(rows()).toContain('Trash Frame Delete');
       });
 
       it('opens from the header button', async () => {
@@ -2103,8 +2311,7 @@ describe('Review UI', () => {
       );
 
       fixture.destroy();
-      fixture = TestBed.createComponent(App);
-      TestBed.tick();
+      startApp();
       await openGroup(0);
 
       expect(pinnedThumbnail()).toBeUndefined();

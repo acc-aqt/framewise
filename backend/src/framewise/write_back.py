@@ -255,8 +255,9 @@ class RatingWriteBack:
         if not paths:
             return []
         entries = self._exiftool.read_json("-n", "-XMP-xmp:Rating", "-XMP-xmp:Label", *paths)
-        by_path = {entry["SourceFile"]: entry for entry in entries}
-        return [_rating_from(by_path.get(str(path), {})) for path in paths]
+        # ExifTool names Windows files with forward slashes, so match them as paths.
+        by_path = {Path(entry["SourceFile"]): entry for entry in entries}
+        return [_rating_from(by_path.get(Path(path), {})) for path in paths]
 
     def _absolute(self, relative: str) -> Path:
         return self._store.root / relative

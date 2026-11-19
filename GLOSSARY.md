@@ -30,7 +30,7 @@ A star rating or color label that was already on a Frame's files before framewis
 _Avoid_: Existing rating, prior rating
 
 **Session store**:
-The per-Session SQLite database in framewise's own data folder (`~/Library/Application Support/framewise/` on macOS, `~/.local/share/framewise/` on Linux by default) that holds a Session's Frames and their thumbnails. framewise never writes it into the Session folder.
+The per-Session SQLite database in framewise's own data folder (`~/Library/Application Support/framewise/` on macOS, `~/.local/share/framewise/` on Linux and `%LOCALAPPDATA%\framewise\` on Windows by default) that holds a Session's Frames and their thumbnails. framewise never writes it into the Session folder.
 _Avoid_: Cache, catalog, index
 
 ## Analysis
@@ -126,3 +126,13 @@ _Avoid_: Delete, remove, discard
 **Rating write-back**:
 The explicit, opt-in and reversible step that writes the reviewed Verdicts into the Frames' files so Lightroom Classic can read them.
 _Avoid_: Export, sync, apply
+
+## Releases
+
+**Release**:
+A numbered version of framewise, such as `0.1.0`: a `vX.Y.Z` tag on `main` with its release notes on GitHub. Photographers still update from `main`; a Release names what they have.
+_Avoid_: Build, drop, ship
+
+**Changelog**:
+The hand-written list of user-visible changes in each Release, newest first, with changes not yet in a Release under Unreleased. The Review UI shows it under What's new.
+_Avoid_: Release log, history, news

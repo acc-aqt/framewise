@@ -43,6 +43,14 @@ _Avoid_: Feature, model, check
 An interchangeable implementation of one Capability, built into framewise or installed as a plug-in. Each Capability is served by one Provider at a time.
 _Avoid_: Backend, engine, analyzer, model
 
+**Focus point**:
+The area of a Frame the camera recorded focusing on, in the maker notes of its Analysis source. framewise reads it from Fujifilm cameras for now.
+_Avoid_: AF point, AF area
+
+**Subject**:
+What a Frame without faces is judged on for sharpness: its Focus point, else the area a `subject` Provider masks as the main object, else the whole Frame. A Focus point too small to measure sends the Frame straight to the whole Frame.
+_Avoid_: Foreground, subject mask, main object
+
 ## Judging
 
 **Group**:

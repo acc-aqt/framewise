@@ -198,7 +198,7 @@ class _Assessment:
         return self.worst is None and bool(faces) and all(face.eyes_open for face in faces)
 
     def judgement(self, verdict: Verdict, reasons: list[Reason]) -> Judgement:
-        measured_on, _ = _judged_sharpness(self.analyzed.signals)
+        measured_on, _ = judged_sharpness(self.analyzed.signals)
         return Judgement(verdict, reasons, self.scores, self.faces, measured_on)
 
 
@@ -334,11 +334,11 @@ def _exposure_score(signals: FrameSignals, kind: FrameKind) -> float:
 
 
 def _sharpness_score(signals: FrameSignals) -> float:
-    measured_on, sharpness = _judged_sharpness(signals)
+    measured_on, sharpness = judged_sharpness(signals)
     return _clamp(sharpness / SHARPNESS_RULES[measured_on].sharp_from)
 
 
-def _judged_sharpness(signals: FrameSignals) -> tuple[SharpnessMeasuredOn, float]:
+def judged_sharpness(signals: FrameSignals) -> tuple[SharpnessMeasuredOn, float]:
     """What the Frame's sharpness is judged on, and that sharpness."""
     if signals.faces:
         return "faces", min(face.sharpness for face in signals.faces)
@@ -358,7 +358,7 @@ def _check_face(face: Face) -> FaceCheck:
 
 
 def _sharpness_flaws(analyzed: AnalyzedFrame) -> list[Flaw]:
-    measured_on, sharpness = _judged_sharpness(analyzed.signals)
+    measured_on, sharpness = judged_sharpness(analyzed.signals)
     rule = SHARPNESS_RULES[measured_on]
     if sharpness < rule.blurry_below:
         return [Flaw(rule.blurry, Verdict.REJECT)]

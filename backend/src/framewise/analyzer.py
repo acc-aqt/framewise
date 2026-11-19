@@ -6,7 +6,7 @@ from typing import Literal, Protocol
 # Bump whenever the built-in image maths or the shape of FrameSignals changes, so a re-run
 # re-analyzes Frames whose saved analysis predates it. A Provider's own changes are covered by
 # its version, in the ProviderSignature.
-ANALYSIS_VERSION = 8
+ANALYSIS_VERSION = 9
 
 ProviderSignature = Mapping[str, str]
 """The Provider that served each Capability of an analysis, as "<id>@<version>" by Capability."""
@@ -119,7 +119,8 @@ class FrameSignals:
     exposure_stops: float
     """How far the Frame is over (positive) or under (negative) a mid-gray exposure."""
     low_key: bool
-    """Dark overall but with bright highlights, so deliberately dark rather than underexposed."""
+    """Dark overall but with bright highlights that aren't clipped, such as a lit face, so
+    deliberately dark rather than underexposed. A blown-out lamp or screen alone doesn't count."""
     high_key: bool
     """Bright overall but with its highlights intact, so deliberately bright rather than
     overexposed. With faces, only the faces' highlights count, so a person against a blown-out

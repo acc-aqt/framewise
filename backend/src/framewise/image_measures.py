@@ -18,13 +18,14 @@ SMEARED_RATIO = 1 / 16
 MID_GREY_LINEAR = 0.18
 DARKEST_STOPS = -6.0
 KEY_FROM_STOPS = 0.7
-# A low-key Frame is dark yet keeps some bright highlights; an underexposed one has none.
-LOW_KEY_HIGHLIGHT_TONE = 200
-LOW_KEY_MIN_HIGHLIGHT_SHARE = 0.005
 # A high-key Frame is bright yet keeps its highlights; an overexposed one clips them. With faces,
 # the highlights that count are the faces': a white wall behind a person may clip, their skin
 # must not. A face's center leaves out the hair and background at the edges of its box.
 CLIPPED_TONE = 250
+# A low-key Frame is dark yet keeps some bright highlights that aren't clipped, such as a lit face;
+# an underexposed one has none, or only a blown-out light source such as a lamp or a screen.
+LOW_KEY_HIGHLIGHT_TONE = 200
+LOW_KEY_MIN_HIGHLIGHT_SHARE = 0.005
 HIGH_KEY_MAX_CLIPPED_SHARE = 0.01
 HIGH_KEY_MAX_CLIPPED_FACE_SHARE = 0.1
 FACE_CENTRE_INSET = 0.2
@@ -86,8 +87,7 @@ def measure_image(
         sharpness=_sharpness(ratios),
         motion_blur=0.0 if sharpest == 0 else 1 - softest / sharpest,
         exposure_stops=stops,
-        low_key=stops <= -KEY_FROM_STOPS
-        and _share_from(histogram, LOW_KEY_HIGHLIGHT_TONE) >= LOW_KEY_MIN_HIGHLIGHT_SHARE,
+        low_key=stops <= -KEY_FROM_STOPS and _has_lit_highlights(histogram),
         high_key=stops >= KEY_FROM_STOPS and _keeps_highlights(grey, histogram, face_boxes),
         face_sharpness=[None if box is None else _box_sharpness(grey, box) for box in face_boxes],
         focus_sharpness=None if focus_box is None else _box_sharpness(grey, focus_box),
@@ -112,6 +112,11 @@ def _pixel_box(grey: Image.Image, region: Region) -> Box | None:
     if min(right - left, bottom - top) < MIN_REGION_SIDE:
         return None
     return left, top, right, bottom
+
+
+def _has_lit_highlights(histogram: list[int]) -> bool:
+    lit = _share_from(histogram, LOW_KEY_HIGHLIGHT_TONE) - _share_from(histogram, CLIPPED_TONE)
+    return lit >= LOW_KEY_MIN_HIGHLIGHT_SHARE
 
 
 def _keeps_highlights(grey: Image.Image, histogram: list[int], faces: list[Box | None]) -> bool:

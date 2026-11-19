@@ -61,8 +61,9 @@ class Expression:
     Provider cannot tell."""
     looking: float | None = None
     """From 0 for eyes looking fully aside to 1 for eyes looking into the lens, or None where the
-    Provider cannot tell. A Provider that reads gaze relative to the head, as MediaPipe's does,
-    measures looking into the lens only while the head faces the camera."""
+    Provider cannot tell. It is the gaze from the camera, whatever the head does: a head turned
+    away whose eyes look back into the lens scores high. A Provider that reads gaze relative to
+    the head, as MediaPipe's blendshapes do, adds the head's turn to it."""
     facing: float | None = None
     """From 0 for a head turned fully away to 1 for a head facing the camera, or None where the
     Provider cannot tell."""

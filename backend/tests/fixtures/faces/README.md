@@ -20,3 +20,8 @@ Dr. Herbert John Webber, circa 1910 to 1915, in the public domain (Library of Co
 ggbain.12548,
 https://commons.wikimedia.org/wiki/File:Herbert_John_Webber_side_profile.jpg). His head is
 turned about three-quarters away from the camera.
+
+`glancing-back.jpg` is an 800×800 crop, scaled to 256×256, of the 1280-pixel-wide rendition of
+Johannes Vermeer's Girl with a Pearl Earring, circa 1665, a faithful reproduction of a painting in
+the public domain (Mauritshuis, https://commons.wikimedia.org/wiki/File:Meisje_met_de_parel.jpg).
+Her head is turned about 30 degrees from the viewer and her eyes look back into it.

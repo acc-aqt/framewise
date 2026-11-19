@@ -33,20 +33,29 @@ BLINKS = ("eyeBlinkLeft", "eyeBlinkRight")
 # sits between them.
 EYES_CLOSED_FROM = 0.5
 SMILES = ("mouthSmileLeft", "mouthSmileRight")
-# Each direction the eyes can look, as the blendshapes of both eyes looking that way. They run
-# from 0 for eyes looking straight ahead from the head to 1 for eyes turned fully that way, so
-# they say where the eyes look relative to the head, not to the camera.
-EYE_LOOKS = (
-    ("eyeLookOutLeft", "eyeLookInRight"),
-    ("eyeLookInLeft", "eyeLookOutRight"),
-    ("eyeLookUpLeft", "eyeLookUpRight"),
-    ("eyeLookDownLeft", "eyeLookDownRight"),
-)
+# The blendshapes of both eyes looking each way. They run from 0 for eyes looking straight ahead
+# from the head to 1 for eyes turned fully that way, so they say where the eyes look relative to
+# the head, not to the camera.
+EYES_LEFT = ("eyeLookOutLeft", "eyeLookInRight")
+EYES_RIGHT = ("eyeLookInLeft", "eyeLookOutRight")
+EYES_UP = ("eyeLookUpLeft", "eyeLookUpRight")
+EYES_DOWN = ("eyeLookDownLeft", "eyeLookDownRight")
+EYE_TURN_DEGREES = 35.0
+"""How far, in degrees, eyes turn from the head at a blendshape of 1. The blendshapes carry no
+angle, so the eyes' angle is taken as linear in them: how far they look one way less how far
+they look the other, times this. 35 degrees is about as far as eyes turn in a glance, and on the
+reference faces it brings a head turned 31 degrees whose eyes look back into the lens to within
+3 degrees of it."""
 # How far the head may turn, in degrees of yaw and pitch combined, and still face the camera
 # fully, and from how far it is turned away. On the reference faces, frontal portraits read 7 to
 # 9 degrees, mostly pitch, and a three-quarter profile 34 degrees.
 FACING_WITHIN_DEGREES = 15.0
 TURNED_AWAY_FROM_DEGREES = 40.0
+# How far the gaze, the head's angle plus the eyes', may miss the lens, in degrees, and still
+# look into it fully, and from how far it looks aside. On the reference faces, eyes looking into
+# the lens read 3 to 9 degrees, and eyes looking aside or following a turned head 26 to 33.
+LOOKING_WITHIN_DEGREES = 12.0
+LOOKING_ASIDE_FROM_DEGREES = 22.0
 MIN_OVERLAP = 0.3
 """How much a box from another detector must overlap a landmarked face to be read as it."""
 CROP_SIZE = 2.0
@@ -82,7 +91,7 @@ class MediaPipeEyeState(_MediaPipeProvider):
 class MediaPipeExpression(_MediaPipeProvider):
     capability = EXPRESSION
     id = "mediapipe-expression"
-    version = 3
+    version = 4
 
     def expression(self, jpg_path: Path, faces: list[Region]) -> list[Expression | None]:
         return [_expression(face) for face in _faces_in_boxes(jpg_path, faces)]
@@ -97,8 +106,8 @@ class _LandmarkedFace:
     smile: float
     """The mean of both mouth corners' smile blendshapes."""
     looking: float
-    """From 0 for eyes turned fully to one side, up or down to 1 for eyes looking straight
-    ahead from the head."""
+    """From 0 for eyes looking aside to 1 for eyes looking into the lens, wherever the head
+    turns."""
     facing: float
     """From 0 for a head turned away from the camera to 1 for a head facing it."""
 
@@ -197,24 +206,43 @@ def _box(landmarks) -> Region:
 
 def _landmarked_face(landmarks, blendshapes, matrix) -> _LandmarkedFace:
     scores = {category.category_name: category.score for category in blendshapes}
+    head_yaw, head_pitch = _head_angle(matrix)
+    eyes_yaw, eyes_pitch = _eyes_angle(scores)
     return _LandmarkedFace(
         _box(landmarks),
         blink=_mean(scores, BLINKS),
         smile=_mean(scores, SMILES),
-        looking=1 - max(_mean(scores, look) for look in EYE_LOOKS),
-        facing=_facing(matrix),
+        looking=_within(
+            math.hypot(head_yaw + eyes_yaw, head_pitch + eyes_pitch),
+            LOOKING_WITHIN_DEGREES,
+            LOOKING_ASIDE_FROM_DEGREES,
+        ),
+        facing=_within(
+            math.hypot(head_yaw, head_pitch), FACING_WITHIN_DEGREES, TURNED_AWAY_FROM_DEGREES
+        ),
     )
 
 
-def _facing(matrix) -> float:
-    """How fully the head faces the camera, from the yaw and pitch of the landmarker's facial
+def _head_angle(matrix) -> tuple[float, float]:
+    """The head's yaw and pitch from the camera, in degrees, from the landmarker's facial
     transformation matrix."""
     rotation = numpy.asarray(matrix)[:3, :3]
     yaw = math.degrees(math.atan2(-rotation[2, 0], math.hypot(rotation[2, 1], rotation[2, 2])))
     pitch = math.degrees(math.atan2(rotation[2, 1], rotation[2, 2]))
-    turned = math.hypot(yaw, pitch)
-    span = TURNED_AWAY_FROM_DEGREES - FACING_WITHIN_DEGREES
-    return 1 - _clamp((turned - FACING_WITHIN_DEGREES) / span)
+    return yaw, pitch
+
+
+def _eyes_angle(scores: dict[str, float]) -> tuple[float, float]:
+    """The eyes' yaw and pitch from the head, in degrees, on the same axes as the head's, so the
+    two add up to the gaze from the camera. See EYE_TURN_DEGREES."""
+    yaw = _mean(scores, EYES_LEFT) - _mean(scores, EYES_RIGHT)
+    pitch = _mean(scores, EYES_DOWN) - _mean(scores, EYES_UP)
+    return yaw * EYE_TURN_DEGREES, pitch * EYE_TURN_DEGREES
+
+
+def _within(degrees: float, fully_within: float, none_from: float) -> float:
+    """1 up to fully_within degrees, falling evenly to 0 at none_from."""
+    return 1 - _clamp((degrees - fully_within) / (none_from - fully_within))
 
 
 def _mean(scores: dict[str, float], names: tuple[str, ...]) -> float:

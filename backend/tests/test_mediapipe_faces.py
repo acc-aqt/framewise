@@ -83,6 +83,15 @@ def test_a_face_looking_aside_scores_lower_looking_than_one_looking_into_the_len
     )
 
 
+def test_a_head_turned_away_whose_eyes_look_back_into_the_lens_scores_high_looking():
+    glancing_back = expression(FACES / "glancing-back.jpg")
+    assert glancing_back.looking > 0.5 > glancing_back.facing
+
+
+def test_a_head_turned_away_whose_eyes_follow_it_scores_low_looking():
+    assert expression(FACES / "turned-away.jpg").looking < 0.5
+
+
 def test_a_frame_without_faces_has_none(tmp_path):
     assert MediaPipeFaceDetection().detect_faces(draw_landscape(tmp_path / "landscape.jpg")) == []
 

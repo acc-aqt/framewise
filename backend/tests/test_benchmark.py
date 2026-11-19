@@ -357,6 +357,7 @@ def test_a_provider_override_replaces_a_config_choice_that_cannot_be_honoured(
     assert report["providers"] == {"fingerprint": "chosen@1"}
 
 
+@runs_the_benchmark
 def test_each_frame_result_names_what_its_sharpness_was_measured_on_and_the_measure(
     session_dir, catalog, tmp_path, isolated_data_dir
 ):

@@ -1,6 +1,6 @@
 # ADR-0007: Releases and versioning
 
-**Status:** Accepted — 2026-11-18
+**Status:** Accepted — 2026-11-18. Amended by ADR-0009 — 2026-11-19.
 
 ## Context
 
@@ -29,6 +29,6 @@ framewise changes daily, and photographers update it with `git pull` and `script
 ## Considered Options
 
 - **Release notes generated from pull request titles or commits.** Rejected: they describe the code, not what a photographer notices.
-- **Installing from tags instead of `main`.** Rejected for now: it changes the install and update instructions for little gain while framewise is installed from a checkout.
+- **Installing from tags instead of `main`.** Rejected for now: it changes the install and update instructions for little gain while framewise is installed from a checkout. ADR-0009 makes framewise installable as one package, so a Release can carry the wheel instead.
 - **A CI check that every pull request touches the Changelog.** Rejected: most pull requests are internal and would need a way to opt out.
 - **1.0.0 as a feature milestone or a date.** Rejected: a version number is a promise about upgrades, so 1.0.0 is defined by the promises above.

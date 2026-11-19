@@ -16,7 +16,7 @@ from starlette.types import ASGIApp
 
 from framewise.analyzer import FrameAnalyzer
 from framewise.changelog import CHANGELOG_PATH
-from framewise.exiftool import ExifTool
+from framewise.exiftool import ExifTool, exiftool_install_hint, find_exiftool
 from framewise.lightroom import LIGHTROOM_PREFERENCES
 from framewise.models import MODELS, Model, ModelError, ensure_model
 from framewise.providers import ProviderError, resolve_analyzer
@@ -32,11 +32,18 @@ from framewise.server import LocalOnly, SessionPicker, create_app
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
-UI_DIR = Path(__file__).resolve().parents[3] / "frontend" / "dist" / "frontend" / "browser"
+PACKAGED_UI_DIR = Path(__file__).resolve().parent / "review_ui"
+UI_DIR = (
+    PACKAGED_UI_DIR
+    if PACKAGED_UI_DIR.is_dir()
+    else PACKAGED_UI_DIR.parents[3] / "frontend" / "dist" / "frontend" / "browser"
+)
+"""The Review UI an installed wheel carries, or the checkout's build when running from a clone."""
 
 Serve = Callable[[ASGIApp, str, int, Callable[[], None]], None]
 ChooseFolder = Callable[[], Path | None]
 KeepAwake = Callable[[], AbstractContextManager[object]]
+FindExifTool = Callable[[], str | None]
 
 
 def serve_with_uvicorn(app: ASGIApp, host: str, port: int, on_ready: Callable[[], None]) -> None:
@@ -216,6 +223,7 @@ def main(
     keep_awake: KeepAwake = keep_machine_awake,
     choose_folder: ChooseFolder = choose_folder_in_dialog,
     models: Sequence[Model] = MODELS,
+    find_exiftool: FindExifTool = find_exiftool,
 ) -> None:
     parser = argparse.ArgumentParser(prog="framewise")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -256,6 +264,14 @@ def main(
 
     if args.session_folder is not None and not args.session_folder.is_dir():
         parser.error(f"not a folder: {args.session_folder}")
+
+    if find_exiftool() is None:
+        print(
+            "framewise: error: ExifTool is not installed. framewise needs it for Rating "
+            f"write-back. {exiftool_install_hint(sys.platform)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     if args.command == "reset":
         hard_reset(args.session_folder)

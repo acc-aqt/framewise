@@ -1,6 +1,6 @@
 # ADR-0008: Windows as a native platform
 
-**Status:** Accepted — 2026-11-18
+**Status:** Accepted — 2026-11-18. Amended by ADR-0009 — 2026-11-19.
 
 ## Context
 
@@ -8,7 +8,7 @@ framewise ran on macOS and Linux. Most Lightroom Classic photographers work on W
 
 ## Decision
 
-1. **framewise runs natively on Windows,** installed with `scripts/setup.ps1` and run from a clone with uv, like on the other platforms.
+1. **framewise runs natively on Windows,** installed with `scripts/setup.ps1` and run from a clone with uv, like on the other platforms. ADR-0009 adds installing it as one package, with the `portable` extra.
 2. **Windows uses the portable Providers only:** DINOv2-small for the fingerprint and MediaPipe for face detection and eye state, the same as Linux. Windows has no `face-quality` or `aesthetics` Provider yet.
 3. **Only Windows x64 is supported.** Windows on ARM is neither tested in CI nor checked by hand.
 4. **Each operating-system seam gets a Windows branch:**

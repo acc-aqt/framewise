@@ -35,7 +35,7 @@ jobs:
 
       - name: Lint the setup and release scripts
         if: runner.os == 'Linux'
-        run: shellcheck ../scripts/setup.sh ../scripts/release.sh
+        run: shellcheck ../scripts/setup.sh ../scripts/release.sh ../scripts/smoke-test-wheel.sh
 
       - name: Set up framewise
         if: runner.os != 'Windows'
@@ -78,3 +78,36 @@ jobs:
       - run: uv run ruff format --check
 
       - run: uv run pytest
+
+  wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build the wheel, with the Review UI inside
+        working-directory: backend
+        run: uv build --wheel
+
+      - name: Run the wheel in a clean Linux container with only ExifTool
+        run: |
+          docker run --rm \
+            --volume "$PWD:/repo:ro" \
+            --volume "$(command -v uv):/usr/local/bin/uv:ro" \
+            --volume "$(command -v uvx):/usr/local/bin/uvx:ro" \
+            --workdir /repo \
+            debian:trixie-slim \
+            bash -c 'apt-get update &&
+              apt-get install --yes --no-install-recommends libimage-exiftool-perl curl ca-certificates &&
+              scripts/smoke-test-wheel.sh backend/dist/*.whl'

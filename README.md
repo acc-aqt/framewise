@@ -45,6 +45,16 @@ powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 
 It installs everything else framewise needs, optional tools included, builds the Review UI and installs the backend. `--help` (`-Help` on Windows) says what it does and on which platforms it runs. Re-running it is safe: after pulling new changes, run it again to update framewise.
 
+### From a wheel
+
+framewise also installs as one package with the Review UI built in. Build the wheel in a set-up checkout (`cd backend && uv build --wheel`), then on any machine with [uv](https://docs.astral.sh/uv/) and [ExifTool](https://exiftool.org), run it without a clone or Node.js:
+
+```sh
+uvx --python 3.13 --from framewise-0.1.0-py3-none-any.whl framewise review /path/to/session-folder
+```
+
+On Linux and Windows, add the [portable Providers](#providers): `uvx --python 3.13 --from "framewise[portable] @ file:///path/to/framewise-0.1.0-py3-none-any.whl" framewise review …`. `--python 3.13` keeps uv from picking a newer Python that the portable Providers cannot install on yet.
+
 ## Platform support
 
 - **macOS**: the Apple Vision Providers serve every Capability. `aesthetics` needs macOS 15 or later.
@@ -134,7 +144,7 @@ Details:
 - JPGs and DNGs get embedded XMP; other RAWs get an `.xmp` sidecar, merged into any existing one.
 - Label names come from Lightroom Classic's active color label set (for example `Rot` and `Gelb`), read from its preferences on macOS and, on Windows, from `%APPDATA%\Adobe\Lightroom\Preferences\Lightroom Classic CC 7 Preferences.agprefs`.
 - Writing takes a while for large Sessions, because each DNG is rewritten in full. Reloading the page doesn't stop it.
-- Write-back needs [ExifTool](https://exiftool.org), which the [setup script](#install) installs.
+- framewise needs [ExifTool](https://exiftool.org), which the [setup script](#install) installs. Without it, framewise stops at start-up and says how to install it.
 
 **Reset Session…** on the same screen starts the review over: it undoes the write-back and clears all Overrides, fixed Groups and the Keeper budget. The analysis is kept, so nothing is analyzed again. Stars and labels framewise didn't write, such as in-camera ratings, stay as they are.
 

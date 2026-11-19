@@ -439,3 +439,34 @@ def test_review_without_a_folder_refuses_another_site_opening_the_folder_dialog(
 
     assert response.status_code == 403
     assert dialogs == []
+
+
+@pytest.mark.parametrize(
+    ("platform", "install_command"),
+    [
+        ("darwin", "brew install exiftool"),
+        ("linux", "sudo apt install libimage-exiftool-perl"),
+        ("win32", "winget install --id OliverBetz.ExifTool"),
+    ],
+)
+@pytest.mark.parametrize("command", ["review", "reset"])
+def test_refuses_to_start_without_exiftool_and_says_how_to_install_it(
+    session_dir, isolated_data_dir, capsys, monkeypatch, platform, install_command, command
+):
+    monkeypatch.setattr(sys, "platform", platform)
+
+    with pytest.raises(SystemExit) as exit_info:
+        main(
+            [command, str(session_dir)],
+            serve=FakeServer(),
+            open_browser=print,
+            analyzer=FakeAnalyzer(),
+            keep_awake=FakeWakeLock(),
+            find_exiftool=lambda: None,
+        )
+
+    assert exit_info.value.code == 1
+    error = capsys.readouterr().err
+    assert error.startswith("framewise: error: ExifTool is not installed")
+    assert install_command in error
+    assert "Traceback" not in error

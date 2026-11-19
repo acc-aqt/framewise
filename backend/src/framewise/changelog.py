@@ -4,7 +4,13 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-CHANGELOG_PATH = Path(__file__).resolve().parents[3] / "CHANGELOG.md"
+PACKAGED_CHANGELOG = Path(__file__).resolve().parent / "CHANGELOG.md"
+CHANGELOG_PATH = (
+    PACKAGED_CHANGELOG
+    if PACKAGED_CHANGELOG.is_file()
+    else PACKAGED_CHANGELOG.parents[3] / "CHANGELOG.md"
+)
+"""The Changelog an installed wheel carries, or the checkout's when running from a clone."""
 
 UNRELEASED_HEADING = "## Unreleased"
 RELEASE_HEADING = re.compile(r"^## (\d+\.\d+\.\d+) — (\d{4}-\d{2}-\d{2})$")

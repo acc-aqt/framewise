@@ -50,10 +50,10 @@ It installs everything else framewise needs, optional tools included, builds the
 framewise also installs as one package with the Review UI built in. Build the wheel in a set-up checkout (`cd backend && uv build --wheel`), then on any machine with [uv](https://docs.astral.sh/uv/) and [ExifTool](https://exiftool.org), run it without a clone or Node.js:
 
 ```sh
-uvx --from framewise-0.1.0-py3-none-any.whl framewise review /path/to/session-folder
+uvx --python 3.13 --from framewise-0.1.0-py3-none-any.whl framewise review /path/to/session-folder
 ```
 
-On Linux and Windows, add the [portable Providers](#providers): `uvx --from "framewise[portable] @ file:///path/to/framewise-0.1.0-py3-none-any.whl" framewise review …`.
+On Linux and Windows, add the [portable Providers](#providers): `uvx --python 3.13 --from "framewise[portable] @ file:///path/to/framewise-0.1.0-py3-none-any.whl" framewise review …`. `--python 3.13` keeps uv from picking a newer Python that the portable Providers cannot install on yet.
 
 ## Platform support
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Checks that a built framewise wheel works on its own, as a photographer
-# installs it: runs `uvx --from <wheel> framewise review` on a one-Frame
+# installs it: runs `uvx --python 3.13 --from <wheel> framewise review` on a one-Frame
 # Session and checks over HTTP that the Review UI and the Session load and
 # that the Frame gets analyzed.
 #
@@ -61,8 +61,8 @@ mkdir "$scratch/session"
 cp "$repo_root/backend/tests/fixtures/faces/eyes-open.jpg" "$scratch/session/DSCF0001.JPG"
 export FRAMEWISE_DATA_DIR="$scratch/data"
 
-echo "+ uvx --from '$package' framewise review <session> --port $port"
-uvx --from "$package" framewise review "$scratch/session" --port "$port" > "$scratch/log" 2>&1 &
+echo "+ uvx --python 3.13 --from '$package' framewise review <session> --port $port"
+uvx --python 3.13 --from "$package" framewise review "$scratch/session" --port "$port" > "$scratch/log" 2>&1 &
 server_pid=$!
 
 # The first run installs framewise and its dependencies before it serves.

@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { FaceBadges } from './face-badges';
+import { ServerConnection } from './server-connection';
 import { Face } from './session-api';
 
 /**
@@ -26,6 +27,7 @@ import { Face } from './session-api';
         [attr.loading]="lazy() ? 'lazy' : null"
         [attr.data-testid]="imageTestId()"
         (load)="imageLoaded($event)"
+        (error)="connection.check()"
       />
       @if (badgedFaces(); as faces) {
         <app-face-badges [faces]="faces" />
@@ -67,6 +69,8 @@ export class FramePicture {
   readonly fit = input(true);
   readonly lazy = input(false);
   readonly imageTestId = input<string | null>(null);
+
+  protected readonly connection = inject(ServerConnection);
 
   /** The image's width over its height, once loaded. */
   protected readonly aspectRatio = signal<number | null>(null);

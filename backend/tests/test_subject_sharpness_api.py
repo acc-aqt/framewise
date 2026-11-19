@@ -82,7 +82,7 @@ def test_a_frame_sharp_at_its_focus_point_is_not_soft_however_blurred_the_rest(
         session_dir,
         analyzer,
         ("DSCF0001", {}),
-        ("DSCF0002", {"sharpness": 0.2, "subject": at_focus_point(0.8)}),
+        ("DSCF0002", {"sharpness": 0.2, "subject": at_focus_point(0.95)}),
     )
 
     frame = frames_by_name(review())["DSCF0002.JPG"]
@@ -124,8 +124,8 @@ def test_a_frame_with_faces_is_still_judged_on_its_faces(session_dir, review, an
 @pytest.mark.parametrize(
     ("signals", "measured_on", "sharpness_score"),
     [
-        ({"sharpness": 0.9, "subject": at_focus_point(0.5)}, "focus-point", 0.746),
-        ({"sharpness": 0.9, "subject": on_subject_mask(0.5)}, "subject-mask", 0.746),
+        ({"sharpness": 0.9, "subject": at_focus_point(0.5)}, "focus-point", 0.556),
+        ({"sharpness": 0.9, "subject": on_subject_mask(0.5)}, "subject-mask", 0.556),
         ({"sharpness": 0.9}, "frame", 0.9),
     ],
 )

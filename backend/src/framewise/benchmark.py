@@ -19,8 +19,8 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from framewise.analyzer import FrameAnalyzer
-from framewise.judge import KEPT, Proposal, Verdict, judge
+from framewise.analyzer import FrameAnalyzer, FrameSignals
+from framewise.judge import KEPT, Proposal, Verdict, judge, judged_sharpness
 from framewise.lightroom import LIGHTROOM_PREFERENCES
 from framewise.providers import Provider, ProviderError, resolve_analyzer
 from framewise.review import SessionAnalysis, open_session, resolve_config_path
@@ -215,6 +215,7 @@ def _run(
 
     frames = store.frames()
     references = match_references(frames, session_root, ratings)
+    signals = {analyzed.frame.id: analyzed.signals for group in groups for analyzed in group}
     return {
         "session": str(session_root),
         "frames": len(frames),
@@ -225,19 +226,26 @@ def _run(
         "analysis_seconds": analysed - started,
         "judging_seconds": judged - analysed,
         "frame_results": [
-            _frame_result(frame, proposal, references) for frame in frames if frame.id in proposal
+            _frame_result(frame, proposal, references, signals[frame.id])
+            for frame in frames
+            if frame.id in proposal
         ],
     }
 
 
-def _frame_result(frame: Frame, proposal: Proposal, references: dict[int, int]) -> dict:
+def _frame_result(
+    frame: Frame, proposal: Proposal, references: dict[int, int], signals: FrameSignals
+) -> dict:
     judgement = proposal[frame.id]
+    measured_on, sharpness = judged_sharpness(signals)
     return {
         "jpg_path": frame.jpg_path,
         "reference_stars": references.get(frame.id),
         "verdict": judgement.verdict.value,
         "reasons": [reason.code for reason in judgement.reasons],
         "scores": asdict(judgement.scores),
+        "sharpness_measured_on": measured_on,
+        "sharpness": sharpness,
     }
 
 

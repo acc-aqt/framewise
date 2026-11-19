@@ -37,11 +37,14 @@ SOFT_BELOW = 0.4
 FACE_BLURRY_BELOW = 0.25
 FACE_SOFT_BELOW = 0.5
 FACE_SHARP_FROM = 0.67
-# The area a camera focused on and a subject mask are measured on their own like a face, and start
-# out with the face thresholds until they are calibrated on the reference benchmark (#175).
+# The area a camera focused on and a subject mask are measured on their own like a face, and keep
+# the face's blurry and soft thresholds: on 34 Fujifilm Frames the soft ones measure below 0.5 at
+# the focus point, and smooth subjects that are sharp measure as low as 0.61 (#175). Unlike faces,
+# most sharp subjects measure 0.9 or more (22 of 34 Fujifilm focus points, 292 of 343 Leica subject
+# masks), so full sharpness starts there, leaving room to rank sharp Frames within a Burst.
 FOCUS_BLURRY_BELOW = FACE_BLURRY_BELOW
 FOCUS_SOFT_BELOW = FACE_SOFT_BELOW
-FOCUS_SHARP_FROM = FACE_SHARP_FROM
+FOCUS_SHARP_FROM = 0.9
 MOTION_BLUR_FROM = 0.5
 POSSIBLE_MOTION_BLUR_FROM = 0.35
 EXPOSURE_TOLERANCE_STOPS = 0.7
@@ -198,7 +201,7 @@ class _Assessment:
         return self.worst is None and bool(faces) and all(face.eyes_open for face in faces)
 
     def judgement(self, verdict: Verdict, reasons: list[Reason]) -> Judgement:
-        measured_on, _ = _judged_sharpness(self.analyzed.signals)
+        measured_on, _ = judged_sharpness(self.analyzed.signals)
         return Judgement(verdict, reasons, self.scores, self.faces, measured_on)
 
 
@@ -334,11 +337,11 @@ def _exposure_score(signals: FrameSignals, kind: FrameKind) -> float:
 
 
 def _sharpness_score(signals: FrameSignals) -> float:
-    measured_on, sharpness = _judged_sharpness(signals)
+    measured_on, sharpness = judged_sharpness(signals)
     return _clamp(sharpness / SHARPNESS_RULES[measured_on].sharp_from)
 
 
-def _judged_sharpness(signals: FrameSignals) -> tuple[SharpnessMeasuredOn, float]:
+def judged_sharpness(signals: FrameSignals) -> tuple[SharpnessMeasuredOn, float]:
     """What the Frame's sharpness is judged on, and that sharpness."""
     if signals.faces:
         return "faces", min(face.sharpness for face in signals.faces)
@@ -358,7 +361,7 @@ def _check_face(face: Face) -> FaceCheck:
 
 
 def _sharpness_flaws(analyzed: AnalyzedFrame) -> list[Flaw]:
-    measured_on, sharpness = _judged_sharpness(analyzed.signals)
+    measured_on, sharpness = judged_sharpness(analyzed.signals)
     rule = SHARPNESS_RULES[measured_on]
     if sharpness < rule.blurry_below:
         return [Flaw(rule.blurry, Verdict.REJECT)]

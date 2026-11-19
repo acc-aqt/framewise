@@ -4,6 +4,8 @@ What changed in framewise, written for photographers. The Review UI shows this l
 
 ## Unreleased
 
+## 0.2.0 — 2026-11-19
+
 - framewise runs on Windows x64 as a preview, with the same portable Providers as on Linux. Set it up with `scripts\setup.ps1`. **Rating write-back** uses the color label names from Lightroom Classic's preferences there too.
 - On Windows and Linux, key hints say `Alt+` and `Delete` instead of the Mac symbols.
 - framewise can be installed as one package with the Review UI built in. A machine that runs it from that package with `uvx` needs only ExifTool, with no git clone, Node.js or setup script.

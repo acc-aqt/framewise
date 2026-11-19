@@ -1,6 +1,6 @@
 [project]
 name = "framewise-cull"
-version = "0.1.0"
+version = "0.2.0"
 description = "Cull a photo Session: scan Frames and review them locally."
 authors = [
     { name = "alexander-carrels" }

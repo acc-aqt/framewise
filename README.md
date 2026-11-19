@@ -13,7 +13,29 @@ Built with AI coding agents; design, calibration and review by me.
 
 ## Install
 
-The repo has two parts:
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and [ExifTool](https://exiftool.org/install.html) (`brew install exiftool` on macOS, `sudo apt install libimage-exiftool-perl` on Debian and Ubuntu, `winget install --id OliverBetz.ExifTool` on Windows). Then run framewise straight from [PyPI](https://pypi.org/project/framewise-cull/), where it is published as `framewise-cull`.
+
+On macOS:
+
+```sh
+uvx --python 3.13 --from framewise-cull framewise review /path/to/session-folder
+```
+
+On Linux and Windows, with the [portable Providers](#providers):
+
+```sh
+uvx --python 3.13 --from "framewise-cull[portable]" framewise review /path/to/session-folder
+```
+
+The first run downloads framewise and everything it needs; later runs start straight away. `--python 3.13` keeps uv from picking a newer Python that the portable Providers cannot install on yet. On Linux, MediaPipe's face checks also need the OpenGL, EGL and OpenGL ES libraries (`sudo apt install libgl1 libegl1 libgles2` on Debian and Ubuntu).
+
+uvx keeps using the version it downloaded first. To update to the latest Release, add `@latest` after the name and any extra, such as `--from framewise-cull@latest` or `--from "framewise-cull[portable]@latest"`; to run a given Release, name it, such as `--from framewise-cull==0.2.0`. Each [GitHub Release](https://github.com/acc-aqt/framewise/releases) also carries its wheel, which uvx runs the same way: `--from <wheel file or its URL>`, or `--from "framewise-cull[portable] @ <URL>"` on Linux and Windows.
+
+The commands under [Running it](#running-it) and below are written for a checkout (`uv run framewise …`). With an install from PyPI, put the same `uvx --python 3.13 --from …` you installed with in front of `framewise` instead, with `framewise-cull[portable]` on Linux and Windows.
+
+### From a checkout
+
+To work on framewise, or to run what is on `main` before it is released, set up a clone. The repo has two parts:
 
 - `backend/`: the Python FastAPI backend and the `framewise` command, managed with [`uv`](https://docs.astral.sh/uv/). `uv` installs and pins its own Python, so the system Python is untouched.
 - `frontend/`: the Angular Review UI, which the backend serves.
@@ -45,15 +67,7 @@ powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 
 It installs everything else framewise needs, optional tools included, builds the Review UI and installs the backend. `--help` (`-Help` on Windows) says what it does and on which platforms it runs. Re-running it is safe: after pulling new changes, run it again to update framewise.
 
-### From a wheel
-
-framewise also installs as one package with the Review UI built in. Build the wheel in a set-up checkout (`cd backend && uv build --wheel`), then on any machine with [uv](https://docs.astral.sh/uv/) and [ExifTool](https://exiftool.org), run it without a clone or Node.js:
-
-```sh
-uvx --python 3.13 --from framewise-0.1.0-py3-none-any.whl framewise review /path/to/session-folder
-```
-
-On Linux and Windows, add the [portable Providers](#providers): `uvx --python 3.13 --from "framewise[portable] @ file:///path/to/framewise-0.1.0-py3-none-any.whl" framewise review …`. `--python 3.13` keeps uv from picking a newer Python that the portable Providers cannot install on yet.
+To build the wheel a Release publishes, run `uv build --wheel` in `backend/` of a set-up checkout.
 
 ## Platform support
 
@@ -127,7 +141,7 @@ The portable Providers run on Linux and macOS with free, local models:
 - DINOv2-small, run by onnxruntime, serves `fingerprint` (`dinov2-small-fingerprint`).
 - MediaPipe's Face Landmarker serves `face-detection` (`mediapipe-face-detection`) and `eye-state` (`mediapipe-eye-state`).
 
-On Linux the [setup script](#install) installs them. On macOS, install them with the `portable` extra (`cd backend && uv sync --extra portable`); the setup script keeps them when you run it again. They rank below Apple Vision, so on macOS Apple Vision stays the default ([Platform support](#platform-support)).
+On Linux and Windows, install them with the `portable` extra, as under [Install](#install); in a checkout the [setup script](#from-a-checkout) installs them. On macOS, add the same extra (in a checkout, `cd backend && uv sync --extra portable`); the setup script keeps them when you run it again. They rank below Apple Vision, so on macOS Apple Vision stays the default ([Platform support](#platform-support)).
 
 Their model files are downloaded on first use into a `models` folder next to the Session stores and checked against pinned SHA-256 checksums. On a machine that will analyze offline, fetch them ahead of time with `uv run framewise models download`.
 
@@ -145,7 +159,7 @@ Details:
 - JPGs and DNGs get embedded XMP; other RAWs get an `.xmp` sidecar, merged into any existing one.
 - Label names come from Lightroom Classic's active color label set (for example `Rot` and `Gelb`), read from its preferences on macOS and, on Windows, from `%APPDATA%\Adobe\Lightroom\Preferences\Lightroom Classic CC 7 Preferences.agprefs`.
 - Writing takes a while for large Sessions, because each DNG is rewritten in full. Reloading the page doesn't stop it.
-- framewise needs [ExifTool](https://exiftool.org), which the [setup script](#install) installs. Without it, framewise stops at start-up and says how to install it.
+- framewise needs [ExifTool](https://exiftool.org), which the [setup script](#from-a-checkout) installs and [Install](#install) says how to get. Without it, framewise stops at start-up and says how to install it.
 
 **Reset Session…** on the same screen starts the review over: it undoes the write-back and clears all Overrides, fixed Groups and the Keeper budget. The analysis is kept, so nothing is analyzed again. Stars and labels framewise didn't write, such as in-camera ratings, stay as they are.
 
@@ -157,7 +171,7 @@ The design decisions are recorded as ADRs in [docs/adr/](docs/adr/), and the dom
 
 ## Tests
 
-Set up the checkout as under [Install](#install), then run from the repo root:
+Set up the checkout as under [From a checkout](#from-a-checkout), then run from the repo root:
 
 ```sh
 (cd backend && uv run pytest && uv run ruff check .)

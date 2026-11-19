@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# Checks that a built framewise wheel works on its own, as a photographer
-# installs it: runs `uvx --python 3.13 --from <wheel> framewise review` on a one-Frame
+# Checks that a framewise wheel works on its own, as a photographer installs
+# it: runs `uvx --python 3.13 --from <wheel> framewise review` on a one-Frame
 # Session and checks over HTTP that the Review UI and the Session load and
 # that the Frame gets analyzed.
 #
-# Needs uv, curl and ExifTool, and nothing from the checkout but a test photo.
-# On Linux it installs the wheel with the portable extra, which framewise
-# needs there.
+# --pypi X.Y.Z tests the version published on PyPI instead of a local wheel.
 #
-# Usage: scripts/smoke-test-wheel.sh <wheel> [--help]
+# Needs uv, curl and ExifTool, and nothing from the checkout but a test photo.
+# On Linux it installs framewise with the portable extra, which it needs
+# there.
+#
+# Usage: scripts/smoke-test-wheel.sh <wheel> | --pypi X.Y.Z | --help
 
 set -euo pipefail
 
@@ -21,16 +23,33 @@ fail() {
   exit 1
 }
 
+if [[ "$(uname -s)" == Linux ]]; then
+  extra="[portable]"
+else
+  extra=""
+fi
+
 case "${1:-}" in
   "") fail "give the wheel to test. See scripts/smoke-test-wheel.sh --help." ;;
   -h | --help)
     print_help
     exit 0
     ;;
+  --pypi)
+    [[ "${2:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "give the version to test, such as --pypi 0.2.0."
+    package="framewise-cull$extra==$2"
+    ;;
+  *)
+    wheel="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+    [[ -f "$wheel" ]] || fail "no wheel at $1."
+    if [[ -n "$extra" ]]; then
+      package="framewise-cull$extra @ file://$wheel"
+    else
+      package="$wheel"
+    fi
+    ;;
 esac
 
-wheel="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
-[[ -f "$wheel" ]] || fail "no wheel at $1."
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 port=8765
 url="http://127.0.0.1:$port"
@@ -38,12 +57,6 @@ url="http://127.0.0.1:$port"
 for command in uv curl exiftool; do
   command -v "$command" > /dev/null || fail "$command is not installed."
 done
-
-if [[ "$(uname -s)" == Linux ]]; then
-  package="framewise[portable] @ file://$wheel"
-else
-  package="$wheel"
-fi
 
 fetch() {
   curl --silent --fail "$url$1" || true
@@ -96,4 +109,4 @@ done
 }
 cat "$scratch/log"
 
-echo "smoke-test: the wheel serves the Review UI with the Session and the Changelog, and analyzes the Frame."
+echo "smoke-test: $package serves the Review UI with the Session and the Changelog, and analyzes the Frame."

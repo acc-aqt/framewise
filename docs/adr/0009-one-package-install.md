@@ -1,6 +1,6 @@
 # ADR-0009: framewise installs as one package
 
-**Status:** Accepted — 2026-11-19
+**Status:** Accepted — 2026-11-19. Amended by ADR-0010 — 2026-11-19.
 
 ## Context
 
@@ -18,12 +18,12 @@ framewise was installed from a clone with `scripts/setup.sh` or `scripts/setup.p
 ## Considered Options
 
 - **A script that builds the Review UI into the source tree before `uv build`.** Rejected: plain `uv build` would then make a wheel without the Review UI.
-- **Publishing to PyPI now.** Deferred: the wheel comes first. Where photographers download it from is a follow-up.
+- **Publishing to PyPI now.** Deferred: the wheel comes first. ADR-0010 publishes it with each Release.
 - **Keeping ExifTool optional and failing only at Rating write-back.** Rejected: the failure came late and as a traceback, and write-back is the point of a review.
 
 ## Consequences
 
-- Nothing publishes the wheel yet, so photographers still build it from a checkout or receive one.
+- Until ADR-0010, nothing published the wheel, so photographers built it from a checkout or received one.
 - On Linux, MediaPipe's face checks need the OpenGL, EGL and OpenGL ES libraries, which `scripts/setup.sh` installs and a machine with only ExifTool lacks. The CI smoke test checks that a Frame is still analyzed without them, but not that its faces are checked.
 - The Review UI build runs inside the wheel build, so building a wheel needs Node.js.
 - When uv has to download a Python, `uvx` picks the newest one and ignores the package's supported versions. onnxruntime, in the `portable` extra, has no Python 3.15 wheels yet, so the install command names Python 3.13, the version CI tests. The package also allows only Python below 3.15, so a newer Python fails with a clear resolver error.

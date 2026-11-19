@@ -1,5 +1,5 @@
 [project]
-name = "framewise"
+name = "framewise-cull"
 version = "0.1.0"
 description = "Cull a photo Session: scan Frames and review them locally."
 authors = [

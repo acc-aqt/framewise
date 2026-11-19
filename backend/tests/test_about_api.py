@@ -10,7 +10,7 @@ from framewise.server import SessionPicker
 def test_about_names_the_running_version(review):
     about = review().get("/api/about").json()
 
-    assert about["version"] == version("framewise")
+    assert about["version"] == version("framewise-cull")
 
 
 def test_about_answers_before_a_session_is_open():
@@ -18,7 +18,7 @@ def test_about_answers_before_a_session_is_open():
 
     about = TestClient(picker).get("/api/about").json()
 
-    assert about["version"] == version("framewise")
+    assert about["version"] == version("framewise-cull")
 
 
 def changelog(client) -> list[dict]:
@@ -75,7 +75,10 @@ def test_about_lists_the_changelog_newest_first(review, tmp_path):
 def test_about_has_no_changelog_when_the_file_is_missing(review, tmp_path):
     client = review(changelog_path=tmp_path / "CHANGELOG.md")
 
-    assert client.get("/api/about").json() == {"version": version("framewise"), "changelog": []}
+    assert client.get("/api/about").json() == {
+        "version": version("framewise-cull"),
+        "changelog": [],
+    }
 
 
 @pytest.mark.parametrize(
@@ -133,4 +136,4 @@ def test_the_changelog_is_in_the_shape_the_review_ui_shows(review):
     assert entries, "CHANGELOG.md is missing or out of shape, see ADR-0007"
     released = [entry["version"] for entry in entries if entry["version"] is not None]
     if released:
-        assert released[0] == version("framewise")
+        assert released[0] == version("framewise-cull")

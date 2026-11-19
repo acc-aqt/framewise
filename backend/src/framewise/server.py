@@ -379,7 +379,7 @@ def _add_about(app: FastAPI, changelog_path: Path | None) -> None:
     @app.get("/api/about")
     def about() -> dict:
         return {
-            "version": version("framewise"),
+            "version": version("framewise-cull"),
             "changelog": [asdict(entry) for entry in read_changelog(changelog_path)],
         }
 

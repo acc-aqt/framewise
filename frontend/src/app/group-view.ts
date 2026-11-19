@@ -14,7 +14,7 @@ import { FrameTile } from './frame-tile';
 import { Icon } from './icon';
 import { findWinner, scoreBreakdown } from './proposal';
 import { Frame, Group } from './session-api';
-import { commandById } from './shortcuts';
+import { commandById, PlatformKeyPipe } from './shortcuts';
 import { Tooltip, TooltipContent } from './tooltip';
 
 const SHORTCUT_HINTS = [
@@ -53,7 +53,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
 @Component({
   selector: 'app-group-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FrameTile, Icon, NgTemplateOutlet, Tooltip],
+  imports: [FrameTile, Icon, NgTemplateOutlet, PlatformKeyPipe, Tooltip],
   host: { 'data-testid': 'group-view' },
   template: `
     <div class="toolbar">
@@ -141,7 +141,7 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
       <span class="keys">
         @for (hint of shortcutHints; track hint.label) {
           <span class="hint"
-            ><kbd class="key">{{ hint.keys }}</kbd> {{ hint.label }}</span
+            ><kbd class="key">{{ hint.keys | platformKey }}</kbd> {{ hint.label }}</span
           >
         }
       </span>

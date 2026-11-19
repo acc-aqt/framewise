@@ -1,5 +1,5 @@
 """framewise's portable face Providers, built on MediaPipe's Face Landmarker. They need the
-framewise[portable] extra and report themselves unavailable without it."""
+framewise-cull[portable] extra and report themselves unavailable without it."""
 
 import math
 import threading

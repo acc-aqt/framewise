@@ -30,7 +30,7 @@ pytestmark = pytest.mark.skipif(
     not (
         MediaPipeFaceDetection().is_available() and is_verified(FACE_LANDMARKER, resolve_data_dir())
     ),
-    reason="needs framewise[portable] and its models, from `framewise models download`",
+    reason="needs framewise-cull[portable] and its models, from `framewise models download`",
 )
 
 FACES = Path(__file__).parent / "fixtures" / "faces"

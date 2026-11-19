@@ -12,6 +12,7 @@ framewise analyzes each Frame's Analysis source with one Provider per Capability
 | `face-quality` | `face_quality(jpg_path, faces)` | For each box, a score from 0 to 1, or `None`. |
 | `expression` | `expression(jpg_path, faces)` | For each box, an `Expression`, or `None` (cannot read the face). |
 | `aesthetics` | `aesthetics(jpg_path)` | A score from 0 to 1, or `None`. |
+| `subject` | `subject_mask(jpg_path)` | A mask of the Frame's main subject, or `None` where it finds none. |
 
 The protocols are in `backend/src/framewise/providers.py`. `jpg_path` is a `pathlib.Path` to the Frame's JPG.
 
@@ -38,6 +39,15 @@ The face detection Provider alone decides which faces a Frame has. The eye state
 framewise's MediaPipe Provider reads `looking` relative to the head, not the camera: a head turned away whose eyes look back into the lens scores low on both `looking` and `facing`.
 
 Leave any part your Provider cannot tell as `None`; `looking` and `facing` default to it. framewise weighs the parts a face has into one expression, the smile 0.4 and the other two 0.3 each, and ranks a Frame by its weakest face's expression. Expression never counts as a flaw.
+
+### Subject masks
+
+A subject mask is a greyscale `PIL.Image.Image` (mode `"L"`):
+
+- covering the Frame as it is displayed, after its EXIF orientation, at any size: framewise stretches it over the Frame;
+- 255 inside the subject and 0 outside it.
+
+framewise measures sharpness on the mask's pixels alone, shrunk by a few pixels so the subject's outline against the background doesn't count. A Frame without faces is judged on that sharpness, unless its camera recorded a focus point, which wins. framewise ignores a mask too small to measure.
 
 ### Scales
 

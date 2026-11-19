@@ -19,7 +19,7 @@ EXIF_RATING_TAG = 0x4746
 EXIF_IFD_TAG = 0x8769
 DATE_TIME_ORIGINAL_TAG = 0x9003
 SUBSEC_TIME_ORIGINAL_TAG = 0x9291
-BACKGROUND_PRIORITY_PLATFORMS = ("darwin", "linux")
+BACKGROUND_PRIORITY_PLATFORMS = ("darwin", "linux", "win32")
 
 
 def xmp_packet(stars: int | None = None, label: str | None = None) -> bytes:
@@ -76,6 +76,13 @@ def make_raw(path: Path, stars: int | None = None, label: str | None = None) -> 
 def make_sidecar(path: Path, stars: int | None = None, label: str | None = None) -> Path:
     path.write_bytes(xmp_packet(stars, label))
     return path
+
+
+@pytest.fixture(autouse=True)
+def no_focus_point_reader(monkeypatch):
+    """Analysis reads no focus points, so what it signs and measures doesn't depend on whether
+    ExifTool is installed where the tests run."""
+    monkeypatch.setattr("framewise.providers.find_exiftool", lambda: None)
 
 
 @pytest.fixture
@@ -173,7 +180,17 @@ class FakeAnalyzer:
         return FrameSignals(fingerprint=fingerprint, **(CLEAN_SIGNALS | scripted))
 
 
+THREAD_PRIORITY_NORMAL = 0
+
+
 def _at_background_priority() -> bool:
+    if sys.platform == "win32":
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        kernel32.GetCurrentThread.restype = ctypes.c_void_p
+        kernel32.GetThreadPriority.argtypes = [ctypes.c_void_p]
+        return kernel32.GetThreadPriority(kernel32.GetCurrentThread()) < THREAD_PRIORITY_NORMAL
     if sys.platform == "darwin":
         return os.getpriority(os.PRIO_DARWIN_THREAD, 0) != 0
     return os.getpriority(os.PRIO_PROCESS, threading.get_native_id()) > 0

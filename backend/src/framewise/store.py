@@ -14,6 +14,7 @@ from framewise.analyzer import (
     Face,
     FrameSignals,
     ProviderSignature,
+    Subject,
 )
 from framewise.camera_rating import CameraRating
 from framewise.scan import ScannedFrame
@@ -438,7 +439,13 @@ def _signals_without_fingerprint(signals: FrameSignals) -> dict:
 def _signals(row: sqlite3.Row) -> FrameSignals:
     values = json.loads(row["signals"])
     faces = [_face(face) for face in values.pop("faces")]
-    return FrameSignals(fingerprint=array("f", row["fingerprint"]).tolist(), faces=faces, **values)
+    subject = values.pop("subject")
+    return FrameSignals(
+        fingerprint=array("f", row["fingerprint"]).tolist(),
+        faces=faces,
+        subject=None if subject is None else Subject(**subject),
+        **values,
+    )
 
 
 def _face(values: dict) -> Face:

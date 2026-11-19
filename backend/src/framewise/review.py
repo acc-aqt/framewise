@@ -24,9 +24,12 @@ LOWEST_PRIORITY_NICENESS = 19
 
 
 def default_data_dir(platform: str, environ: Mapping[str, str], home: Path) -> Path:
-    """Application Support on macOS, the XDG data directory elsewhere."""
+    """Application Support on macOS, local application data on Windows, the XDG data directory
+    elsewhere."""
     if platform == "darwin":
         return home / "Library" / "Application Support" / "framewise"
+    if platform == "win32":
+        return Path(environ.get("LOCALAPPDATA") or home / "AppData" / "Local") / "framewise"
     return Path(environ.get("XDG_DATA_HOME") or home / ".local" / "share") / "framewise"
 
 
@@ -41,7 +44,9 @@ def resolve_config_path() -> Path:
 
 
 def session_database_path(root: Path, data_dir: Path) -> Path:
-    digest = hashlib.sha256(str(root).encode()).hexdigest()[:16]
+    """One store per Session folder. On Windows, where paths ignore case, a folder reached
+    through a differently cased path is the same Session."""
+    digest = hashlib.sha256(os.path.normcase(root).encode()).hexdigest()[:16]
     return data_dir / f"{root.name}-{digest}.sqlite"
 
 
@@ -218,6 +223,21 @@ class SessionAnalysis:
             return
         if sys.platform == "darwin":
             os.setpriority(os.PRIO_DARWIN_THREAD, 0, os.PRIO_DARWIN_BG)
+        elif sys.platform == "win32":
+            _enter_windows_background_mode()
         elif sys.platform == "linux":
             # Linux keeps a niceness per thread, addressed by its thread id.
             os.setpriority(os.PRIO_PROCESS, threading.get_native_id(), LOWEST_PRIORITY_NICENESS)
+
+
+THREAD_MODE_BACKGROUND_BEGIN = 0x00010000
+
+
+def _enter_windows_background_mode() -> None:
+    """Lowers this thread's CPU and I/O priority, like macOS's background thread priority."""
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32
+    kernel32.GetCurrentThread.restype = ctypes.c_void_p
+    kernel32.SetThreadPriority.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    kernel32.SetThreadPriority(kernel32.GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN)

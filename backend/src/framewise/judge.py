@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import PurePosixPath
 
-from framewise.analyzer import Face, FrameSignals
+from framewise.analyzer import Expression, Face, FrameSignals
 from framewise.camera_rating import CameraRating
 from framewise.store import AnalyzedFrame, FrameKind
 
@@ -53,6 +53,10 @@ WEIGHTS = {
     "face_quality": 0.2,
     "expression": 0.1,
 }
+# How a face's smile, its eyes looking into the lens and its head facing the camera weigh into
+# its expression. A part the Provider cannot read is left out and the others are weighed alone,
+# so a neutral face looking into the camera still scores well.
+EXPRESSION_WEIGHTS = {"smile": 0.4, "looking": 0.3, "facing": 0.3}
 EYES_CLOSED = "eyes-closed"
 
 
@@ -301,12 +305,29 @@ def _face_quality(faces: list[Face]) -> float | None:
 
 
 def _expression(faces: list[Face]) -> float | None:
-    smiles = [
-        face.expression.smile
+    expressions = [
+        expression
         for face in faces
-        if face.expression is not None and face.expression.smile is not None
+        if face.expression is not None
+        and (expression := _face_expression(face.expression)) is not None
     ]
-    return _clamp(min(smiles)) if smiles else None
+    return _clamp(min(expressions)) if expressions else None
+
+
+def _face_expression(expression: Expression) -> float | None:
+    """The weighted mean of the parts of the face's expression that the Provider could read."""
+    parts = [
+        (value, EXPRESSION_WEIGHTS[name])
+        for name, value in (
+            ("smile", expression.smile),
+            ("looking", expression.looking),
+            ("facing", expression.facing),
+        )
+        if value is not None
+    ]
+    if not parts:
+        return None
+    return sum(value * weight for value, weight in parts) / sum(weight for _, weight in parts)
 
 
 def _check_face(face: Face) -> FaceCheck:

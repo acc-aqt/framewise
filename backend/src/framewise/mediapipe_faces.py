@@ -1,6 +1,7 @@
 """framewise's portable face Providers, built on MediaPipe's Face Landmarker. They need the
 framewise[portable] extra and report themselves unavailable without it."""
 
+import math
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,6 +33,20 @@ BLINKS = ("eyeBlinkLeft", "eyeBlinkRight")
 # sits between them.
 EYES_CLOSED_FROM = 0.5
 SMILES = ("mouthSmileLeft", "mouthSmileRight")
+# Each direction the eyes can look, as the blendshapes of both eyes looking that way. They run
+# from 0 for eyes looking straight ahead from the head to 1 for eyes turned fully that way, so
+# they say where the eyes look relative to the head, not to the camera.
+EYE_LOOKS = (
+    ("eyeLookOutLeft", "eyeLookInRight"),
+    ("eyeLookInLeft", "eyeLookOutRight"),
+    ("eyeLookUpLeft", "eyeLookUpRight"),
+    ("eyeLookDownLeft", "eyeLookDownRight"),
+)
+# How far the head may turn, in degrees of yaw and pitch combined, and still face the camera
+# fully, and from how far it is turned away. On the reference faces, frontal portraits read 7 to
+# 9 degrees, mostly pitch, and a three-quarter profile 34 degrees.
+FACING_WITHIN_DEGREES = 15.0
+TURNED_AWAY_FROM_DEGREES = 40.0
 MIN_OVERLAP = 0.3
 """How much a box from another detector must overlap a landmarked face to be read as it."""
 CROP_SIZE = 2.0
@@ -67,7 +82,7 @@ class MediaPipeEyeState(_MediaPipeProvider):
 class MediaPipeExpression(_MediaPipeProvider):
     capability = EXPRESSION
     id = "mediapipe-expression"
-    version = 2
+    version = 3
 
     def expression(self, jpg_path: Path, faces: list[Region]) -> list[Expression | None]:
         return [_expression(face) for face in _faces_in_boxes(jpg_path, faces)]
@@ -81,6 +96,11 @@ class _LandmarkedFace:
     """The mean of both eyes' blink blendshapes."""
     smile: float
     """The mean of both mouth corners' smile blendshapes."""
+    looking: float
+    """From 0 for eyes turned fully to one side, up or down to 1 for eyes looking straight
+    ahead from the head."""
+    facing: float
+    """From 0 for a head turned away from the camera to 1 for a head facing it."""
 
 
 _this_thread = threading.local()
@@ -141,9 +161,12 @@ def _box_in_crop(box: Region, crop: tuple[int, int, int, int], frame: Image.Imag
 def _landmark(image: Image.Image) -> list[_LandmarkedFace]:
     result = _landmarker().detect(mediapipe.Image(mediapipe.ImageFormat.SRGB, numpy.asarray(image)))
     return [
-        _landmarked_face(landmarks, blendshapes)
-        for landmarks, blendshapes in zip(
-            result.face_landmarks, result.face_blendshapes, strict=True
+        _landmarked_face(landmarks, blendshapes, matrix)
+        for landmarks, blendshapes, matrix in zip(
+            result.face_landmarks,
+            result.face_blendshapes,
+            result.facial_transformation_matrixes,
+            strict=True,
         )
     ]
 
@@ -159,6 +182,7 @@ def _landmarker():
             num_faces=MAX_FACES,
             min_face_detection_confidence=MIN_DETECTION_CONFIDENCE,
             output_face_blendshapes=True,
+            output_facial_transformation_matrixes=True,
         )
         landmarker = FaceLandmarker.create_from_options(options)
         _this_thread.landmarker = landmarker
@@ -171,11 +195,26 @@ def _box(landmarks) -> Region:
     return min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
 
 
-def _landmarked_face(landmarks, blendshapes) -> _LandmarkedFace:
+def _landmarked_face(landmarks, blendshapes, matrix) -> _LandmarkedFace:
     scores = {category.category_name: category.score for category in blendshapes}
     return _LandmarkedFace(
-        _box(landmarks), blink=_mean(scores, BLINKS), smile=_mean(scores, SMILES)
+        _box(landmarks),
+        blink=_mean(scores, BLINKS),
+        smile=_mean(scores, SMILES),
+        looking=1 - max(_mean(scores, look) for look in EYE_LOOKS),
+        facing=_facing(matrix),
     )
+
+
+def _facing(matrix) -> float:
+    """How fully the head faces the camera, from the yaw and pitch of the landmarker's facial
+    transformation matrix."""
+    rotation = numpy.asarray(matrix)[:3, :3]
+    yaw = math.degrees(math.atan2(-rotation[2, 0], math.hypot(rotation[2, 1], rotation[2, 2])))
+    pitch = math.degrees(math.atan2(rotation[2, 1], rotation[2, 2]))
+    turned = math.hypot(yaw, pitch)
+    span = TURNED_AWAY_FROM_DEGREES - FACING_WITHIN_DEGREES
+    return 1 - _clamp((turned - FACING_WITHIN_DEGREES) / span)
 
 
 def _mean(scores: dict[str, float], names: tuple[str, ...]) -> float:
@@ -204,7 +243,9 @@ def _eyes_open(face: _LandmarkedFace | None) -> bool | None:
 
 
 def _expression(face: _LandmarkedFace | None) -> Expression | None:
-    return None if face is None else Expression(smile=face.smile)
+    if face is None:
+        return None
+    return Expression(smile=face.smile, looking=face.looking, facing=face.facing)
 
 
 def _clamp(value: float) -> float:

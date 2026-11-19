@@ -113,6 +113,7 @@ def judgement(verdict: Verdict) -> Judgement:
         exposure=1,
         aesthetics=None,
         face_quality=None,
+        expression=None,
         camera_rating=0,
         total=1,
     )

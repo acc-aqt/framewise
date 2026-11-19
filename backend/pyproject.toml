@@ -34,6 +34,7 @@ apple-vision-aesthetics = "framewise.apple_vision:AppleAesthetics"
 apple-vision-subject = "framewise.apple_vision:AppleSubject"
 mediapipe-face-detection = "framewise.mediapipe_faces:MediaPipeFaceDetection"
 mediapipe-eye-state = "framewise.mediapipe_faces:MediaPipeEyeState"
+mediapipe-expression = "framewise.mediapipe_faces:MediaPipeExpression"
 dinov2-small-fingerprint = "framewise.dinov2_fingerprint:DinoV2Fingerprint"
 
 [build-system]

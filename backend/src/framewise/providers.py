@@ -15,6 +15,7 @@ from framewise.analyzer import (
     ActiveProvider,
     AlternativeProvider,
     CapabilityLineup,
+    Expression,
     Face,
     FrameSignals,
     ProviderLineup,
@@ -30,9 +31,18 @@ FINGERPRINT = "fingerprint"
 FACE_DETECTION = "face-detection"
 EYE_STATE = "eye-state"
 FACE_QUALITY = "face-quality"
+EXPRESSION = "expression"
 AESTHETICS = "aesthetics"
 SUBJECT = "subject"
-CAPABILITIES = (FINGERPRINT, FACE_DETECTION, EYE_STATE, FACE_QUALITY, AESTHETICS, SUBJECT)
+CAPABILITIES = (
+    FINGERPRINT,
+    FACE_DETECTION,
+    EYE_STATE,
+    FACE_QUALITY,
+    EXPRESSION,
+    AESTHETICS,
+    SUBJECT,
+)
 ENTRY_POINT_GROUP = "framewise.providers"
 
 FOCUS_POINT = "focus-point"
@@ -93,6 +103,12 @@ class FaceQualityProvider(Provider, Protocol):
         ...
 
 
+class ExpressionProvider(Provider, Protocol):
+    def expression(self, jpg_path: Path, faces: list[Region]) -> list[Expression | None]:
+        """For each face, its expression, or None where it cannot read the face."""
+        ...
+
+
 class AestheticsProvider(Provider, Protocol):
     def aesthetics(self, jpg_path: Path) -> float | None:
         """A score from 0 to 1, or None where it cannot tell."""
@@ -110,9 +126,9 @@ class SubjectProvider(Provider, Protocol):
 class ProviderAnalyzer:
     """Analyzes a Frame's Analysis source with one Provider per Capability and the built-in
     image maths. The face detection Provider alone decides which faces a Frame has; the eye
-    state and face quality Providers and the image maths look inside its boxes. The image maths
-    also measure the subject: the area the camera focused on, where `focus_area` finds one, else
-    the subject Provider's mask."""
+    state, face quality and expression Providers and the image maths look inside its boxes. The
+    image maths also measure the subject: the area the camera focused on, where `focus_area`
+    finds one, else the subject Provider's mask."""
 
     def __init__(
         self,
@@ -120,6 +136,7 @@ class ProviderAnalyzer:
         face_detection: FaceDetectionProvider | None = None,
         eye_state: EyeStateProvider | None = None,
         face_quality: FaceQualityProvider | None = None,
+        expression: ExpressionProvider | None = None,
         aesthetics: AestheticsProvider | None = None,
         subject: SubjectProvider | None = None,
         *,
@@ -130,6 +147,7 @@ class ProviderAnalyzer:
         self.face_detection = face_detection
         self.eye_state = eye_state
         self.face_quality = face_quality
+        self.expression = expression
         self.aesthetics = aesthetics
         self.subject = subject
         self.provider_lineup = provider_lineup
@@ -146,6 +164,7 @@ class ProviderAnalyzer:
             self.face_detection,
             self.eye_state,
             self.face_quality,
+            self.expression,
             self.aesthetics,
             self.subject,
         )
@@ -198,10 +217,21 @@ class ProviderAnalyzer:
             if self.face_quality and boxes
             else unknown_per_face
         )
+        expressions = (
+            self.expression.expression(jpg_path, boxes)
+            if self.expression and boxes
+            else unknown_per_face
+        )
         return [
-            Face(*box, eyes_open=open_eyes, sharpness=face_sharpness, quality=face_quality)
-            for box, open_eyes, face_sharpness, face_quality in zip(
-                boxes, eyes, sharpness, quality, strict=True
+            Face(
+                *box,
+                eyes_open=open_eyes,
+                sharpness=face_sharpness,
+                quality=face_quality,
+                expression=expression,
+            )
+            for box, open_eyes, face_sharpness, face_quality, expression in zip(
+                boxes, eyes, sharpness, quality, expressions, strict=True
             )
             if face_sharpness is not None
         ]
@@ -320,6 +350,7 @@ def _compose(
         face_detection=chosen.get(FACE_DETECTION),
         eye_state=chosen.get(EYE_STATE),
         face_quality=chosen.get(FACE_QUALITY),
+        expression=chosen.get(EXPRESSION),
         aesthetics=chosen.get(AESTHETICS),
         subject=chosen.get(SUBJECT),
         provider_lineup=_describe_provider_lineup(installed, chosen, overrides),

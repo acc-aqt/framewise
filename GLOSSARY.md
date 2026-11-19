@@ -36,7 +36,7 @@ _Avoid_: Cache, catalog, index
 ## Analysis
 
 **Capability**:
-One kind of signal framewise reads from a Frame's Analysis source, such as its fingerprint, its faces, whether those faces' eyes are open, face quality, aesthetics or its main subject.
+One kind of signal framewise reads from a Frame's Analysis source, such as its fingerprint, its faces, whether those faces' eyes are open, face quality, the faces' expression, aesthetics or its main subject.
 _Avoid_: Feature, model, check
 
 **Provider**:

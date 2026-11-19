@@ -7,7 +7,8 @@ Unsure or Rejects. The Keeper budget decides how many of the remaining Frames, b
 the whole Session, become Keepers; the rest are Rejects.
 
 A Frame with faces is judged on its faces: its sharpness is that of its softest face, and every
-face must have open eyes and be sharp for the Frame to pass. A Frame without faces is judged on
+face must have open eyes and be sharp for the Frame to pass. Its face quality and expression are
+those of its weakest face, and only rank it, never Flaw it. A Frame without faces is judged on
 the sharpness of the area its camera focused on where it recorded one, else of its main subject
 where the subject Provider found one, else of the whole Frame.
 
@@ -23,7 +24,7 @@ from enum import StrEnum
 from pathlib import PurePosixPath
 from typing import Literal
 
-from framewise.analyzer import Face, FrameSignals
+from framewise.analyzer import Expression, Face, FrameSignals
 from framewise.camera_rating import CameraRating
 from framewise.store import AnalyzedFrame, FrameKind
 
@@ -61,7 +62,12 @@ WEIGHTS = {
     "exposure": 0.2,
     "aesthetics": 0.3,
     "face_quality": 0.2,
+    "expression": 0.1,
 }
+# How a face's smile, its eyes looking into the lens and its head facing the camera weigh into
+# its expression. A part the Provider cannot read is left out and the others are weighed alone,
+# so a neutral face looking into the camera still scores well.
+EXPRESSION_WEIGHTS = {"smile": 0.4, "looking": 0.3, "facing": 0.3}
 EYES_CLOSED = "eyes-closed"
 
 
@@ -137,6 +143,8 @@ class Scores:
     aesthetics: float | None
     face_quality: float | None
     """The quality of the Frame's weakest face, or None without faces."""
+    expression: float | None
+    """The expression of the Frame's weakest face, or None without faces."""
     camera_rating: float
     """The hint a Camera rating adds to the total, or 0 without one."""
     total: float
@@ -315,6 +323,7 @@ def _scores(analyzed: AnalyzedFrame) -> Scores:
         "exposure": _exposure_score(signals, analyzed.frame.kind),
         "aesthetics": None if signals.aesthetics is None else _clamp(signals.aesthetics),
         "face_quality": _face_quality(signals.faces),
+        "expression": _expression(signals.faces),
     }
     available = {name: value for name, value in components.items() if value is not None}
     total_weight = sum(WEIGHTS[name] for name in available)
@@ -353,6 +362,32 @@ def judged_sharpness(signals: FrameSignals) -> tuple[SharpnessMeasuredOn, float]
 def _face_quality(faces: list[Face]) -> float | None:
     qualities = [face.quality for face in faces if face.quality is not None]
     return _clamp(min(qualities)) if qualities else None
+
+
+def _expression(faces: list[Face]) -> float | None:
+    expressions = [
+        expression
+        for face in faces
+        if face.expression is not None
+        and (expression := _face_expression(face.expression)) is not None
+    ]
+    return _clamp(min(expressions)) if expressions else None
+
+
+def _face_expression(expression: Expression) -> float | None:
+    """The weighted mean of the parts of the face's expression that the Provider could read."""
+    parts = [
+        (value, EXPRESSION_WEIGHTS[name])
+        for name, value in (
+            ("smile", expression.smile),
+            ("looking", expression.looking),
+            ("facing", expression.facing),
+        )
+        if value is not None
+    ]
+    if not parts:
+        return None
+    return sum(value * weight for value, weight in parts) / sum(weight for _, weight in parts)
 
 
 def _check_face(face: Face) -> FaceCheck:

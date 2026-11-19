@@ -218,6 +218,7 @@ def test_each_frame_carries_its_score_breakdown_and_signals(session_dir, review,
         "exposure",
         "aesthetics",
         "face_quality",
+        "expression",
         "camera_rating",
         "total",
     }

@@ -4,6 +4,9 @@ What changed in framewise, written for photographers. The Review UI shows this l
 
 ## Unreleased
 
+- Faces are read for their expression: a smile, eyes looking into the lens and a head facing the camera. Within a Group, a Frame where everyone smiles and looks at the camera ranks above one where someone does not; expression never makes a Frame a Reject. An open Group and the loupe show a badge on each face. Needs an `expression` Provider, which the portable MediaPipe Provider serves on macOS, Linux and Windows.
+- Someone who glances back over their shoulder into the lens counts as looking at the camera, whichever way their head is turned. A Frame where they do ranks above one where they look away.
+
 ## 0.2.0 — 2026-11-19
 
 - framewise runs on Windows x64 as a preview, with the same portable Providers as on Linux. Set it up with `scripts\setup.ps1`. **Rating write-back** uses the color label names from Lightroom Classic's preferences there too.

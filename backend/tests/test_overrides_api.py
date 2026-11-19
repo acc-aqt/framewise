@@ -1,7 +1,12 @@
+import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 
-from conftest import make_jpg
+import pytest
+from conftest import make_jpg, review_app
 from test_verdicts_api import keep_every_clean_frame
+
+from framewise.review import SessionAnalysis, open_session
 
 START = datetime(2026, 6, 20, 14, 30, 0)
 BEACH = [1.0, 0.0, 0.0]
@@ -128,6 +133,23 @@ def test_overrides_survive_a_re_run_with_re_analysis(session_dir, review, analyz
     changed = frames_by_name(client)["DSCF0002.JPG"]
     assert changed["verdict"] == "unsure"
     assert changed["override"] == {"verdict": "unsure", "stars": 2, "label": None}
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows paths ignore case")
+def test_reopening_a_session_through_a_differently_cased_path_reuses_its_store(
+    session_dir, data_dir, review, analyzer
+):
+    burst(session_dir, analyzer, ("DSCF0001", {"aesthetics": 0.7}), ("DSCF0002", {}))
+    override(review(), "DSCF0002.JPG", verdict="reject", stars=1)
+    analyzer.analyzed.clear()
+
+    store = open_session(Path(str(session_dir).swapcase()), data_dir)
+    analysis = SessionAnalysis(store, analyzer)
+    analysis.run()
+    client = review_app(store, analysis)
+
+    assert analyzer.analyzed == []
+    assert frames_by_name(client)["DSCF0002.JPG"]["override"]["verdict"] == "reject"
 
 
 def test_choosing_a_new_winner_re_judges_the_previous_winner(session_dir, review, analyzer):

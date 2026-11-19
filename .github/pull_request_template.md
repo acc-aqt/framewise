@@ -1,0 +1,1 @@
+- [ ] Changes a photographer can notice have a line under `## Unreleased` in `CHANGELOG.md` (internal changes need none)

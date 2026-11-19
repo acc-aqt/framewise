@@ -24,7 +24,7 @@ SOFT = {"sharpness": 0.3}
 
 def exiftool(*args: str | Path) -> str:
     return subprocess.run(
-        [EXIFTOOL, *map(str, args)], check=True, capture_output=True, text=True
+        [EXIFTOOL, *map(str, args)], check=True, capture_output=True, encoding="utf-8"
     ).stdout
 
 
@@ -265,6 +265,62 @@ def test_label_names_come_from_the_active_lightroom_color_label_set(
     assert dry_run["notice"] is None
     assert rating(reject)["label"] == "Rot"
     assert rating(unsure)["label"] == "Gelb"
+
+
+AGPREFS = (
+    Path(__file__).parent / "fixtures" / "lightroom" / "Lightroom Classic CC 7 Preferences.agprefs"
+)
+
+
+def test_on_windows_label_names_come_from_lightroom_classics_agprefs(session_dir, review, analyzer):
+    jpg(session_dir, analyzer, "DSCF0001.JPG", aesthetics=0.75)
+    reject = jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3, **BLURRY)
+    unsure = jpg(session_dir, analyzer, "DSCF0003.JPG", 0.6, **SOFT)
+    client = review(lightroom_preferences=AGPREFS)
+
+    dry_run = client.get("/api/write-back").json()
+    client.post("/api/write-back")
+
+    assert dry_run["label_set"] == {
+        "red": "Rot",
+        "yellow": "Gelb",
+        "green": "Grün",
+        "blue": "Blau",
+        "purple": "Lila",
+        "from_lightroom": True,
+    }
+    assert dry_run["notice"] is None
+    assert rating(reject)["label"] == "Rot"
+    assert rating(unsure)["label"] == "Gelb"
+
+
+@pytest.mark.parametrize(
+    "agprefs",
+    [
+        pytest.param('prefs = {\n\tlabel1 = "Rot",\n\tlabel2 = "Gelb",\n}\n', id="labels missing"),
+        pytest.param(
+            'prefs = {\n\tlabel1 = "Rot",\n\tlabel2 = "",\n\tlabel3 = "Grün",\n'
+            '\tlabel4 = "Blau",\n\tlabel5 = "Lila",\n}\n',
+            id="a label empty",
+        ),
+        pytest.param("not lua at all \x00\xff", id="garbage"),
+    ],
+)
+def test_an_unreadable_agprefs_falls_back_to_the_english_defaults(
+    session_dir, review, analyzer, tmp_path, agprefs
+):
+    reject = jpg(session_dir, analyzer, "DSCF0002.JPG", 0.3, **BLURRY)
+    jpg(session_dir, analyzer, "DSCF0001.JPG", aesthetics=0.75)
+    preferences = tmp_path / "Lightroom Classic CC 7 Preferences.agprefs"
+    preferences.write_bytes(agprefs.encode("utf-8", "surrogateescape"))
+    client = review(lightroom_preferences=preferences)
+
+    dry_run = client.get("/api/write-back").json()
+    client.post("/api/write-back")
+
+    assert dry_run["label_set"]["from_lightroom"] is False
+    assert "English defaults" in dry_run["notice"]
+    assert rating(reject)["label"] == "Red"
 
 
 def test_without_a_lightroom_label_set_the_english_defaults_are_used_and_the_dry_run_says_so(

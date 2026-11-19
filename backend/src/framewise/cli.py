@@ -15,7 +15,8 @@ from fastapi import FastAPI
 from starlette.types import ASGIApp
 
 from framewise.analyzer import FrameAnalyzer
-from framewise.exiftool import ExifTool
+from framewise.changelog import CHANGELOG_PATH
+from framewise.exiftool import ExifTool, exiftool_install_hint, find_exiftool
 from framewise.lightroom import LIGHTROOM_PREFERENCES
 from framewise.models import MODELS, Model, ModelError, ensure_model
 from framewise.providers import ProviderError, resolve_analyzer
@@ -31,11 +32,18 @@ from framewise.server import LocalOnly, SessionPicker, create_app
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
-UI_DIR = Path(__file__).resolve().parents[3] / "frontend" / "dist" / "frontend" / "browser"
+PACKAGED_UI_DIR = Path(__file__).resolve().parent / "review_ui"
+UI_DIR = (
+    PACKAGED_UI_DIR
+    if PACKAGED_UI_DIR.is_dir()
+    else PACKAGED_UI_DIR.parents[3] / "frontend" / "dist" / "frontend" / "browser"
+)
+"""The Review UI an installed wheel carries, or the checkout's build when running from a clone."""
 
 Serve = Callable[[ASGIApp, str, int, Callable[[], None]], None]
 ChooseFolder = Callable[[], Path | None]
 KeepAwake = Callable[[], AbstractContextManager[object]]
+FindExifTool = Callable[[], str | None]
 
 
 def serve_with_uvicorn(app: ASGIApp, host: str, port: int, on_ready: Callable[[], None]) -> None:
@@ -56,6 +64,10 @@ def serve_with_uvicorn(app: ASGIApp, host: str, port: int, on_ready: Callable[[]
 @contextmanager
 def keep_machine_awake() -> Iterator[None]:
     """Stops idle sleep until the block ends, or until framewise exits if it ends first."""
+    if sys.platform == "win32":
+        with _keep_windows_awake():
+            yield
+        return
     command = _wake_lock_command()
     if command is None:
         print("framewise: warning: cannot keep the machine awake here", file=sys.stderr)
@@ -72,6 +84,29 @@ def keep_machine_awake() -> Iterator[None]:
     finally:
         wake_lock.terminate()
         wake_lock.wait()
+
+
+ES_CONTINUOUS = 0x80000000
+ES_SYSTEM_REQUIRED = 0x00000001
+
+
+@contextmanager
+def _keep_windows_awake() -> Iterator[None]:
+    """Asks Windows to stay awake while this thread is in the block. Windows also drops the
+    request when the thread ends."""
+    import ctypes
+
+    set_state = ctypes.windll.kernel32.SetThreadExecutionState
+    set_state.restype = ctypes.c_uint32
+    set_state.argtypes = [ctypes.c_uint32]
+    if set_state(ES_CONTINUOUS | ES_SYSTEM_REQUIRED) == 0:
+        print("framewise: warning: cannot keep the machine awake", file=sys.stderr)
+        yield
+        return
+    try:
+        yield
+    finally:
+        set_state(ES_CONTINUOUS)
 
 
 def _wake_lock_command() -> list[str] | None:
@@ -95,7 +130,7 @@ def _wake_lock_command() -> list[str] | None:
 def choose_folder_in_dialog() -> Path | None:
     """Asks for a Session folder with the system's folder dialog, or None if canceled or
     there is none."""
-    command = _folder_dialog_command()
+    command = folder_dialog_command(sys.platform)
     if command is None:
         print(
             "framewise: warning: no folder dialog here, pass the Session folder to "
@@ -103,16 +138,35 @@ def choose_folder_in_dialog() -> Path | None:
             file=sys.stderr,
         )
         return None
-    result = subprocess.run(command, capture_output=True, text=True)
+    result = subprocess.run(command, capture_output=True, encoding="utf-8")
     if result.returncode != 0:
         return None
     return Path(result.stdout.strip())
 
 
-def _folder_dialog_command() -> list[str] | None:
-    if sys.platform == "darwin":
+# Tk's folder dialog is the Explorer one on Windows. It prints the chosen folder as UTF-8, so a
+# name outside the console's code page survives, and exits non-zero when canceled.
+TK_FOLDER_DIALOG = """
+import sys, tkinter, tkinter.filedialog
+root = tkinter.Tk()
+root.withdraw()
+root.attributes("-topmost", True)
+folder = tkinter.filedialog.askdirectory(title="Choose a Session folder", mustexist=True)
+if not folder:
+    sys.exit(1)
+sys.stdout.reconfigure(encoding="utf-8")
+print(folder)
+"""
+
+
+def folder_dialog_command(platform: str) -> list[str] | None:
+    """The command that shows the system's folder dialog and prints the chosen folder, or None
+    where there is no dialog."""
+    if platform == "darwin":
         script = 'activate\nPOSIX path of (choose folder with prompt "Choose a Session folder")'
         return ["osascript", "-e", script]
+    if platform == "win32":
+        return [sys.executable, "-c", TK_FOLDER_DIALOG]
     if shutil.which("zenity"):
         return ["zenity", "--file-selection", "--directory", "--title=Choose a Session folder"]
     return None
@@ -169,6 +223,7 @@ def main(
     keep_awake: KeepAwake = keep_machine_awake,
     choose_folder: ChooseFolder = choose_folder_in_dialog,
     models: Sequence[Model] = MODELS,
+    find_exiftool: FindExifTool = find_exiftool,
 ) -> None:
     parser = argparse.ArgumentParser(prog="framewise")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -210,6 +265,14 @@ def main(
     if args.session_folder is not None and not args.session_folder.is_dir():
         parser.error(f"not a folder: {args.session_folder}")
 
+    if find_exiftool() is None:
+        print(
+            "framewise: error: ExifTool is not installed. framewise needs it for Rating "
+            f"write-back. {exiftool_install_hint(sys.platform)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     if args.command == "reset":
         hard_reset(args.session_folder)
         return
@@ -229,11 +292,12 @@ def main(
             lightroom_preferences=LIGHTROOM_PREFERENCES,
             provider_lineup=analyzer.provider_lineup,
             config_path=resolve_config_path().absolute(),
+            changelog_path=CHANGELOG_PATH,
         )
 
     url = f"http://{HOST}:{args.port}/"
     if args.session_folder is None:
-        app: ASGIApp = SessionPicker(choose_folder, start_session, UI_DIR)
+        app: ASGIApp = SessionPicker(choose_folder, start_session, UI_DIR, CHANGELOG_PATH)
         print(f"framewise: Review UI at {url}, choose a Session folder there")
     else:
         app = start_session(args.session_folder)

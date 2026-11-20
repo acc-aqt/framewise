@@ -264,17 +264,18 @@ class SessionStore:
             for table in FRAME_TABLES:
                 self._db.execute(f"DELETE FROM {table} WHERE {condition}", (paths,))
 
-    def has_current_preview(self, frame: ScannedFrame) -> bool:
-        """Whether the RAW-only Frame's cached preview was extracted from its RAW as it is now."""
+    def current_preview_size(self, frame: ScannedFrame) -> tuple[int, int] | None:
+        """The width and height of the RAW-only Frame's cached preview, if it was extracted from
+        its RAW as it is now, otherwise None."""
         main_path = self._relative(frame.main_path)
         if not self.preview_file(main_path).is_file():
-            return False
+            return None
         row = self._db.execute(
-            "SELECT 1 FROM previews WHERE main_path = ? AND source_path = ? AND source_size = ? "
-            "AND source_mtime_ns = ?",
+            "SELECT width, height FROM previews WHERE main_path = ? AND source_path = ? "
+            "AND source_size = ? AND source_mtime_ns = ?",
             (main_path, *self._file_key(frame.raw_path)),
         ).fetchone()
-        return row is not None
+        return None if row is None else (row["width"], row["height"])
 
     def new_preview_file(self, frame: ScannedFrame) -> Path:
         """Where to extract the RAW-only Frame's preview to, in the preview cache."""

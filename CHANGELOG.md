@@ -6,6 +6,7 @@ What changed in framewise, written for photographers. The Review UI shows this l
 
 - A RAW with no JPG of the same name is now a **RAW-only Frame** instead of being skipped, so a Session shot in RAW only, or a merge such as a `-Pano.dng`, is grouped, judged and reviewed like any other. framewise judges it by the largest preview JPG embedded in the RAW and marks it RAW-only in the Review UI. **Rating write-back** and Trash leave RAW-only Frames alone for now.
 - Skipped files are listed with the reason, such as a RAW without an embedded preview framewise can read.
+- A **RAW-only Frame** whose embedded preview is less than 1600 px on its long edge is skipped instead of getting a misleading Verdict, and the Review UI lists it under **Skipped** with the preview's size. Change the minimum with `min_preview_long_edge` under `[raw_only]` in `config.toml`.
 
 ## 0.2.0 — 2026-11-19
 

@@ -5,10 +5,12 @@ import pytest
 from conftest import BACKGROUND_PRIORITY_PLATFORMS, FakeAnalyzer, make_jpg, wait_until
 from fastapi.testclient import TestClient
 from test_models import CONTENT, hosted_model
+from test_previews import make_dng_with_previews
 from test_providers import FakeFingerprint
 from test_write_back_api import rating
 
 from framewise.cli import main
+from framewise.exiftool import find_exiftool
 from framewise.providers import compose_analyzer
 
 
@@ -291,6 +293,48 @@ def test_review_refuses_to_start_with_a_broken_config(session_dir, isolated_data
 
     assert exit_info.value.code == 1
     assert "config.toml: invalid TOML" in capsys.readouterr().err
+
+
+def test_review_refuses_to_start_with_an_invalid_minimum_preview_size(
+    session_dir, isolated_data_dir, capsys
+):
+    isolated_data_dir.mkdir(parents=True)
+    (isolated_data_dir / "config.toml").write_text("[raw_only]\nmin_preview_long_edge = 0\n")
+
+    with pytest.raises(SystemExit) as exit_info:
+        main(
+            ["review", str(session_dir)],
+            serve=FakeServer(),
+            open_browser=print,
+            analyzer=FakeAnalyzer(),
+            keep_awake=FakeWakeLock(),
+        )
+
+    assert exit_info.value.code == 1
+    assert "min_preview_long_edge must be a whole number of pixels" in capsys.readouterr().err
+
+
+@pytest.mark.skipif(find_exiftool() is None, reason="ExifTool is not installed")
+def test_review_skips_raws_by_the_minimum_preview_size_in_the_config(
+    session_dir, isolated_data_dir
+):
+    make_dng_with_previews(session_dir / "L1000001.DNG", [(32, 24), (32, 24), (400, 300)])
+    make_dng_with_previews(session_dir / "L1000002.DNG", [(32, 24), (32, 24), (300, 200)])
+    isolated_data_dir.mkdir(parents=True)
+    (isolated_data_dir / "config.toml").write_text("[raw_only]\nmin_preview_long_edge = 400\n")
+    server = FakeServer()
+
+    main(
+        ["review", str(session_dir)],
+        serve=server,
+        open_browser=print,
+        analyzer=FakeAnalyzer(),
+        keep_awake=FakeWakeLock(),
+    )
+
+    session = server.client().get("/api/session").json()
+    assert session["total_frames"] == 1
+    assert [skipped["path"] for skipped in session["skipped"]] == ["L1000002.DNG"]
 
 
 def test_models_download_fetches_every_model_into_the_data_dir(tmp_path, isolated_data_dir, capsys):

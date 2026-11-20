@@ -130,7 +130,7 @@ def test_a_session_of_raws_opens_with_previews_extracted_by_exiftool(tmp_path):
     make_dng_with_previews(session_dir / "L1000001.DNG", [(96, 64), (32, 24), (400, 300)])
     make_raw(session_dir / "DSCF0002.RAF")
 
-    store = open_session(session_dir, tmp_path / "data")
+    store = open_session(session_dir, tmp_path / "data", min_preview_long_edge=400)
 
     [frame] = store.frames()
     assert (frame.main_path, frame.kind) == ("L1000001.DNG", "raw-only")

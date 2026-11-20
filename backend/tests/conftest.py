@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from framewise.analyzer import FrameSignals, SimilarityThresholds
-from framewise.previews import Preview, PreviewError
+from framewise.previews import DEFAULT_MIN_PREVIEW_LONG_EDGE, Preview, PreviewError
 from framewise.review import SessionAnalysis, open_session
 from framewise.server import create_app
 
@@ -236,27 +236,33 @@ def analyzer():
 
 
 class FakePreviews:
-    """Stands in for extracting a RAW's embedded preview with ExifTool: writes a small JPG as the
-    preview, or fails for the RAWs it is told have none. Tells the FakeAnalyzer which RAW each
-    preview came from."""
+    """Stands in for extracting a RAW's embedded preview with ExifTool: writes a JPG as the
+    preview, large enough to be judged unless a RAW is given another size, or fails for the RAWs it
+    is told have none. Tells the FakeAnalyzer which RAW each preview came from."""
 
     def __init__(self, analyzer: FakeAnalyzer):
         self.extracted: list[Path] = []
-        self.size = (64, 48)
+        self.size = (1600, 1200)
         self._analyzer = analyzer
         self._without_preview: set[Path] = set()
+        self._sizes: dict[Path, tuple[int, int]] = {}
 
     def without_preview(self, raw: Path) -> Path:
         self._without_preview.add(raw.resolve())
+        return raw
+
+    def sized(self, raw: Path, size: tuple[int, int]) -> Path:
+        self._sizes[raw.resolve()] = size
         return raw
 
     def __call__(self, raw: Path, destination: Path) -> Preview:
         self.extracted.append(raw)
         if raw.resolve() in self._without_preview:
             raise PreviewError("The RAW holds no embedded preview")
-        make_jpg(destination, size=self.size)
+        size = self._sizes.get(raw.resolve(), self.size)
+        make_jpg(destination, size=size)
         self._analyzer.raw_of_preview[destination.resolve()] = raw
-        return Preview(*self.size)
+        return Preview(*size)
 
 
 @pytest.fixture
@@ -310,8 +316,10 @@ def review_app(store, analysis: SessionAnalysis, *args, **app_options) -> TestCl
 def review(session_dir: Path, data_dir: Path, analyzer: FakeAnalyzer, previews: FakePreviews):
     """Opens the Review UI after analysis has finished."""
 
-    def start(**app_options) -> TestClient:
-        store = open_session(session_dir, data_dir, previews)
+    def start(
+        min_preview_long_edge: int = DEFAULT_MIN_PREVIEW_LONG_EDGE, **app_options
+    ) -> TestClient:
+        store = open_session(session_dir, data_dir, previews, min_preview_long_edge)
         analysis = SessionAnalysis(store, analyzer)
         analysis.run()
         return review_app(store, analysis, **app_options)

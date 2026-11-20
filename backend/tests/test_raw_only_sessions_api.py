@@ -1,6 +1,8 @@
 import io
 import os
+import re
 
+import pytest
 from conftest import make_jpg, make_raw, make_sidecar
 from PIL import Image
 from test_review_api import snapshot
@@ -9,6 +11,7 @@ from test_verdicts_api import BEACH, frames_by_name, reasons
 from test_write_back_api import files_by_path, lightroom_preferences
 
 from framewise.exiftool import ExifTool
+from framewise.previews import PreviewConfigError, read_min_preview_long_edge
 from framewise.review import hard_reset_session, session_database_path
 from framewise.store import preview_cache_dir
 
@@ -81,6 +84,71 @@ def test_a_raw_without_a_usable_preview_is_skipped_with_the_reason(session_dir, 
         {"path": "DSCF0002.RAF", "reason": "The RAW holds no embedded preview"}
     ]
     assert [frame["main_path"] for frame in client.get("/api/frames").json()] == ["DSCF0001.RAF"]
+
+
+def test_a_raw_whose_preview_is_below_the_minimum_is_skipped_with_its_size(
+    session_dir, review, previews
+):
+    previews.sized(make_raw(session_dir / "DSCF0001.RAF"), (1600, 1067))
+    previews.sized(make_raw(session_dir / "DSCF0002.RAF"), (1067, 1599))
+
+    client = review()
+    summary = client.get("/api/session").json()
+
+    assert summary["skipped"] == [
+        {
+            "path": "DSCF0002.RAF",
+            "reason": "The embedded preview is too small to judge: 1599 px on its long edge, "
+            "below the minimum of 1600 px",
+        }
+    ]
+    assert [frame["main_path"] for frame in client.get("/api/frames").json()] == ["DSCF0001.RAF"]
+
+
+def test_a_changed_minimum_judges_or_skips_frames_on_the_next_run(session_dir, review, previews):
+    previews.sized(make_raw(session_dir / "DSCF0001.RAF"), (2400, 1600))
+    previews.sized(make_raw(session_dir / "DSCF0002.RAF"), (1200, 800))
+    review()
+
+    stricter = review(min_preview_long_edge=3000).get("/api/session").json()
+    lenient = review(min_preview_long_edge=1200)
+
+    assert [skipped["path"] for skipped in stricter["skipped"]] == [
+        "DSCF0001.RAF",
+        "DSCF0002.RAF",
+    ]
+    assert stricter["skipped"][0]["reason"] == (
+        "The embedded preview is too small to judge: 2400 px on its long edge, "
+        "below the minimum of 3000 px"
+    )
+    assert lenient.get("/api/session").json()["skipped"] == []
+    assert [frame["main_path"] for frame in lenient.get("/api/frames").json()] == [
+        "DSCF0001.RAF",
+        "DSCF0002.RAF",
+    ]
+
+
+def test_a_merged_raw_without_a_jpg_is_judged_when_its_preview_is_large_enough(
+    session_dir, review, previews
+):
+    make_raw(session_dir / "L1000001.DNG")
+    make_jpg(session_dir / "L1000001.JPG")
+    previews.sized(make_raw(session_dir / "L1000001-Pano.dng"), (8000, 2000))
+    previews.sized(make_raw(session_dir / "L1000002-Pano.dng"), (1024, 256))
+
+    client = review()
+    frames = frames_by_name(client)
+
+    assert frames["L1000001-Pano.dng"]["kind"] == "raw-only"
+    assert frames["L1000001-Pano.dng"]["verdict"] is not None
+    assert "L1000002-Pano.dng" not in frames
+    assert client.get("/api/session").json()["skipped"] == [
+        {
+            "path": "L1000002-Pano.dng",
+            "reason": "The embedded preview is too small to judge: 1024 px on its long edge, "
+            "below the minimum of 1600 px",
+        }
+    ]
 
 
 def test_a_raw_only_frame_is_grouped_judged_and_shown_from_its_preview(
@@ -213,3 +281,41 @@ def test_trashing_a_raw_only_frame_is_refused_and_moves_nothing(session_dir, rev
     assert trash.trashed == []
     assert os.path.exists(raw)
     assert client.get("/api/session").json()["total_frames"] == 1
+
+
+def test_the_minimum_preview_size_defaults_to_1600_px(tmp_path):
+    config = tmp_path / "config.toml"
+    config.write_text('[providers]\nfingerprint = "chosen"\n')
+
+    assert read_min_preview_long_edge(config) == 1600
+    assert read_min_preview_long_edge(tmp_path / "missing.toml") == 1600
+
+
+def test_the_config_file_sets_the_minimum_preview_size(tmp_path):
+    config = tmp_path / "config.toml"
+    config.write_text("[raw_only]\nmin_preview_long_edge = 1200\n")
+
+    assert read_min_preview_long_edge(config) == 1200
+
+
+@pytest.mark.parametrize(
+    ("toml", "error"),
+    [
+        ("[raw_only\n", "invalid TOML"),
+        ("raw_only = 1200\n", "[raw_only] must be a table"),
+        ('[raw_only]\nmin_preview_long_edge = "1200"\n', "a whole number of pixels"),
+        ("[raw_only]\nmin_preview_long_edge = 1200.5\n", "a whole number of pixels"),
+        ("[raw_only]\nmin_preview_long_edge = true\n", "a whole number of pixels"),
+        ("[raw_only]\nmin_preview_long_edge = 0\n", "a whole number of pixels"),
+        ("[raw_only]\nmin_preview_long_edge = -1\n", "a whole number of pixels"),
+        ("[raw_only]\nmin_long_edge = 1200\n", "unknown setting min_long_edge"),
+    ],
+)
+def test_an_invalid_minimum_preview_size_is_an_error(tmp_path, toml, error):
+    config = tmp_path / "config.toml"
+    config.write_text(toml)
+
+    with pytest.raises(PreviewConfigError, match=re.escape(error)) as raised:
+        read_min_preview_long_edge(config)
+
+    assert str(config) in str(raised.value)

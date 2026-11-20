@@ -15,7 +15,12 @@ from framewise.camera_rating import CameraRating, read_camera_rating
 from framewise.capture_time import read_capture_time
 from framewise.exiftool import ExifTool
 from framewise.grouper import group_frames
-from framewise.previews import ExifToolPreviews, ExtractPreview, cache_previews
+from framewise.previews import (
+    DEFAULT_MIN_PREVIEW_LONG_EDGE,
+    ExifToolPreviews,
+    ExtractPreview,
+    cache_previews,
+)
 from framewise.scan import scan_session
 from framewise.store import AnalyzedFrame, Frame, SessionStore, preview_cache_dir
 from framewise.thumbnails import make_thumbnail
@@ -73,17 +78,23 @@ def hard_reset_session(folder: Path, data_dir: Path, exiftool: ExifTool) -> Writ
 
 
 def open_session(
-    folder: Path, data_dir: Path, extract_preview: ExtractPreview | None = None
+    folder: Path,
+    data_dir: Path,
+    extract_preview: ExtractPreview | None = None,
+    min_preview_long_edge: int = DEFAULT_MIN_PREVIEW_LONG_EDGE,
 ) -> SessionStore:
     """Scans the Session folder into its Session store. RAW-only Frames get their embedded
     preview cached first, with ExifTool unless `extract_preview` is given; a RAW without a usable
-    preview is skipped."""
+    preview, or with one whose long edge is below `min_preview_long_edge`, is skipped."""
     root = folder.resolve()
     store = SessionStore(session_database_path(root, data_dir), root)
     exiftool = ExifTool()
     try:
         frames, skipped = cache_previews(
-            store, scan_session(root), extract_preview or ExifToolPreviews(exiftool)
+            store,
+            scan_session(root),
+            extract_preview or ExifToolPreviews(exiftool),
+            min_preview_long_edge,
         )
     finally:
         exiftool.close()

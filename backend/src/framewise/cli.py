@@ -19,6 +19,7 @@ from framewise.changelog import CHANGELOG_PATH
 from framewise.exiftool import ExifTool, exiftool_install_hint, find_exiftool
 from framewise.lightroom import LIGHTROOM_PREFERENCES
 from framewise.models import MODELS, Model, ModelError, ensure_model
+from framewise.previews import PreviewConfigError, read_min_preview_long_edge
 from framewise.providers import ProviderError, resolve_analyzer
 from framewise.review import (
     SessionAnalysis,
@@ -279,9 +280,12 @@ def main(
 
     if analyzer is None:
         analyzer = _resolve_analyzer()
+    min_preview_long_edge = _read_min_preview_long_edge()
 
     def start_session(folder: Path) -> FastAPI:
-        store = open_session(folder, resolve_data_dir())
+        store = open_session(
+            folder, resolve_data_dir(), min_preview_long_edge=min_preview_long_edge
+        )
         analysis = SessionAnalysis(store, analyzer, background=args.background)
         analyze_in_background(analysis, nullcontext if args.allow_sleep else keep_awake)
         print(f"framewise: {len(store.frames())} Frames in {store.root}")
@@ -308,6 +312,14 @@ def main(
             file=sys.stderr,
         )
     serve(LocalOnly(app), HOST, args.port, lambda: open_browser(url))
+
+
+def _read_min_preview_long_edge() -> int:
+    try:
+        return read_min_preview_long_edge(resolve_config_path())
+    except PreviewConfigError as error:
+        print(f"framewise: error: {error}", file=sys.stderr)
+        sys.exit(1)
 
 
 def _resolve_analyzer() -> FrameAnalyzer:

@@ -4,6 +4,7 @@ the Session folder."""
 
 import base64
 import re
+import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,6 +18,10 @@ from framewise.store import SessionStore
 PREVIEW_TAGS = ("PreviewImage", "JpgFromRaw", "OtherImage")
 BINARY_SIZE = re.compile(r"\(Binary data (\d+) bytes")
 NO_PREVIEW = "The RAW holds no embedded preview framewise can read"
+DEFAULT_MIN_PREVIEW_LONG_EDGE = 1600
+"""The smallest long edge, in pixels, of a preview that sharpness and faces can be judged on."""
+CONFIG_SECTION = "raw_only"
+MIN_PREVIEW_LONG_EDGE_KEY = "min_preview_long_edge"
 
 
 @dataclass(frozen=True)
@@ -31,6 +36,10 @@ class PreviewError(Exception):
     def __init__(self, reason: str):
         super().__init__(reason)
         self.reason = reason
+
+
+class PreviewConfigError(ValueError):
+    """The [raw_only] settings in the config file are invalid."""
 
 
 ExtractPreview = Callable[[Path, Path], Preview]
@@ -96,25 +105,71 @@ class ExifToolPreviews:
         return sorted(sizes, key=sizes.__getitem__, reverse=True)
 
 
+def read_min_preview_long_edge(config_path: Path) -> int:
+    """The minimum long edge of a RAW-only Frame's preview, from the [raw_only] table of a config
+    file. A missing file or setting keeps the default."""
+    try:
+        with config_path.open("rb") as file:
+            config = tomllib.load(file)
+    except FileNotFoundError:
+        return DEFAULT_MIN_PREVIEW_LONG_EDGE
+    except tomllib.TOMLDecodeError as error:
+        raise PreviewConfigError(f"{config_path}: invalid TOML: {error}") from error
+    settings = config.get(CONFIG_SECTION, {})
+    if not isinstance(settings, dict):
+        raise PreviewConfigError(f"{config_path}: [{CONFIG_SECTION}] must be a table")
+    for key in settings:
+        if key != MIN_PREVIEW_LONG_EDGE_KEY:
+            raise PreviewConfigError(f"{config_path}: [{CONFIG_SECTION}] has unknown setting {key}")
+    value = settings.get(MIN_PREVIEW_LONG_EDGE_KEY, DEFAULT_MIN_PREVIEW_LONG_EDGE)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise PreviewConfigError(
+            f"{config_path}: {MIN_PREVIEW_LONG_EDGE_KEY} must be a whole number of pixels, "
+            "1 or more"
+        )
+    return value
+
+
 def cache_previews(
-    store: SessionStore, frames: list[ScannedFrame], extract_preview: ExtractPreview
+    store: SessionStore,
+    frames: list[ScannedFrame],
+    extract_preview: ExtractPreview,
+    min_long_edge: int = DEFAULT_MIN_PREVIEW_LONG_EDGE,
 ) -> tuple[list[ScannedFrame], dict[Path, str]]:
     """Makes sure each RAW-only Frame has a current preview in the preview cache, reusing one while
     its RAW's size and modification time are unchanged. Returns the Frames that can be analyzed,
-    and the RAWs without a usable preview with the reason."""
+    and the RAWs without a usable preview, or with one whose long edge is below `min_long_edge`,
+    with the reason."""
     usable, skipped = [], {}
     for frame in frames:
-        if frame.jpg_path is not None or store.has_current_preview(frame):
+        if frame.jpg_path is not None:
             usable.append(frame)
             continue
         try:
-            preview = extract_preview(frame.raw_path, store.new_preview_file(frame))
+            preview = _current_preview(store, frame, extract_preview)
         except PreviewError as error:
             skipped[frame.raw_path] = error.reason
             continue
-        store.save_preview(frame, preview.width, preview.height)
+        long_edge = max(preview.width, preview.height)
+        if long_edge < min_long_edge:
+            skipped[frame.raw_path] = (
+                f"The embedded preview is too small to judge: {long_edge} px on its long edge, "
+                f"below the minimum of {min_long_edge} px"
+            )
+            continue
         usable.append(frame)
     return usable, skipped
+
+
+def _current_preview(
+    store: SessionStore, frame: ScannedFrame, extract_preview: ExtractPreview
+) -> Preview:
+    cached = store.current_preview_size(frame)
+    if cached is not None:
+        return Preview(*cached)
+    preview = extract_preview(frame.raw_path, store.new_preview_file(frame))
+    store.save_preview(frame, preview.width, preview.height)
+    return preview
 
 
 def _jpg_size(path: Path) -> Preview | None:

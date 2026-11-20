@@ -106,6 +106,15 @@ framewise analyzes each Frame's JPG with the installed analysis Providers; which
 
 A RAW with no JPG of the same name in its folder, from a RAW-only shoot or a merge such as a `-Pano.dng`, is a RAW-only Frame. framewise judges it by the largest preview JPG embedded in the RAW, extracted with [ExifTool](https://exiftool.org) into a folder next to the Session store, never into the Session folder, and extracted again only when the RAW changes. A RAW-only Frame is judged as leniently on exposure as a RAW+JPG Frame, since its RAW holds the detail its preview clipped. A RAW without a preview framewise can read is listed under **Skipped** with the reason ([ADR-0011](docs/adr/0011-raw-only-frames-from-the-embedded-preview.md)).
 
+A preview too small to judge sharpness and faces by would give a misleading Verdict, so a RAW-only Frame whose preview is less than 1600 px on its long edge is listed under **Skipped** too, with the preview's size. To change the minimum, set it in the `config.toml` described under [Providers](#providers):
+
+```toml
+[raw_only]
+min_preview_long_edge = 1200
+```
+
+It must be a whole number of pixels, 1 or more; any other value, or another setting in `[raw_only]`, stops `framewise review` with an error. The next `framewise review` judges or skips RAW-only Frames by the new minimum.
+
 - **Groups**: near-duplicate and burst Frames are grouped together.
 - **Verdicts**: each Frame gets a proposed Verdict (Winner, Keeper, Reject or Unsure) with Reasons, judged from its sharpness, motion blur, exposure and, where an `aesthetics` Provider is available, an aesthetics score.
 - **Faces**: in Frames with faces, every face is checked for closed eyes, sharpness and, where a `face-quality` Provider is available, face quality. Sharpness is then judged on the faces rather than the whole image.

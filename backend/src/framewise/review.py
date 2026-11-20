@@ -129,7 +129,7 @@ class AnalysisProgress:
 class _FrameWork:
     frame: Frame
     source: Path
-    """The JPG the Frame's Analysis source is read from."""
+    """The Frame's Analysis source: its JPG, or a RAW-only Frame's cached embedded preview."""
     needs_thumbnail: bool
     needs_analysis: bool
 

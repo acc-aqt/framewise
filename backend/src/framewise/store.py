@@ -86,8 +86,8 @@ SCHEMA_VERSION = 1
 """Bumped whenever an upgrade must change a Session store's existing tables, not just add to them.
 Stores up to framewise 0.2.0 are version 0."""
 
-# Version 1 identifies a Frame by its main file rather than its JPG, and calls the file a
-# thumbnail or analysis was made from its Analysis source.
+# Version 1 identifies a Frame by its main file rather than its JPG, and records the source file
+# a thumbnail or analysis is kept current by (see Frame.source_file).
 RENAMED_COLUMNS = {
     "frames": {"jpg_path": "main_path"},
     "thumbnails": {
@@ -104,7 +104,7 @@ RENAMED_COLUMNS = {
     "overrides": {"jpg_path": "main_path"},
 }
 # The file columns version 1 adds, each filled from the main file: up to version 0 a Frame's main
-# file was always its JPG, and so was the Analysis source of its thumbnail and analysis.
+# file was always its JPG, and so was the source file of its thumbnail and analysis.
 FILLED_COLUMNS = {
     "frames": "jpg_path",
     "thumbnails": "source_path",
@@ -134,11 +134,12 @@ class Frame:
         return "jpg-only" if self.raw_path is None else "raw+jpg"
 
     @property
-    def analysis_source(self) -> str:
-        """The file holding the pixels the Frame is judged by: its JPG, or the RAW whose embedded
-        preview a RAW-only Frame is judged by. Thumbnails and analyses are current while this file
-        is unchanged."""
-        return self.jpg_path or self.raw_path
+    def source_file(self) -> str:
+        """The file whose size and modification time keep the Frame's thumbnail and analysis
+        current: its JPG, or a RAW-only Frame's RAW, its main file, from which its embedded
+        preview is extracted. The pixels analyzed, its Analysis source, are
+        SessionStore.analysis_image."""
+        return self.jpg_path if self.jpg_path is not None else self.main_path
 
 
 @dataclass(frozen=True)
@@ -310,7 +311,7 @@ class SessionStore:
         return self.preview_dir / f"{digest}.jpg"
 
     def analysis_image(self, frame: Frame) -> Path:
-        """The JPG the Frame's Analysis source is read from: its JPG, or a RAW-only Frame's cached
+        """The Frame's Analysis source: its JPG, or a RAW-only Frame's cached embedded
         preview."""
         if frame.jpg_path is None:
             return self.preview_file(frame.main_path)
@@ -320,8 +321,8 @@ class SessionStore:
         return self._has_current_row("thumbnails", frame)
 
     def has_current_analysis(self, frame: Frame, signature: ProviderSignature) -> bool:
-        """Whether the Frame's saved analysis is of its Analysis source's current contents, made
-        by the given Providers."""
+        """Whether the Frame's saved analysis is of its source file's current contents, made by
+        the given Providers."""
         row = self._db.execute(
             "SELECT 1 FROM analyses WHERE main_path = ? AND source_path = ? AND source_size = ? "
             "AND source_mtime_ns = ? AND version = ? AND providers = ?",
@@ -584,9 +585,9 @@ class SessionStore:
         return row is not None
 
     def _source_key(self, frame: Frame) -> tuple[str, str, int, int]:
-        """The Frame's main file, then its Analysis source with that file's current size and
+        """The Frame's main file, then its source file with that file's current size and
         modification time."""
-        return frame.main_path, *self._file_key(self.root / frame.analysis_source)
+        return frame.main_path, *self._file_key(self.root / frame.source_file)
 
     def _file_key(self, path: Path) -> tuple[str, int, int]:
         stat = path.stat()

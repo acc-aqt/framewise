@@ -14,11 +14,11 @@ What the photographer's cameras embed, checked on 2026-11-20 with ExifTool 13.55
 
 1. **A RAW with no JPG of the same name in its folder is a RAW-only Frame.** Pairing is otherwise unchanged: a RAW and a JPG with the same base name still make one RAW+JPG Frame, and each RAW left over, including several sharing a base name, makes a RAW-only Frame of its own. Its main file is the RAW.
 2. **A RAW-only Frame's Analysis source is the largest JPG embedded in its RAW.** framewise asks ExifTool for every `PreviewImage`, `JpgFromRaw` and `OtherImage` in the RAW, tries them largest first, and keeps the first one Pillow can read. It then copies the RAW's metadata into the preview, so orientation, capture time and focus point are read as from a camera JPG.
-3. **A RAW without a usable preview is skipped, with the reason.** The Review UI lists skipped files with their reasons.
+3. **A RAW without a usable preview is skipped, with the reason.** A preview ExifTool reports an error extracting gives way to the next largest, and a preview the RAW's metadata can't be copied into is not used, since its orientation and capture time would be wrong. The Review UI lists skipped files with their reasons.
 4. **Previews are cached next to the Session store, never in the Session folder.** They live in a `<store>-previews` folder beside the Session store's database, one JPG per RAW-only Frame, recorded in the store with the RAW's size and modification time. A re-run reuses a cached preview, thumbnail and analysis while the RAW is unchanged and extracts it again when the RAW changes. A preview leaves the cache with its Frame, and `framewise reset` deletes the cache with the store.
 5. **RAW+JPG Frames keep reading the camera's JPG.** Nothing changes for them.
 6. **A RAW-only Frame gets the exposure leniency of a RAW+JPG Frame**, because its RAW holds detail that the preview, like a camera JPG, has clipped.
-7. **Rating write-back and Trash leave RAW-only Frames alone for now.** The write-back dry run says how many RAW-only Frames it leaves out, and trashing a RAW-only Frame is refused with a message. Writing and trashing them is #151.
+7. **Rating write-back and Trash leave RAW-only Frames alone for now.** The write-back dry run says how many RAW-only Frames it leaves out, and the Trash dialog says how many RAW-only Frames stay and leaves them out; the server refuses to trash one with a message. Writing and trashing them is #151.
 
 ## Considered Options
 
@@ -31,4 +31,6 @@ What the photographer's cameras embed, checked on 2026-11-20 with ExifTool 13.55
 
 - Opening a Session extracts the previews of new or changed RAW-only Frames before the Review UI starts. With ExifTool's persistent process this takes under a tenth of a second per RAW on the photographer's files.
 - The preview cache holds each RAW-only Frame's largest preview, often as large as a camera JPG, in framewise's data folder.
-- A small preview gives a less reliable Verdict than a camera JPG. Skipping Frames whose preview is too small to judge is #152; the preview's size is recorded in the store for that.
+- A small preview gives a less reliable Verdict than a camera JPG, so a RAW-only Frame whose preview is shorter than a minimum on its long edge is skipped, with the preview's size as the reason (#152). The minimum defaults to 1600 px, pending the survey of real previews in #149, and is set with `min_preview_long_edge` under `[raw_only]` in `config.toml`, which `framewise review` and `framewise-benchmark` both read.
+- A Frame whose kind changes changes its main file: a RAW+JPG Frame whose JPG is deleted becomes a RAW-only Frame identified by its RAW, and exporting a JPG next to a lone RAW turns a RAW-only Frame into a RAW+JPG Frame identified by the JPG. Its Overrides and fixed Group, kept by the old main file, no longer apply to it, and it is analyzed again.
+- Opening a Session store from framewise 0.2.0 upgrades it, and 0.2.0 cannot open an upgraded store. The upgrade first copies the store to a `-v0-backup.sqlite` beside it, which is the way back to 0.2.0. `framewise reset` deletes that backup with the store.

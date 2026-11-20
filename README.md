@@ -102,7 +102,7 @@ If the Review UI has not been built, `framewise review` warns you.
 
 ## How it judges
 
-framewise analyzes each Frame's JPG with the installed analysis Providers; which ones a machine gets is under [Platform support](#platform-support).
+framewise analyzes each Frame's JPG, or a RAW-only Frame's embedded preview, with the installed analysis Providers; which ones a machine gets is under [Platform support](#platform-support).
 
 A RAW with no JPG of the same name in its folder, from a RAW-only shoot or a merge such as a `-Pano.dng`, is a RAW-only Frame. framewise judges it by the largest preview JPG embedded in the RAW, extracted with [ExifTool](https://exiftool.org) into a folder next to the Session store, never into the Session folder, and extracted again only when the RAW changes. A RAW-only Frame is judged as leniently on exposure as a RAW+JPG Frame, since its RAW holds the detail its preview clipped. A RAW without a preview framewise can read is listed under **Skipped** with the reason ([ADR-0011](docs/adr/0011-raw-only-frames-from-the-embedded-preview.md)).
 
@@ -175,7 +175,7 @@ Details:
 
 **Reset Session…** on the same screen starts the review over: it undoes the write-back and clears all Overrides, fixed Groups and the Keeper budget. The analysis is kept, so nothing is analyzed again. Stars and labels framewise didn't write, such as in-camera ratings, stay as they are.
 
-`uv run framewise reset /path/to/session-folder` also deletes the Session store and its cached previews, so the next `framewise review` analyzes every Frame again.
+`uv run framewise reset /path/to/session-folder` also deletes the Session store, its cached previews and any backup made of it when a newer framewise upgraded it, so the next `framewise review` analyzes every Frame again.
 
 ## Architecture
 

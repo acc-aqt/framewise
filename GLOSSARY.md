@@ -30,8 +30,12 @@ The file that identifies a Frame. It is the JPG of a JPG-only or RAW+JPG Frame, 
 _Avoid_: Master, primary, JPG path
 
 **Analysis source**:
-The pixels framewise judges a Frame by: the JPG, or the RAW's embedded preview. A JPG-only or RAW+JPG Frame is judged by its JPG, and a RAW-only Frame by the largest preview embedded in its RAW, which framewise keeps in its own data folder, never in the Session folder.
-_Avoid_: Preview
+The pixels framewise judges a Frame by: the JPG, or the RAW's embedded preview. A JPG-only or RAW+JPG Frame is judged by its JPG, and a RAW-only Frame by its RAW's embedded preview, which framewise keeps in its own data folder, never in the Session folder.
+_Avoid_: Preview, on its own, for the Analysis source in general
+
+**Embedded preview**:
+The largest JPG a camera stores inside a RAW, which framewise extracts with ExifTool and judges a RAW-only Frame by. It is that Frame's Analysis source; a JPG-only or RAW+JPG Frame's JPG is not an embedded preview.
+_Avoid_: Thumbnail, JpgFromRaw, PreviewImage
 
 **Camera rating**:
 A star rating or color label that was already on a Frame's files before framewise saw them, for example stars set in-camera.

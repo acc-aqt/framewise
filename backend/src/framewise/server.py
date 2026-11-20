@@ -182,13 +182,14 @@ def create_app(
 
     @app.get("/api/frames/{frame_id}/image")
     def frame_image(frame_id: int) -> FileResponse:
-        """The JPG the Frame is judged by: its JPG, or a RAW-only Frame's embedded preview."""
+        """The Frame's Analysis source: its JPG, or a RAW-only Frame's embedded preview."""
         path = store.analysis_image(_known_frame(frame_id))
-        inside = path.resolve().is_relative_to(store.root) or path.resolve().is_relative_to(
+        resolved = path.resolve()
+        inside = resolved.is_relative_to(store.root) or resolved.is_relative_to(
             store.preview_dir.resolve()
         )
         if path.is_symlink() or not path.is_file() or not inside:
-            raise HTTPException(status_code=404, detail="JPG not found")
+            raise HTTPException(status_code=404, detail="Image not found")
         return FileResponse(path, media_type="image/jpeg")
 
     def _known_frame(frame_id: int) -> Frame:

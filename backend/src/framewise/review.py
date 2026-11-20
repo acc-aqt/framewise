@@ -22,7 +22,13 @@ from framewise.previews import (
     cache_previews,
 )
 from framewise.scan import scan_session
-from framewise.store import AnalyzedFrame, Frame, SessionStore, preview_cache_dir
+from framewise.store import (
+    AnalyzedFrame,
+    Frame,
+    SessionStore,
+    preview_cache_dir,
+    upgrade_backups,
+)
 from framewise.thumbnails import make_thumbnail
 from framewise.write_back import RatingWriteBack, WriteBackResult
 
@@ -58,9 +64,10 @@ def session_database_path(root: Path, data_dir: Path) -> Path:
 
 
 def hard_reset_session(folder: Path, data_dir: Path, exiftool: ExifTool) -> WriteBackResult | None:
-    """Undoes Rating write-back, then deletes the Session store and its preview cache, so the next
-    review analyzes every Frame again. Keeps the store if a file fails to restore, so the reset
-    can be retried. None if the folder has no Session store."""
+    """Undoes Rating write-back, then deletes the Session store with its preview cache and the
+    backups made before its upgrades, so the next review analyzes every Frame again. Keeps the
+    store if a file fails to restore, so the reset can be retried. None if the folder has no
+    Session store."""
     root = folder.resolve()
     database = session_database_path(root, data_dir)
     if not database.exists():
@@ -74,6 +81,8 @@ def hard_reset_session(folder: Path, data_dir: Path, exiftool: ExifTool) -> Writ
         for suffix in ("", "-wal", "-shm"):
             database.with_name(database.name + suffix).unlink(missing_ok=True)
         shutil.rmtree(preview_cache_dir(database), ignore_errors=True)
+        for backup in upgrade_backups(database):
+            backup.unlink(missing_ok=True)
     return result
 
 

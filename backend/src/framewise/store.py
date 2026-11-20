@@ -196,6 +196,17 @@ def preview_cache_dir(database_path: Path) -> Path:
     return database_path.with_name(f"{database_path.stem}-previews")
 
 
+def upgrade_backup_path(database_path: Path, version: int) -> Path:
+    """Where a Session store of an earlier schema version is copied before it is upgraded."""
+    return database_path.with_name(f"{database_path.stem}-v{version}-backup{database_path.suffix}")
+
+
+def upgrade_backups(database_path: Path) -> list[Path]:
+    """The copies of a Session store made before its upgrades."""
+    pattern = f"{database_path.stem}-v*-backup{database_path.suffix}"
+    return list(database_path.parent.glob(pattern))
+
+
 BUSY_TIMEOUT_SECONDS = 30
 
 
@@ -247,22 +258,25 @@ class SessionStore:
             )
 
     def remove_frames_except(self, frames: list[ScannedFrame]) -> None:
-        current = json.dumps([self._relative(frame.main_path) for frame in frames])
-        self._remove_frames_where("NOT IN", current)
+        current = {self._relative(frame.main_path) for frame in frames}
+        self.remove_frames([path for path in self._main_paths_with_rows() if path not in current])
 
     def remove_frames(self, main_paths: list[str]) -> None:
         """Takes these Frames out of the Session, keeping their Overrides and Group Overrides
         as for Frames that vanish from the Session folder."""
-        self._remove_frames_where("IN", json.dumps(main_paths))
-
-    def _remove_frames_where(self, operator: str, paths: str) -> None:
-        condition = f"main_path {operator} (SELECT value FROM json_each(?))"
+        paths = json.dumps(main_paths)
+        condition = "main_path IN (SELECT value FROM json_each(?))"
         previews = self._db.execute(f"SELECT main_path FROM previews WHERE {condition}", (paths,))
         for row in previews.fetchall():
             self.preview_file(row["main_path"]).unlink(missing_ok=True)
         with self._db:
             for table in FRAME_TABLES:
                 self._db.execute(f"DELETE FROM {table} WHERE {condition}", (paths,))
+
+    def _main_paths_with_rows(self) -> list[str]:
+        """The main files of every Frame with a row of its own in the store."""
+        union = " UNION ".join(f"SELECT main_path FROM {table}" for table in FRAME_TABLES)
+        return [row["main_path"] for row in self._db.execute(union)]
 
     def current_preview_size(self, frame: ScannedFrame) -> tuple[int, int] | None:
         """The width and height of the RAW-only Frame's cached preview, if it was extracted from
@@ -512,15 +526,19 @@ class SessionStore:
     def _upgrade(self) -> None:
         """Brings a Session store from an earlier release up to SCHEMA_VERSION, after copying it
         to a backup next to it. The upgrade runs in one transaction, so if it fails the store is
-        left as it was. A new store only gets the version."""
-        version = self._db.execute("PRAGMA user_version").fetchone()[0]
-        if version >= SCHEMA_VERSION:
+        left as it was. A new store only gets the version. The version is read again once the
+        transaction holds the write lock, so a review opening the store at the same time can't
+        upgrade it twice."""
+        if self._schema_version() >= SCHEMA_VERSION:
             return
-        tables = self._tables()
-        if tables:
-            self._back_up(version)
-        self._db.execute("BEGIN")
+        self._db.execute("BEGIN IMMEDIATE")
         with self._db:
+            version = self._schema_version()
+            if version >= SCHEMA_VERSION:
+                return
+            tables = self._tables()
+            if tables:
+                self._back_up(version)
             for table, columns in RENAMED_COLUMNS.items():
                 if table in tables:
                     for old, new in columns.items():
@@ -531,19 +549,23 @@ class SessionStore:
                     self._db.execute(f"UPDATE {table} SET {column} = main_path")
             self._db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
+    def _schema_version(self) -> int:
+        return self._db.execute("PRAGMA user_version").fetchone()[0]
+
     def _tables(self) -> set[str]:
         rows = self._db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         return {row["name"] for row in rows}
 
     def _back_up(self, version: int) -> None:
-        database = self._database_path
-        backup = sqlite3.connect(
-            database.with_name(f"{database.stem}-v{version}-backup{database.suffix}")
-        )
+        """Copies the store through a connection of its own: SQLite can't back up through a
+        connection holding the write lock, which the upgrade does."""
+        source = sqlite3.connect(self._database_path)
+        backup = sqlite3.connect(upgrade_backup_path(self._database_path, version))
         try:
-            self._db.backup(backup)
+            source.backup(backup)
         finally:
             backup.close()
+            source.close()
 
     def _add_missing_columns(self) -> None:
         for table, columns in ADDED_COLUMNS.items():

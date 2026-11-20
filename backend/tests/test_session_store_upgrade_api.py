@@ -1,5 +1,7 @@
 import json
 import sqlite3
+import threading
+import time
 from array import array
 from dataclasses import asdict
 
@@ -8,7 +10,8 @@ from conftest import clean_signals, make_jpg, make_raw
 
 from framewise import store as session_store
 from framewise.analyzer import ANALYSIS_VERSION
-from framewise.review import session_database_path
+from framewise.exiftool import ExifTool
+from framewise.review import hard_reset_session, session_database_path
 
 # The Session store's tables as framewise 0.2.0 created them, when a Frame was identified by its
 # JPG.
@@ -79,6 +82,7 @@ def make_store_from_0_2_0(session_dir, data_dir, analyzer):
     data_dir.mkdir(parents=True)
     database_path = session_database_path(session_dir.resolve(), data_dir)
     database = sqlite3.connect(database_path)
+    database.execute("PRAGMA journal_mode=WAL")
     with database:
         database.executescript(SCHEMA_0_2_0)
         database.executemany(
@@ -179,6 +183,49 @@ def test_an_upgraded_store_is_not_backed_up_again(session_dir, data_dir, analyze
     review()
 
     assert list(data_dir.glob("*backup*")) == []
+
+
+def test_hard_reset_of_a_store_from_0_2_0_leaves_no_backup_behind(session_dir, data_dir, analyzer):
+    make_store_from_0_2_0(session_dir, data_dir, analyzer)
+    exiftool = ExifTool()
+    try:
+        hard_reset_session(session_dir, data_dir, exiftool)
+    finally:
+        exiftool.close()
+
+    assert list(data_dir.iterdir()) == []
+
+
+def test_two_reviews_opening_a_store_from_0_2_0_at_once_upgrade_it_once(
+    session_dir, data_dir, analyzer, monkeypatch
+):
+    database_path = make_store_from_0_2_0(session_dir, data_dir, analyzer)
+    back_up = session_store.SessionStore._back_up
+
+    def slow_back_up(store, version):
+        back_up(store, version)
+        time.sleep(0.2)
+
+    monkeypatch.setattr(session_store.SessionStore, "_back_up", slow_back_up)
+    start = threading.Barrier(2)
+    errors = []
+
+    def open_store():
+        start.wait()
+        try:
+            session_store.SessionStore(database_path, session_dir.resolve()).close()
+        except Exception as error:
+            errors.append(error)
+
+    threads = [threading.Thread(target=open_store) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    store = session_store.SessionStore(database_path, session_dir.resolve())
+    assert sorted(store.overrides()) == ["DSCF0003.JPG"]
 
 
 def test_a_failed_upgrade_leaves_the_store_untouched(

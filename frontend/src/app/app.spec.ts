@@ -2648,6 +2648,42 @@ describe('Review UI', () => {
       expect(currentFrameThumbnail()).toBe('/api/frames/3/thumbnail');
     });
 
+    it('leaves RAW-only Frames out of what a Trash moves, and says they stay', async () => {
+      await respond(summary, [
+        group(1, [
+          frame(1, 'jpg-only', { verdict: 'winner' }),
+          frame(2, 'raw+jpg'),
+          frame(5, 'raw-only'),
+        ]),
+      ]);
+      all('[data-testid="group-tile"]')[0].click();
+      await fixture.whenStable();
+
+      await click(all('[data-testid="trash-group"]')[0]);
+
+      expect(text('[data-testid="trash-confirmation"] p')).toBe(
+        'Move 2 Frames (3 files) to the Trash?',
+      );
+      expect(text('#trash-note')).toContain(
+        "1 RAW-only Frame stays: framewise can't trash RAW-only Frames yet.",
+      );
+      await confirmTrash([1, 2], [group(5, [frame(5, 'raw-only', { verdict: 'winner' })])]);
+    });
+
+    it('offers nothing to trash when every Frame is RAW-only', async () => {
+      await respond(summary, [group(5, [frame(5, 'raw-only', { verdict: 'winner' })])]);
+      all('[data-testid="group-tile"]')[0].click();
+      await fixture.whenStable();
+
+      await press('Backspace');
+
+      expect(text('[data-testid="trash-confirmation"] p')).toBe(
+        "Nothing to move: framewise can't trash RAW-only Frames yet.",
+      );
+      expect((all('[data-testid="trash-confirm"]')[0] as HTMLButtonElement).disabled).toBe(true);
+      expect(document.activeElement).toBe(all('[data-testid="trash-cancel"]')[0]);
+    });
+
     it('asks to trash with Delete too, and trashes nothing on Escape', async () => {
       await openGroup(0);
 

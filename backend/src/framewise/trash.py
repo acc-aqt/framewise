@@ -30,10 +30,8 @@ class TrashResult:
 
 
 def files_to_trash(frame: Frame) -> list[str]:
-    """The Frame's files relative to the Session folder, its main file last. A RAW's sidecar belongs
-    to the Frame, so it is trashed with it. A RAW-only Frame is never trashed (#151)."""
-    if frame.jpg_path is None:
-        return []
+    """The files of a JPG-only or RAW+JPG Frame relative to the Session folder, its main file last.
+    A RAW's sidecar belongs to the Frame, so it is trashed with it."""
     if frame.raw_path is None:
         return [frame.jpg_path]
     sidecar = Path(frame.raw_path).with_suffix(SIDECAR_EXTENSION).as_posix()
@@ -45,7 +43,7 @@ def trash_frames(
 ) -> TrashResult:
     """Trashes each Frame's files. A Frame leaves the Session once its main file is in the Trash;
     its Overrides are kept, as for any Frame that vanishes, so they come back if it is
-    restored. RAW-only Frames are refused and stay."""
+    restored. RAW-only Frames are refused and stay, until #151."""
     trashed, failed = [], []
     for frame in frames:
         if frame.kind == "raw-only":

@@ -41,7 +41,7 @@ import {
 } from './shortcuts';
 import { Tooltip, TooltipContent } from './tooltip';
 import { TrashApi, TrashResult } from './trash-api';
-import { TrashConfirmation } from './trash-confirmation';
+import { TrashConfirmation, trashableFrames } from './trash-confirmation';
 import { WhatsNew } from './whats-new';
 import { WriteBackView } from './write-back';
 
@@ -361,10 +361,11 @@ export class App {
   protected confirmTrash(): void {
     const trash = this.trashing();
     this.trashing.set(null);
-    if (trash === null) {
+    const frames = trash === null ? [] : trashableFrames(trash.frames);
+    if (trash === null || frames.length === 0) {
       return;
     }
-    this.trashApi.trash(trash.frames.map((frame) => frame.id)).subscribe({
+    this.trashApi.trash(frames.map((frame) => frame.id)).subscribe({
       next: (result) => {
         if (trash.fromGrid !== null) {
           this.tileToFocus.set(trash.fromGrid.tileIndex);

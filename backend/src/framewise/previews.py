@@ -18,6 +18,7 @@ from framewise.store import SessionStore
 PREVIEW_TAGS = ("PreviewImage", "JpgFromRaw", "OtherImage")
 BINARY_SIZE = re.compile(r"\(Binary data (\d+) bytes")
 NO_PREVIEW = "The RAW holds no embedded preview framewise can read"
+UNDECODABLE_PREVIEW = "ExifTool returned the preview in a form framewise could not decode"
 DEFAULT_MIN_PREVIEW_LONG_EDGE = 1600
 """The smallest long edge, in pixels, of a preview that sharpness and faces can be judged on."""
 CONFIG_SECTION = "raw_only"
@@ -62,32 +63,57 @@ class ExifToolPreviews:
 
     def _extract(self, raw: Path, destination: Path) -> Preview:
         partial = destination.with_name(f"{destination.stem}.partial{destination.suffix}")
-        for tag in self._previews_largest_first(raw):
-            partial.unlink(missing_ok=True)
-            self._write_binary(raw, tag, partial)
-            preview = _jpg_size(partial)
-            if preview is None:
-                continue
-            self._exiftool.run("-overwrite_original", "-tagsFromFile", raw, "-all:all", partial)
+        try:
+            preview = self._extract_largest(raw, partial)
+            self._copy_metadata(raw, partial)
             partial.replace(destination)
             return preview
-        partial.unlink(missing_ok=True)
-        raise PreviewError(NO_PREVIEW)
+        finally:
+            partial.unlink(missing_ok=True)
 
-    def _write_binary(self, raw: Path, tag: str, path: Path) -> None:
-        """Writes the tag's binary value to `path`. ExifTool's -W writes it directly, but reads %
-        in the path as the start of a format code, so a path with % takes the slower way through
-        ExifTool's JSON, which carries the value in base64."""
+    def _extract_largest(self, raw: Path, path: Path) -> Preview:
+        """Writes the largest preview Pillow can read to `path`. Raises PreviewError, with
+        ExifTool's last error if it gave one, when there is none."""
+        error = None
+        for tag in self._previews_largest_first(raw):
+            path.unlink(missing_ok=True)
+            tag_error = self._write_binary(raw, tag, path)
+            if tag_error is not None:
+                error = tag_error
+                continue
+            preview = _jpg_size(path)
+            if preview is not None:
+                return preview
+        raise PreviewError(NO_PREVIEW if error is None else f"{NO_PREVIEW}: {error}")
+
+    def _copy_metadata(self, raw: Path, preview: Path) -> None:
+        """Copies the RAW's metadata into the preview. A preview without it is refused, because
+        its orientation and capture time would be wrong."""
+        result = self._exiftool.run(
+            "-overwrite_original", "-tagsFromFile", raw, "-all:all", preview
+        )
+        if result.errors:
+            raise PreviewError(
+                f"ExifTool could not copy the RAW's metadata into its preview: {result.errors[0]}"
+            )
+
+    def _write_binary(self, raw: Path, tag: str, path: Path) -> str | None:
+        """Writes the tag's binary value to `path`, returning why it could not, if it could not.
+        ExifTool's -W writes it directly, but reads % in the path as the start of a format code,
+        so a path with % takes the slower way through ExifTool's JSON, which carries the value in
+        base64."""
         if "%" not in str(path):
-            self._exiftool.run("-b", f"-{tag}", "-W!", path, raw)
-            return
+            errors = self._exiftool.run("-b", f"-{tag}", "-W!", path, raw).errors
+            return errors[0] if errors else None
         try:
             [entry] = self._exiftool.read_json("-b", f"-{tag}", raw)
             [value] = [value for name, value in entry.items() if name != "SourceFile"]
-            if isinstance(value, str) and value.startswith("base64:"):
-                path.write_bytes(base64.b64decode(value.removeprefix("base64:"), validate=True))
+            if not (isinstance(value, str) and value.startswith("base64:")):
+                return UNDECODABLE_PREVIEW
+            path.write_bytes(base64.b64decode(value.removeprefix("base64:"), validate=True))
         except ValueError:
-            return
+            return UNDECODABLE_PREVIEW
+        return None
 
     def _previews_largest_first(self, raw: Path) -> list[str]:
         """The RAW's embedded preview tags, group-qualified, largest first."""

@@ -8,7 +8,7 @@ import pytest
 from conftest import make_raw
 from PIL import Image
 
-from framewise.exiftool import ExifTool, find_exiftool
+from framewise.exiftool import ExifTool, ExifToolResult, find_exiftool
 from framewise.previews import NO_PREVIEW, ExifToolPreviews, PreviewError
 from framewise.review import open_session
 
@@ -79,6 +79,33 @@ def _ifd(entries: list[tuple], offset: int) -> bytes:
     return directory + struct.pack("<I", 0) + values
 
 
+class FlakyExifTool(ExifTool):
+    """The real ExifTool, except for the commands `fail` answers itself, by returning a result or
+    raising."""
+
+    def __init__(self, fail):
+        super().__init__()
+        self._fail = fail
+
+    def run(self, *args):
+        injected = self._fail([str(arg) for arg in args])
+        return super().run(*args) if injected is None else injected
+
+
+@pytest.fixture
+def flaky_extract():
+    started = []
+
+    def make(fail):
+        exiftool = FlakyExifTool(fail)
+        started.append(exiftool)
+        return ExifToolPreviews(exiftool)
+
+    yield make
+    for exiftool in started:
+        exiftool.close()
+
+
 @pytest.fixture
 def extract():
     exiftool = ExifTool()
@@ -139,3 +166,99 @@ def test_a_session_of_raws_opens_with_previews_extracted_by_exiftool(tmp_path):
     assert [(skipped.path, skipped.reason) for skipped in store.summary().skipped] == [
         ("DSCF0002.RAF", NO_PREVIEW)
     ]
+
+
+def test_a_preview_exiftool_fails_to_extract_gives_way_to_the_next_largest(tmp_path, flaky_extract):
+    raw = make_dng_with_previews(tmp_path / "L1000001.DNG", [(96, 64), (32, 24), (150, 100)])
+    destination = tmp_path / "cache" / "preview.jpg"
+    destination.parent.mkdir()
+    failed = []
+
+    def fail_first_extraction(args):
+        if "-W!" in args and not failed:
+            failed.append(args)
+            return ExifToolResult(output="", errors=["Error: Error creating file"])
+        return None
+
+    preview = flaky_extract(fail_first_extraction)(raw, destination)
+
+    assert (preview.width, preview.height) == (96, 64)
+    assert sorted(path.name for path in destination.parent.iterdir()) == ["preview.jpg"]
+
+
+def test_a_raw_whose_previews_all_fail_to_extract_is_refused_with_exiftools_error(
+    tmp_path, flaky_extract
+):
+    raw = make_dng_with_previews(tmp_path / "L1000001.DNG", [(96, 64), (32, 24), (150, 100)])
+    destination = tmp_path / "cache" / "preview.jpg"
+    destination.parent.mkdir()
+
+    def fail_extraction(args):
+        if "-W!" in args:
+            return ExifToolResult(output="", errors=["Error: Error creating file"])
+        return None
+
+    with pytest.raises(PreviewError) as raised:
+        flaky_extract(fail_extraction)(raw, destination)
+
+    assert raised.value.reason == f"{NO_PREVIEW}: Error: Error creating file"
+    assert list(destination.parent.iterdir()) == []
+
+
+def test_a_preview_without_the_raws_metadata_is_not_used(tmp_path, flaky_extract):
+    raw = make_dng_with_previews(tmp_path / "L1000001.DNG", [(96, 64)])
+    destination = tmp_path / "cache" / "preview.jpg"
+    destination.parent.mkdir()
+
+    def fail_metadata_copy(args):
+        if "-tagsFromFile" in args:
+            return ExifToolResult(output="", errors=["Error: Not a valid JPEG"])
+        return None
+
+    with pytest.raises(PreviewError) as raised:
+        flaky_extract(fail_metadata_copy)(raw, destination)
+
+    assert raised.value.reason == (
+        "ExifTool could not copy the RAW's metadata into its preview: Error: Not a valid JPEG"
+    )
+    assert list(destination.parent.iterdir()) == []
+
+
+def test_exiftool_failing_mid_extraction_leaves_no_partial_preview(tmp_path, flaky_extract):
+    raw = make_dng_with_previews(tmp_path / "L1000001.DNG", [(96, 64)])
+    destination = tmp_path / "cache" / "preview.jpg"
+    destination.parent.mkdir()
+
+    def crash_on_metadata_copy(args):
+        if "-tagsFromFile" in args:
+            raise BrokenPipeError("ExifTool stopped")
+        return None
+
+    with pytest.raises(PreviewError):
+        flaky_extract(crash_on_metadata_copy)(raw, destination)
+
+    assert list(destination.parent.iterdir()) == []
+
+
+def test_a_preview_exiftool_returns_undecodable_through_a_percent_path_is_refused_with_why(
+    tmp_path, flaky_extract
+):
+    raw = make_dng_with_previews(tmp_path / "L1000001.DNG", [(96, 64)])
+    destination = tmp_path / "100%d cache" / "preview.jpg"
+    destination.parent.mkdir()
+
+    def garble_base64(args):
+        if "-json" in args and "-b" in args:
+            return ExifToolResult(
+                output='[{"SourceFile": "L1000001.DNG", "PreviewImage": "base64:not base64!"}]',
+                errors=[],
+            )
+        return None
+
+    with pytest.raises(PreviewError) as raised:
+        flaky_extract(garble_base64)(raw, destination)
+
+    assert raised.value.reason == (
+        f"{NO_PREVIEW}: ExifTool returned the preview in a form framewise could not decode"
+    )
+    assert list(destination.parent.iterdir()) == []

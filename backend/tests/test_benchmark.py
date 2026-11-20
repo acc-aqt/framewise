@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from conftest import FakeAnalyzer, make_jpg
+from test_previews import make_dng_with_previews
 
 from framewise.analyzer import SimilarityThresholds, Subject
 from framewise.benchmark import (
@@ -20,6 +21,7 @@ from framewise.benchmark import (
     timing,
 )
 from framewise.camera_rating import CameraRating
+from framewise.exiftool import find_exiftool
 from framewise.judge import Judgement, Scores, Verdict
 from framewise.store import Frame
 
@@ -392,3 +394,39 @@ def test_benchmark_refuses_to_run_on_windows(session_dir, catalog, tmp_path, cap
 
     assert exit_info.value.code == 2
     assert "does not run on Windows" in capsys.readouterr().err
+
+
+@runs_the_benchmark
+@pytest.mark.skipif(find_exiftool() is None, reason="ExifTool is not installed")
+def test_benchmark_skips_raws_by_the_minimum_preview_size_in_the_config(
+    session_dir, catalog, tmp_path, isolated_data_dir
+):
+    make_dng_with_previews(session_dir / "L1000001.DNG", [(32, 24), (32, 24), (400, 300)])
+    make_dng_with_previews(session_dir / "L1000002.DNG", [(32, 24), (32, 24), (300, 200)])
+    isolated_data_dir.mkdir()
+    (isolated_data_dir / "config.toml").write_text("[raw_only]\nmin_preview_long_edge = 400\n")
+    report = tmp_path / "report.json"
+
+    main(
+        [str(session_dir), "--catalog", str(catalog.path), "--report", str(report)],
+        analyzer=FakeAnalyzer(),
+    )
+
+    assert json.loads(report.read_text())["frames"] == 1
+
+
+@runs_the_benchmark
+def test_benchmark_refuses_to_run_with_an_invalid_minimum_preview_size(
+    session_dir, catalog, tmp_path, isolated_data_dir, capsys
+):
+    isolated_data_dir.mkdir()
+    (isolated_data_dir / "config.toml").write_text("[raw_only]\nmin_preview_long_edge = 0\n")
+
+    with pytest.raises(SystemExit) as exit_info:
+        main(
+            [str(session_dir), "--catalog", str(catalog.path), "--report", str(tmp_path / "r")],
+            analyzer=FakeAnalyzer(),
+        )
+
+    assert exit_info.value.code == 1
+    assert "framewise-benchmark: error:" in capsys.readouterr().err

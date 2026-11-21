@@ -5,6 +5,7 @@ What changed in framewise, written for photographers. The Review UI shows this l
 ## Unreleased
 
 - Face badges appear together with the Frame's image in the loupe, the Compare loupe and an open Group, instead of floating over an empty area while the image loads. Stepping to the next Frame no longer shows the previous Frame's badges over it.
+- When `framewise review` stops, an open Review UI tab says it lost the connection and how to start it again, instead of showing broken thumbnails. It also notices when you come back to the tab. It reconnects on its own once the server is back, keeping every Override that was saved before it stopped.
 
 ## 0.2.0 — 2026-11-19
 

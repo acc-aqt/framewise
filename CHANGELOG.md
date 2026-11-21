@@ -4,6 +4,8 @@ What changed in framewise, written for photographers. The Review UI shows this l
 
 ## Unreleased
 
+- Faces are read for their expression: a smile, eyes looking into the lens and a head facing the camera. Within a Group, a Frame where everyone faces and looks at the camera ranks above one where someone does not, and a smile adds a little; expression never makes a Frame a Reject. An open Group and the loupe show a badge on each face. Needs an `expression` Provider, which the portable MediaPipe Provider serves on macOS, Linux and Windows.
+- Someone who glances back over their shoulder into the lens counts as looking at the camera, whichever way their head is turned. A Frame where they do ranks above one where they look away.
 - Face badges appear together with the Frame's image in the loupe, the Compare loupe and an open Group, instead of floating over an empty area while the image loads. Stepping to the next Frame no longer shows the previous Frame's badges over it.
 - When `framewise review` stops, an open Review UI tab says it lost the connection and how to start it again, instead of showing broken thumbnails. It also notices when you come back to the tab. It reconnects on its own once the server is back, keeping every Override that was saved before it stopped.
 

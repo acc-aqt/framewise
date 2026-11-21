@@ -1198,6 +1198,25 @@ describe('Review UI', () => {
     expect(text('[data-testid="score-breakdown"]', frames[1])).not.toContain('Face quality');
   });
 
+  it('includes the expression in the score breakdown where it is available', async () => {
+    await respond(summary, [
+      group(1, [
+        frame(1, 'jpg-only', {
+          verdict: 'winner',
+          scores: { ...SCORES, expression: 0.72 },
+          faces: [face(0.1, 'open', 'sharp')],
+        }),
+        frame(2, 'jpg-only'),
+      ]),
+    ]);
+    all('[data-testid="group-tile"]')[0].click();
+    await fixture.whenStable();
+
+    const frames = all('[data-testid="group-view"] [data-testid="frame-details"]');
+    expect(text('[data-testid="score-breakdown"]', frames[0])).toContain('Expression 0.72');
+    expect(text('[data-testid="score-breakdown"]', frames[1])).not.toContain('Expression');
+  });
+
   it('shows the hint a Camera rating gave in the score breakdown', async () => {
     await respond(summary, [
       group(1, [
@@ -3319,6 +3338,7 @@ const SCORES: Frame['scores'] = {
   exposure: 1,
   aesthetics: 0.5,
   face_quality: null,
+  expression: null,
   camera_rating: 0,
   total: 0.8,
 };

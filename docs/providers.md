@@ -38,7 +38,7 @@ The face detection Provider alone decides which faces a Frame has. The eye state
 
 `looking` is the gaze from the camera, so a head turned away whose eyes look back into the lens scores high on `looking` and low on `facing`. MediaPipe's blendshapes give the eyes' direction relative to the head, so framewise's MediaPipe Provider estimates the eyes' angle from them and adds the head's yaw and pitch to it.
 
-Leave any part your Provider cannot tell as `None`; `looking` and `facing` default to it. framewise weighs the parts a face has into one expression, the smile 0.4 and the other two 0.3 each, and ranks a Frame by its weakest face's expression. Expression never counts as a flaw.
+Leave any part your Provider cannot tell as `None`; `looking` and `facing` default to it. framewise weighs the parts a face has into one expression, looking and facing 0.4 each and the smile 0.2, and ranks a Frame by its weakest face's expression. Expression never counts as a flaw.
 
 ### Subject masks
 

@@ -238,7 +238,7 @@ def test_expression_weighs_the_smile_looking_at_the_camera_and_facing_it(
 
     [frame] = frames_by_name(review()).values()
 
-    assert frame["scores"]["expression"] == pytest.approx(0.55)
+    assert frame["scores"]["expression"] == pytest.approx(0.4)
 
 
 def test_a_part_of_the_expression_the_provider_cannot_read_is_left_out(
@@ -252,7 +252,7 @@ def test_a_part_of_the_expression_the_provider_cannot_read_is_left_out(
 
     [frame] = frames_by_name(review()).values()
 
-    assert frame["scores"]["expression"] == pytest.approx(0.5 / 0.7, abs=0.001)
+    assert frame["scores"]["expression"] == pytest.approx(0.5 / 0.6, abs=0.001)
 
 
 def test_a_frame_with_a_smiling_and_a_turned_away_face_scores_as_the_turned_away_one(
@@ -275,7 +275,7 @@ def test_a_frame_with_a_smiling_and_a_turned_away_face_scores_as_the_turned_away
 
     frames = frames_by_name(review())
 
-    assert frames["DSCF0001.JPG"]["scores"]["expression"] == pytest.approx(0.66)
+    assert frames["DSCF0001.JPG"]["scores"]["expression"] == pytest.approx(0.58)
     assert frames["DSCF0002.JPG"]["verdict"] == "winner"
 
 

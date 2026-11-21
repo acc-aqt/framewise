@@ -1,8 +1,9 @@
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { About } from './about-api';
 import { App, POLL_INTERVAL_MS } from './app';
+import { RECONNECT_INTERVAL_MS, watchServerConnection } from './server-connection';
 import { TOOLTIP_DELAY_MS } from './tooltip';
 import {
   AnalysisProgress,
@@ -72,7 +73,10 @@ describe('Review UI', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(withInterceptors([watchServerConnection])),
+        provideHttpClientTesting(),
+      ],
     });
     http = TestBed.inject(HttpTestingController);
     startApp();
@@ -160,6 +164,12 @@ describe('Review UI', () => {
     return Array.from(
       (root ?? (fixture.nativeElement as HTMLElement)).querySelectorAll<HTMLElement>(selector),
     );
+  }
+
+  /** Lets the matching images finish loading, or fail to. */
+  async function loadImages(selector: string, outcome: 'load' | 'error' = 'load'): Promise<void> {
+    all(selector).forEach((image) => image.dispatchEvent(new Event(outcome)));
+    await fixture.whenStable();
   }
 
   async function respond(session: SessionSummary, groups: Group[]): Promise<void> {
@@ -1128,6 +1138,7 @@ describe('Review UI', () => {
     ]);
     all('[data-testid="group-tile"]')[0].click();
     await fixture.whenStable();
+    await loadImages('[data-testid="group-view"] [data-testid="frame-tile"] img');
 
     const badges = all('[data-testid="group-view"] [data-testid="face-badge"]');
     expect(badges.map((badge) => badge.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
@@ -1725,6 +1736,7 @@ describe('Review UI', () => {
       ]);
 
       await press('e');
+      await loadImages('[data-testid="loupe-image"]');
       const badges = () =>
         all('[data-testid="loupe"] [data-testid="face-badge"]').map((badge) =>
           badge.textContent?.replace(/\s+/g, ' ').trim(),
@@ -1733,6 +1745,52 @@ describe('Review UI', () => {
 
       await press('z');
       expect(badges()).toEqual(['Eyes open · Sharp', 'Eyes closed · Sharp']);
+    });
+
+    it("shows the loupe's face badges only once the Frame's image has loaded", async () => {
+      await openFirstGroup([
+        group(1, [
+          frame(1, 'jpg-only', { verdict: 'winner', faces: [face(0.1, 'open', 'sharp')] }),
+        ]),
+      ]);
+
+      await press('e');
+      expect(all('[data-testid="loupe"] [data-testid="face-badge"]')).toEqual([]);
+
+      await loadImages('[data-testid="loupe-image"]');
+      expect(all('[data-testid="loupe"] [data-testid="face-badge"]').length).toBe(1);
+    });
+
+    it("hides the previous Frame's face badges until the next Frame's image has loaded", async () => {
+      await openFirstGroup([
+        group(1, [
+          frame(1, 'jpg-only', { verdict: 'winner', faces: [face(0.1, 'open', 'sharp')] }),
+          frame(2, 'jpg-only', { faces: [face(0.6, 'closed', 'soft')] }),
+        ]),
+      ]);
+      await press('e');
+      await loadImages('[data-testid="loupe-image"]');
+
+      await press('ArrowRight');
+      expect(all('[data-testid="loupe"] [data-testid="face-badge"]')).toEqual([]);
+
+      await loadImages('[data-testid="loupe-image"]');
+      expect(text('[data-testid="loupe"] [data-testid="face-badge"]')).toBe('Eyes closed · Soft');
+    });
+
+    it("shows no face badges when the Frame's image fails to load", async () => {
+      await openFirstGroup([
+        group(1, [
+          frame(1, 'jpg-only', { verdict: 'winner', faces: [face(0.1, 'open', 'sharp')] }),
+        ]),
+      ]);
+      await press('e');
+
+      await loadImages('[data-testid="loupe-image"]', 'error');
+      http.expectOne('/api/about').flush(about);
+      await settle();
+
+      expect(all('[data-testid="loupe"] [data-testid="face-badge"]')).toEqual([]);
     });
 
     it('moves the loupe between Frames with the arrow keys', async () => {
@@ -2097,6 +2155,8 @@ describe('Review UI', () => {
         await press('ArrowRight');
 
         await press('c');
+        expect(all('[data-testid="loupe"] [data-testid="face-badge"]')).toEqual([]);
+        await loadImages('[data-testid="loupe-image"]');
 
         expect(compareSides()).toEqual([
           { image: '/api/frames/2/image', verdict: 'Keeper' },
@@ -3177,6 +3237,97 @@ describe('Review UI', () => {
         expect(paletteCommand(label)).toBeUndefined();
         await press('Escape');
       }
+    });
+  });
+
+  describe('losing the server', () => {
+    const reviewed = (override: Frame['override'] = null): Group[] => [
+      group(1, [frame(1, 'jpg-only', { verdict: 'winner', override })]),
+    ];
+
+    async function openGroup(): Promise<void> {
+      await respond(summary, reviewed());
+      all('[data-testid="group-tile"]')[0].click();
+      await settle();
+    }
+
+    async function loseServer(request: { error(event: ProgressEvent): void }): Promise<void> {
+      request.error(new ProgressEvent('error'));
+      await settle();
+    }
+
+    async function nextReconnectAttempt(): Promise<void> {
+      await vi.advanceTimersByTimeAsync(RECONNECT_INTERVAL_MS);
+      await settle();
+    }
+
+    it('shows a disconnected state saying how to restart the server instead of the Frames', async () => {
+      await openGroup();
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true }));
+      await settle();
+      await loseServer(http.expectOne('/api/frames/1/override'));
+
+      expect(text('[data-testid="disconnected"]')).toContain('Lost the connection to framewise');
+      expect(text('[data-testid="disconnected"] code')).toBe('framewise review');
+      expect(all('[data-testid="group-view"]')).toEqual([]);
+      expect(all('img[src^="/api/frames"]')).toEqual([]);
+    });
+
+    it('notices the server is gone when a Frame image fails to load', async () => {
+      await respond(summary, reviewed());
+
+      all('[data-testid="group-tile"] img')[0].dispatchEvent(new Event('error'));
+      await settle();
+      await loseServer(http.expectOne('/api/about'));
+
+      expect(all('[data-testid="disconnected"]').length).toBe(1);
+    });
+
+    it('stays connected when a Frame image fails to load but the server answers', async () => {
+      await respond(summary, reviewed());
+
+      all('[data-testid="group-tile"] img')[0].dispatchEvent(new Event('error'));
+      await settle();
+      http.expectOne('/api/about').flush(about);
+      await settle();
+
+      expect(all('[data-testid="disconnected"]')).toEqual([]);
+    });
+
+    it('notices the server is gone when the photographer returns to an idle tab', async () => {
+      await respond(summary, reviewed());
+
+      document.dispatchEvent(new Event('visibilitychange'));
+      await settle();
+      await loseServer(http.expectOne('/api/about'));
+
+      expect(all('[data-testid="disconnected"]').length).toBe(1);
+    });
+
+    it('comes back with the Session as the server stored it once the server is back', async () => {
+      vi.useFakeTimers();
+      await openGroup();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true }));
+      await settle();
+      await loseServer(http.expectOne('/api/frames/1/override'));
+
+      await nextReconnectAttempt();
+      await loseServer(http.expectOne('/api/about'));
+      expect(all('[data-testid="disconnected"]').length).toBe(1);
+
+      await nextReconnectAttempt();
+      http.expectOne('/api/about').flush(about);
+      await settle();
+      await respond(summary, reviewed());
+
+      expect(all('[data-testid="disconnected"]')).toEqual([]);
+      expect(all('[data-testid="group-view"]').length).toBe(1);
+      expect(all('[data-testid="frame-tile"] img')[0].getAttribute('src')).toBe(
+        '/api/frames/1/thumbnail',
+      );
+      await nextReconnectAttempt();
+      http.expectNone('/api/about');
     });
   });
 });

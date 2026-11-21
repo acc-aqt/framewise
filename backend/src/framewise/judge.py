@@ -66,8 +66,10 @@ WEIGHTS = {
 }
 # How a face's smile, its eyes looking into the lens and its head facing the camera weigh into
 # its expression. A part the Provider cannot read is left out and the others are weighed alone,
-# so a neutral face looking into the camera still scores well.
-EXPRESSION_WEIGHTS = {"smile": 0.4, "looking": 0.3, "facing": 0.3}
+# so a neutral face looking into the camera still scores well. The smile weighs least: in blind
+# tests on two Sessions, looking and facing agreed with the photographer, while a bigger smile
+# lost as often as it won, and posed portraits often mean a neutral face.
+EXPRESSION_WEIGHTS = {"smile": 0.2, "looking": 0.4, "facing": 0.4}
 EYES_CLOSED = "eyes-closed"
 
 

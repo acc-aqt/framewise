@@ -4,6 +4,8 @@ What changed in framewise, written for photographers. The Review UI shows this l
 
 ## Unreleased
 
+- Face badges appear together with the Frame's image in the loupe, the Compare loupe and an open Group, instead of floating over an empty area while the image loads. Stepping to the next Frame no longer shows the previous Frame's badges over it.
+
 ## 0.2.0 — 2026-11-19
 
 - framewise runs on Windows x64 as a preview, with the same portable Providers as on Linux. Set it up with `scripts\setup.ps1`. **Rating write-back** uses the color label names from Lightroom Classic's preferences there too.

@@ -162,6 +162,12 @@ describe('Review UI', () => {
     );
   }
 
+  /** Lets the matching images finish loading, or fail to. */
+  async function loadImages(selector: string, outcome: 'load' | 'error' = 'load'): Promise<void> {
+    all(selector).forEach((image) => image.dispatchEvent(new Event(outcome)));
+    await fixture.whenStable();
+  }
+
   async function respond(session: SessionSummary, groups: Group[]): Promise<void> {
     http.expectOne('/api/session').flush(session);
     await respondToPoll(
@@ -1128,6 +1134,7 @@ describe('Review UI', () => {
     ]);
     all('[data-testid="group-tile"]')[0].click();
     await fixture.whenStable();
+    await loadImages('[data-testid="group-view"] [data-testid="frame-tile"] img');
 
     const badges = all('[data-testid="group-view"] [data-testid="face-badge"]');
     expect(badges.map((badge) => badge.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
@@ -1706,6 +1713,7 @@ describe('Review UI', () => {
       ]);
 
       await press('e');
+      await loadImages('[data-testid="loupe-image"]');
       const badges = () =>
         all('[data-testid="loupe"] [data-testid="face-badge"]').map((badge) =>
           badge.textContent?.replace(/\s+/g, ' ').trim(),
@@ -1714,6 +1722,50 @@ describe('Review UI', () => {
 
       await press('z');
       expect(badges()).toEqual(['Eyes open · Sharp', 'Eyes closed · Sharp']);
+    });
+
+    it("shows the loupe's face badges only once the Frame's image has loaded", async () => {
+      await openFirstGroup([
+        group(1, [
+          frame(1, 'jpg-only', { verdict: 'winner', faces: [face(0.1, 'open', 'sharp')] }),
+        ]),
+      ]);
+
+      await press('e');
+      expect(all('[data-testid="loupe"] [data-testid="face-badge"]')).toEqual([]);
+
+      await loadImages('[data-testid="loupe-image"]');
+      expect(all('[data-testid="loupe"] [data-testid="face-badge"]').length).toBe(1);
+    });
+
+    it("hides the previous Frame's face badges until the next Frame's image has loaded", async () => {
+      await openFirstGroup([
+        group(1, [
+          frame(1, 'jpg-only', { verdict: 'winner', faces: [face(0.1, 'open', 'sharp')] }),
+          frame(2, 'jpg-only', { faces: [face(0.6, 'closed', 'soft')] }),
+        ]),
+      ]);
+      await press('e');
+      await loadImages('[data-testid="loupe-image"]');
+
+      await press('ArrowRight');
+      expect(all('[data-testid="loupe"] [data-testid="face-badge"]')).toEqual([]);
+
+      await loadImages('[data-testid="loupe-image"]');
+      expect(text('[data-testid="loupe"] [data-testid="face-badge"]')).toBe('Eyes closed · Soft');
+    });
+
+    it("shows no face badges when the Frame's image fails to load", async () => {
+      await openFirstGroup([
+        group(1, [
+          frame(1, 'jpg-only', { verdict: 'winner', faces: [face(0.1, 'open', 'sharp')] }),
+        ]),
+      ]);
+      await press('e');
+
+      await loadImages('[data-testid="loupe-image"]', 'error');
+
+      expect(all('[data-testid="loupe"] [data-testid="face-badge"]')).toEqual([]);
     });
 
     it('moves the loupe between Frames with the arrow keys', async () => {
@@ -2078,6 +2130,8 @@ describe('Review UI', () => {
         await press('ArrowRight');
 
         await press('c');
+        expect(all('[data-testid="loupe"] [data-testid="face-badge"]')).toEqual([]);
+        await loadImages('[data-testid="loupe-image"]');
 
         expect(compareSides()).toEqual([
           { image: '/api/frames/2/image', verdict: 'Keeper' },

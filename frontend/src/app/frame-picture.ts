@@ -5,7 +5,8 @@ import { Face } from './session-api';
 /**
  * A Frame's image, optionally with a badge on each face. Fitted, it fills as much of the host as
  * its aspect ratio allows; otherwise it shows at its natural size. Either way the picture is
- * exactly the size of the image, so face badges land on their faces.
+ * exactly the size of the image, so face badges land on their faces. Face badges wait for the
+ * image to load, so they never show over an empty or still-loading picture.
  */
 @Component({
   selector: 'app-frame-picture',
@@ -24,9 +25,9 @@ import { Face } from './session-api';
         [alt]="alt()"
         [attr.loading]="lazy() ? 'lazy' : null"
         [attr.data-testid]="imageTestId()"
-        (load)="measure($event)"
+        (load)="imageLoaded($event)"
       />
-      @if (faces(); as faces) {
+      @if (badgedFaces(); as faces) {
         <app-face-badges [faces]="faces" />
       }
     </div>
@@ -74,7 +75,14 @@ export class FramePicture {
     return ratio === null ? null : `min(100cqw, ${ratio * 100}cqh)`;
   });
 
-  protected measure(event: Event): void {
+  /** The image whose load last finished, so a new image hides the previous one's badges. */
+  private readonly loadedSrc = signal<string | null>(null);
+  protected readonly badgedFaces = computed(() =>
+    this.loadedSrc() === this.src() ? this.faces() : null,
+  );
+
+  protected imageLoaded(event: Event): void {
+    this.loadedSrc.set(this.src());
     const image = event.target as HTMLImageElement;
     if (image.naturalWidth > 0 && image.naturalHeight > 0) {
       this.aspectRatio.set(image.naturalWidth / image.naturalHeight);

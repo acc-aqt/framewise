@@ -1,12 +1,16 @@
+import pytest
 from test_verdicts_api import burst, frames_by_name, keep_every_clean_frame, reasons, verdicts
 
-from framewise.analyzer import Face
+from framewise.analyzer import Expression, Face
 
 
 def face(
     eyes_open: bool | None = True,
     sharpness: float = 0.9,
     quality: float | None = 0.7,
+    smile: float | None = 0.5,
+    looking: float | None = None,
+    facing: float | None = None,
     x: float = 0.4,
 ) -> Face:
     return Face(
@@ -17,6 +21,9 @@ def face(
         eyes_open=eyes_open,
         sharpness=sharpness,
         quality=quality,
+        expression=None
+        if smile is None and looking is None and facing is None
+        else Expression(smile=smile, looking=looking, facing=facing),
     )
 
 
@@ -201,6 +208,106 @@ def test_a_frame_without_faces_has_no_face_quality_score(session_dir, review, an
 
     assert frame["scores"]["face_quality"] is None
     assert frame["faces"] == []
+
+
+def test_a_frame_where_everyone_smiles_beats_one_where_someone_does_not(
+    session_dir, review, analyzer
+):
+    burst(
+        session_dir,
+        analyzer,
+        ("DSCF0001", {"faces": [face(x=0.1, smile=0.95), face(x=0.6, smile=0.1)]}),
+        ("DSCF0002", {"faces": [face(x=0.1, smile=0.6), face(x=0.6, smile=0.6)]}),
+    )
+
+    frames = frames_by_name(review())
+
+    assert frames["DSCF0002.JPG"]["verdict"] == "winner"
+    assert frames["DSCF0001.JPG"]["scores"]["expression"] == 0.1
+    assert frames["DSCF0002.JPG"]["scores"]["expression"] == 0.6
+
+
+def test_expression_weighs_the_smile_looking_at_the_camera_and_facing_it(
+    session_dir, review, analyzer
+):
+    burst(
+        session_dir,
+        analyzer,
+        ("DSCF0001", {"faces": [face(smile=1.0, looking=0.0, facing=0.5)]}),
+    )
+
+    [frame] = frames_by_name(review()).values()
+
+    assert frame["scores"]["expression"] == pytest.approx(0.4)
+
+
+def test_a_part_of_the_expression_the_provider_cannot_read_is_left_out(
+    session_dir, review, analyzer
+):
+    burst(
+        session_dir,
+        analyzer,
+        ("DSCF0001", {"faces": [face(smile=0.5, looking=None, facing=1.0)]}),
+    )
+
+    [frame] = frames_by_name(review()).values()
+
+    assert frame["scores"]["expression"] == pytest.approx(0.5 / 0.6, abs=0.001)
+
+
+def test_a_frame_with_a_smiling_and_a_turned_away_face_scores_as_the_turned_away_one(
+    session_dir, review, analyzer
+):
+    burst(
+        session_dir,
+        analyzer,
+        (
+            "DSCF0001",
+            {
+                "faces": [
+                    face(x=0.1, smile=0.9, looking=1.0, facing=1.0),
+                    face(x=0.6, smile=0.9, looking=1.0, facing=0.0),
+                ]
+            },
+        ),
+        ("DSCF0002", {"faces": [face(x=0.1, smile=0.6, looking=1.0, facing=1.0)]}),
+    )
+
+    frames = frames_by_name(review())
+
+    assert frames["DSCF0001.JPG"]["scores"]["expression"] == pytest.approx(0.58)
+    assert frames["DSCF0002.JPG"]["verdict"] == "winner"
+
+
+def test_no_smile_is_never_a_flaw(session_dir, review, analyzer):
+    burst(session_dir, analyzer, ("DSCF0001", {"faces": [face(smile=0.0)]}))
+
+    [frame] = frames_by_name(review()).values()
+
+    assert frame["verdict"] == "winner"
+    assert frame["reasons"] == []
+
+
+def test_an_unknown_expression_is_left_out_of_the_score(session_dir, review, analyzer):
+    burst(
+        session_dir,
+        analyzer,
+        ("DSCF0001", {"faces": [face(smile=0.0)]}),
+        ("DSCF0002", {"faces": [face(smile=None)]}),
+    )
+
+    frames = frames_by_name(review())
+
+    assert frames["DSCF0002.JPG"]["scores"]["expression"] is None
+    assert frames["DSCF0002.JPG"]["verdict"] == "winner"
+
+
+def test_a_frame_without_faces_has_no_expression_score(session_dir, review, analyzer):
+    burst(session_dir, analyzer, ("DSCF0001", {}))
+
+    [frame] = frames_by_name(review()).values()
+
+    assert frame["scores"]["expression"] is None
 
 
 def test_each_face_carries_its_box_and_badges(session_dir, review, analyzer):

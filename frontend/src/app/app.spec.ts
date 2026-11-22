@@ -1,7 +1,9 @@
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { About } from './about-api';
 import { App, POLL_INTERVAL_MS } from './app';
+import { RECONNECT_INTERVAL_MS, watchServerConnection } from './server-connection';
 import { TOOLTIP_DELAY_MS } from './tooltip';
 import {
   AnalysisProgress,
@@ -15,10 +17,11 @@ import {
 
 const summary: SessionSummary = {
   root: '/Volumes/card/DCIM',
-  total_frames: 3,
+  total_frames: 4,
   jpg_only_count: 1,
   raw_jpg_count: 2,
-  skipped: ['100LEICA/L1000009-Pano.dng'],
+  raw_only_count: 1,
+  skipped: [{ path: '100LEICA/L1000009-Pano.dng', reason: 'The RAW holds no embedded preview' }],
   keeper_budget: 0.4,
   providers: {
     fingerprint: {
@@ -45,6 +48,25 @@ const summary: SessionSummary = {
   config_path: '/Users/me/Library/Application Support/framewise/config.toml',
 };
 
+const about: About = {
+  version: '0.1.0',
+  changelog: [
+    {
+      version: null,
+      date: null,
+      sections: [{ heading: null, items: ['Faster grouping'] }],
+    },
+    {
+      version: '0.1.0',
+      date: '2026-11-20',
+      sections: [
+        { heading: null, items: ['**Rating write-back** for Lightroom Classic'] },
+        { heading: 'Fixed', items: ['`framewise review` opens the browser'] },
+      ],
+    },
+  ],
+};
+
 describe('Review UI', () => {
   let fixture: ComponentFixture<App>;
   let http: HttpTestingController;
@@ -52,17 +74,33 @@ describe('Review UI', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(withInterceptors([watchServerConnection])),
+        provideHttpClientTesting(),
+      ],
     });
     http = TestBed.inject(HttpTestingController);
+    startApp();
+  });
+
+  function startApp(running: About = about): void {
     fixture = TestBed.createComponent(App);
     TestBed.tick();
-  });
+    http.expectOne('/api/about').flush(running);
+  }
 
   afterEach(() => {
     http.verify();
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
+
+  const MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 15_0) AppleWebKit/605.1.15';
+  const WINDOWS = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+
+  function onPlatform(userAgent: string): void {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(userAgent);
+  }
 
   function text(selector: string, root?: HTMLElement): string {
     return (
@@ -129,6 +167,12 @@ describe('Review UI', () => {
     );
   }
 
+  /** Lets the matching images finish loading, or fail to. */
+  async function loadImages(selector: string, outcome: 'load' | 'error' = 'load'): Promise<void> {
+    all(selector).forEach((image) => image.dispatchEvent(new Event(outcome)));
+    await fixture.whenStable();
+  }
+
   async function respond(session: SessionSummary, groups: Group[]): Promise<void> {
     http.expectOne('/api/session').flush(session);
     await respondToPoll(
@@ -188,13 +232,13 @@ describe('Review UI', () => {
   it('names the Frames disclosure File details for assistive technology', async () => {
     await respond(summary, []);
 
-    expect(text('summary', fileDetails())).toBe('File details: 3 Frames');
+    expect(text('summary', fileDetails())).toBe('File details: 4 Frames');
   });
 
   it('shows the Frame count in the header, and opens it to the file kinds and Skipped files', async () => {
     await respond(summary, []);
 
-    expect(visibleText(fileDetails().querySelector('summary')!)).toBe('3 Frames');
+    expect(visibleText(fileDetails().querySelector('summary')!)).toBe('4 Frames');
     expect(fileDetails().open).toBe(false);
 
     const details = await openFileDetails();
@@ -202,14 +246,17 @@ describe('Review UI', () => {
     expect(details.open).toBe(true);
     expect(text('[data-testid="raw-jpg-count"]', details)).toBe('2');
     expect(text('[data-testid="jpg-only-count"]', details)).toBe('1');
+    expect(text('[data-testid="raw-only-count"]', details)).toBe('1');
     expect(text('[data-testid="skipped-count"]', details)).toBe('1');
-    expect(text('[data-testid="skipped-files"]', details)).toContain('100LEICA/L1000009-Pano.dng');
+    expect(text('[data-testid="skipped-files"]', details)).toBe(
+      '100LEICA/L1000009-Pano.dng: The RAW holds no embedded preview',
+    );
   });
 
   it('keeps the file kind counts out of the header row', async () => {
     await respond(summary, []);
 
-    for (const id of ['raw-jpg-count', 'jpg-only-count', 'skipped-count']) {
+    for (const id of ['raw-jpg-count', 'jpg-only-count', 'raw-only-count', 'skipped-count']) {
       const counts = all(`[data-testid="${id}"]`);
       expect(counts.length).toBe(1);
       expect(fileDetails().contains(counts[0])).toBe(true);
@@ -223,6 +270,158 @@ describe('Review UI', () => {
 
     expect(text('[data-testid="skipped-count"]', details)).toBe('0');
     expect(all('[data-testid="skipped-files"]')).toEqual([]);
+  });
+
+  it('shows the running version next to the name', async () => {
+    await respond(summary, []);
+
+    expect(text('header [data-testid="version"]')).toBe('0.1.0');
+  });
+
+  describe("What's new", () => {
+    const versionButton = () => all('header [data-testid="version"]')[0];
+    const panel = () => all('[data-testid="whats-new"]')[0];
+
+    async function openWhatsNew(): Promise<void> {
+      versionButton().click();
+      await settle();
+    }
+
+    /** Reloads the Review UI, which must have answered its first requests already. */
+    async function restartWith(running: About): Promise<void> {
+      fixture.destroy();
+      startApp(running);
+      await respond(summary, []);
+    }
+
+    function shownVersions(): string[] {
+      return all('[data-testid="changelog-version"]', panel()).map((entry) => text('h3', entry));
+    }
+
+    it('opens the Changelog from the version, newest first', async () => {
+      await respond(summary, []);
+      expect(panel()).toBeUndefined();
+
+      await openWhatsNew();
+
+      expect(versionButton().getAttribute('aria-expanded')).toBe('true');
+      expect(shownVersions()).toEqual(['Unreleased', '0.1.0 2026-11-20']);
+      const [unreleased, released] = all('[data-testid="changelog-version"]', panel());
+      expect(all('li', unreleased).map((item) => item.textContent?.trim())).toEqual([
+        'Faster grouping',
+      ]);
+      expect(all('h4', released).map((heading) => heading.textContent?.trim())).toEqual(['Fixed']);
+      expect(text('li strong', released)).toBe('Rating write-back');
+      expect(text('li code', released)).toBe('framewise review');
+      expect(text('li', released)).toBe('Rating write-back for Lightroom Classic');
+    });
+
+    it('leaves out Unreleased when nothing is in it', async () => {
+      await respond(summary, []);
+      await restartWith({
+        ...about,
+        changelog: [{ version: null, date: null, sections: [] }, about.changelog[1]],
+      });
+
+      await openWhatsNew();
+
+      expect(shownVersions()).toEqual(['0.1.0 2026-11-20']);
+    });
+
+    it('says so when there are no release notes', async () => {
+      await respond(summary, []);
+      await restartWith({ ...about, changelog: [] });
+
+      await openWhatsNew();
+
+      expect(shownVersions()).toEqual([]);
+      expect(text('[data-testid="no-release-notes"]', panel())).toBe('No release notes found.');
+    });
+
+    it('closes on Escape and gives focus back to the version', async () => {
+      await respond(summary, []);
+      await openWhatsNew();
+
+      panel().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await settle();
+
+      expect(panel()).toBeUndefined();
+      expect(document.activeElement).toBe(versionButton());
+    });
+
+    it('closes on a click outside it', async () => {
+      await respond(summary, []);
+      await openWhatsNew();
+
+      document.body.click();
+      await settle();
+
+      expect(panel()).toBeUndefined();
+    });
+
+    it('opens from the command palette', async () => {
+      await respond(summary, []);
+
+      await runFromPalette("What's new");
+
+      expect(shownVersions()).toEqual(['Unreleased', '0.1.0 2026-11-20']);
+    });
+
+    describe('after an upgrade', () => {
+      const LAST_SEEN_KEY = 'framewise.whatsNewSeenVersion';
+      const badge = () => all('header [data-testid="whats-new-badge"]')[0];
+
+      afterEach(() => {
+        vi.restoreAllMocks();
+        localStorage.clear();
+      });
+
+      it("marks the version until What's new is opened", async () => {
+        await respond(summary, []);
+        localStorage.setItem(LAST_SEEN_KEY, '0.0.9');
+        await restartWith(about);
+
+        expect(badge()).toBeDefined();
+        expect(versionButton().getAttribute('aria-label')).toContain('unseen changes');
+
+        await openWhatsNew();
+
+        expect(badge()).toBeUndefined();
+        expect(localStorage.getItem(LAST_SEEN_KEY)).toBe('0.1.0');
+
+        await restartWith(about);
+
+        expect(badge()).toBeUndefined();
+      });
+
+      it('marks nothing on the first run, and remembers the version from then on', async () => {
+        await respond(summary, []);
+
+        expect(badge()).toBeUndefined();
+        expect(localStorage.getItem(LAST_SEEN_KEY)).toBe('0.1.0');
+
+        await restartWith({ ...about, version: '0.2.0' });
+
+        expect(badge()).toBeDefined();
+      });
+
+      it("marks nothing and still opens What's new without browser storage", async () => {
+        vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+          throw new DOMException('denied', 'SecurityError');
+        });
+        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+          throw new DOMException('denied', 'SecurityError');
+        });
+        await respond(summary, []);
+        await restartWith(about);
+
+        expect(badge()).toBeUndefined();
+
+        await openWhatsNew();
+
+        expect(shownVersions()).toEqual(['Unreleased', '0.1.0 2026-11-20']);
+      });
+    });
   });
 
   describe('without a Session', () => {
@@ -258,6 +457,17 @@ describe('Review UI', () => {
       expect(chooseButton()).not.toBeNull();
       expect(all('[data-testid="open-write-back"]')).toEqual([]);
       expect(all('header .error')).toEqual([]);
+    });
+
+    it("shows the running version next to the name, and opens What's new from it", async () => {
+      await respondWithoutSession();
+
+      expect(text('header [data-testid="version"]')).toBe('0.1.0');
+
+      all('header [data-testid="version"]')[0].click();
+      await settle();
+
+      expect(all('[data-testid="whats-new"] [data-testid="changelog-version"]').length).toBe(2);
     });
 
     it('opens the chosen Session', async () => {
@@ -619,15 +829,16 @@ describe('Review UI', () => {
     ).toEqual(['2 kept · 3 out', '']);
   });
 
-  it('marks only JPG-only Frames with their kind on the grid', async () => {
+  it('marks JPG-only and RAW-only Frames with their kind on the grid', async () => {
     await respond(summary, [
       group(1, [frame(1, 'raw+jpg', { verdict: 'winner' })]),
       group(2, [frame(2, 'jpg-only', { verdict: 'winner' })]),
+      group(3, [frame(3, 'raw-only', { verdict: 'winner' })]),
     ]);
 
     expect(
       all('[data-testid="group-tile"]').map((tile) => text('[data-testid="kind-badge"]', tile)),
-    ).toEqual(['', 'JPG-only']);
+    ).toEqual(['', 'JPG-only', 'RAW-only']);
   });
 
   it("names each tile after its Frame's file, Verdict and Group size", async () => {
@@ -657,6 +868,24 @@ describe('Review UI', () => {
     expect(title).toContain('Total 0.93');
     expect(title).toContain('Sharpness 0.90');
     expect(title).toContain('Aesthetics unavailable');
+  });
+
+  it('names what the sharpness was measured on in the score breakdown', async () => {
+    await respond(summary, [
+      group(1, [frame(1, 'jpg-only', { sharpness_measured_on: 'focus-point' })]),
+      group(2, [frame(2, 'jpg-only', { sharpness_measured_on: 'faces' })]),
+      group(3, [frame(3, 'jpg-only', { sharpness_measured_on: 'frame' })]),
+      group(4, [frame(4, 'jpg-only', { sharpness_measured_on: 'subject-mask' })]),
+    ]);
+
+    const titles = all('[data-testid="group-tile"] app-frame-tile').map((tile) =>
+      tile.getAttribute('title'),
+    );
+
+    expect(titles[0]).toContain('Sharpness 0.90 (at focus point)');
+    expect(titles[1]).toContain('Sharpness 0.90 (softest face)');
+    expect(titles[2]).toContain('Sharpness 0.90\n');
+    expect(titles[3]).toContain('Sharpness 0.90 (on subject)');
   });
 
   it("shows each Frame's Verdict, Reasons and score breakdown in an open Group", async () => {
@@ -914,6 +1143,7 @@ describe('Review UI', () => {
     ]);
     all('[data-testid="group-tile"]')[0].click();
     await fixture.whenStable();
+    await loadImages('[data-testid="group-view"] [data-testid="frame-tile"] img');
 
     const badges = all('[data-testid="group-view"] [data-testid="face-badge"]');
     expect(badges.map((badge) => badge.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
@@ -971,6 +1201,25 @@ describe('Review UI', () => {
     const frames = all('[data-testid="group-view"] [data-testid="frame-details"]');
     expect(text('[data-testid="score-breakdown"]', frames[0])).toContain('Face quality 0.64');
     expect(text('[data-testid="score-breakdown"]', frames[1])).not.toContain('Face quality');
+  });
+
+  it('includes the expression in the score breakdown where it is available', async () => {
+    await respond(summary, [
+      group(1, [
+        frame(1, 'jpg-only', {
+          verdict: 'winner',
+          scores: { ...SCORES, expression: 0.72 },
+          faces: [face(0.1, 'open', 'sharp')],
+        }),
+        frame(2, 'jpg-only'),
+      ]),
+    ]);
+    all('[data-testid="group-tile"]')[0].click();
+    await fixture.whenStable();
+
+    const frames = all('[data-testid="group-view"] [data-testid="frame-details"]');
+    expect(text('[data-testid="score-breakdown"]', frames[0])).toContain('Expression 0.72');
+    expect(text('[data-testid="score-breakdown"]', frames[1])).not.toContain('Expression');
   });
 
   it('shows the hint a Camera rating gave in the score breakdown', async () => {
@@ -1214,7 +1463,7 @@ describe('Review UI', () => {
     expect(all('[data-testid="open-write-back"]').length).toBe(1);
   });
 
-  it('names how many files the write-back screen reads, one per JPG and two per RAW+JPG Frame', async () => {
+  it('names how many files the write-back screen reads, one per JPG and two per RAW+JPG Frame, leaving out RAW-only Frames', async () => {
     await respond(summary, []);
     all('[data-testid="open-write-back"]')[0].click();
     await settle();
@@ -1492,6 +1741,7 @@ describe('Review UI', () => {
       ]);
 
       await press('e');
+      await loadImages('[data-testid="loupe-image"]');
       const badges = () =>
         all('[data-testid="loupe"] [data-testid="face-badge"]').map((badge) =>
           badge.textContent?.replace(/\s+/g, ' ').trim(),
@@ -1500,6 +1750,52 @@ describe('Review UI', () => {
 
       await press('z');
       expect(badges()).toEqual(['Eyes open · Sharp', 'Eyes closed · Sharp']);
+    });
+
+    it("shows the loupe's face badges only once the Frame's image has loaded", async () => {
+      await openFirstGroup([
+        group(1, [
+          frame(1, 'jpg-only', { verdict: 'winner', faces: [face(0.1, 'open', 'sharp')] }),
+        ]),
+      ]);
+
+      await press('e');
+      expect(all('[data-testid="loupe"] [data-testid="face-badge"]')).toEqual([]);
+
+      await loadImages('[data-testid="loupe-image"]');
+      expect(all('[data-testid="loupe"] [data-testid="face-badge"]').length).toBe(1);
+    });
+
+    it("hides the previous Frame's face badges until the next Frame's image has loaded", async () => {
+      await openFirstGroup([
+        group(1, [
+          frame(1, 'jpg-only', { verdict: 'winner', faces: [face(0.1, 'open', 'sharp')] }),
+          frame(2, 'jpg-only', { faces: [face(0.6, 'closed', 'soft')] }),
+        ]),
+      ]);
+      await press('e');
+      await loadImages('[data-testid="loupe-image"]');
+
+      await press('ArrowRight');
+      expect(all('[data-testid="loupe"] [data-testid="face-badge"]')).toEqual([]);
+
+      await loadImages('[data-testid="loupe-image"]');
+      expect(text('[data-testid="loupe"] [data-testid="face-badge"]')).toBe('Eyes closed · Soft');
+    });
+
+    it("shows no face badges when the Frame's image fails to load", async () => {
+      await openFirstGroup([
+        group(1, [
+          frame(1, 'jpg-only', { verdict: 'winner', faces: [face(0.1, 'open', 'sharp')] }),
+        ]),
+      ]);
+      await press('e');
+
+      await loadImages('[data-testid="loupe-image"]', 'error');
+      http.expectOne('/api/about').flush(about);
+      await settle();
+
+      expect(all('[data-testid="loupe"] [data-testid="face-badge"]')).toEqual([]);
     });
 
     it('moves the loupe between Frames with the arrow keys', async () => {
@@ -1669,6 +1965,7 @@ describe('Review UI', () => {
       }
 
       it('opens with Command-K and lists every command with its key', async () => {
+        onPlatform(MAC);
         await openFirstGroup();
 
         await openPalette();
@@ -1681,7 +1978,18 @@ describe('Review UI', () => {
         expect(rows()).toContain('Trash Frame ⌫');
         expect(rows()).toContain('Trash Group');
         expect(rows()).toContain('Trash selected Groups');
-        expect(rows().length).toBe(32);
+        expect(rows()).toContain("What's new");
+        expect(rows().length).toBe(33);
+      });
+
+      it('names keys the Windows way outside macOS', async () => {
+        onPlatform(WINDOWS);
+        await openFirstGroup();
+
+        await press('k', { ctrlKey: true });
+
+        expect(rows()).toContain('Next Frame in Group Alt+→');
+        expect(rows()).toContain('Trash Frame Delete');
       });
 
       it('opens from the header button', async () => {
@@ -1852,6 +2160,8 @@ describe('Review UI', () => {
         await press('ArrowRight');
 
         await press('c');
+        expect(all('[data-testid="loupe"] [data-testid="face-badge"]')).toEqual([]);
+        await loadImages('[data-testid="loupe-image"]');
 
         expect(compareSides()).toEqual([
           { image: '/api/frames/2/image', verdict: 'Keeper' },
@@ -2085,8 +2395,7 @@ describe('Review UI', () => {
       );
 
       fixture.destroy();
-      fixture = TestBed.createComponent(App);
-      TestBed.tick();
+      startApp();
       await openGroup(0);
 
       expect(pinnedThumbnail()).toBeUndefined();
@@ -2416,6 +2725,42 @@ describe('Review UI', () => {
 
       expect(confirmation()).toBeUndefined();
       expect(currentFrameThumbnail()).toBe('/api/frames/3/thumbnail');
+    });
+
+    it('leaves RAW-only Frames out of what a Trash moves, and says they stay', async () => {
+      await respond(summary, [
+        group(1, [
+          frame(1, 'jpg-only', { verdict: 'winner' }),
+          frame(2, 'raw+jpg'),
+          frame(5, 'raw-only'),
+        ]),
+      ]);
+      all('[data-testid="group-tile"]')[0].click();
+      await fixture.whenStable();
+
+      await click(all('[data-testid="trash-group"]')[0]);
+
+      expect(text('[data-testid="trash-confirmation"] p')).toBe(
+        'Move 2 Frames (3 files) to the Trash?',
+      );
+      expect(text('#trash-note')).toContain(
+        "1 RAW-only Frame stays: framewise can't trash RAW-only Frames yet.",
+      );
+      await confirmTrash([1, 2], [group(5, [frame(5, 'raw-only', { verdict: 'winner' })])]);
+    });
+
+    it('offers nothing to trash when every Frame is RAW-only', async () => {
+      await respond(summary, [group(5, [frame(5, 'raw-only', { verdict: 'winner' })])]);
+      all('[data-testid="group-tile"]')[0].click();
+      await fixture.whenStable();
+
+      await press('Backspace');
+
+      expect(text('[data-testid="trash-confirmation"] p')).toBe(
+        "Nothing to move: framewise can't trash RAW-only Frames yet.",
+      );
+      expect((all('[data-testid="trash-confirm"]')[0] as HTMLButtonElement).disabled).toBe(true);
+      expect(document.activeElement).toBe(all('[data-testid="trash-cancel"]')[0]);
     });
 
     it('asks to trash with Delete too, and trashes nothing on Escape', async () => {
@@ -2935,6 +3280,97 @@ describe('Review UI', () => {
       }
     });
   });
+
+  describe('losing the server', () => {
+    const reviewed = (override: Frame['override'] = null): Group[] => [
+      group(1, [frame(1, 'jpg-only', { verdict: 'winner', override })]),
+    ];
+
+    async function openGroup(): Promise<void> {
+      await respond(summary, reviewed());
+      all('[data-testid="group-tile"]')[0].click();
+      await settle();
+    }
+
+    async function loseServer(request: { error(event: ProgressEvent): void }): Promise<void> {
+      request.error(new ProgressEvent('error'));
+      await settle();
+    }
+
+    async function nextReconnectAttempt(): Promise<void> {
+      await vi.advanceTimersByTimeAsync(RECONNECT_INTERVAL_MS);
+      await settle();
+    }
+
+    it('shows a disconnected state saying how to restart the server instead of the Frames', async () => {
+      await openGroup();
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true }));
+      await settle();
+      await loseServer(http.expectOne('/api/frames/1/override'));
+
+      expect(text('[data-testid="disconnected"]')).toContain('Lost the connection to framewise');
+      expect(text('[data-testid="disconnected"] code')).toBe('framewise review');
+      expect(all('[data-testid="group-view"]')).toEqual([]);
+      expect(all('img[src^="/api/frames"]')).toEqual([]);
+    });
+
+    it('notices the server is gone when a Frame image fails to load', async () => {
+      await respond(summary, reviewed());
+
+      all('[data-testid="group-tile"] img')[0].dispatchEvent(new Event('error'));
+      await settle();
+      await loseServer(http.expectOne('/api/about'));
+
+      expect(all('[data-testid="disconnected"]').length).toBe(1);
+    });
+
+    it('stays connected when a Frame image fails to load but the server answers', async () => {
+      await respond(summary, reviewed());
+
+      all('[data-testid="group-tile"] img')[0].dispatchEvent(new Event('error'));
+      await settle();
+      http.expectOne('/api/about').flush(about);
+      await settle();
+
+      expect(all('[data-testid="disconnected"]')).toEqual([]);
+    });
+
+    it('notices the server is gone when the photographer returns to an idle tab', async () => {
+      await respond(summary, reviewed());
+
+      document.dispatchEvent(new Event('visibilitychange'));
+      await settle();
+      await loseServer(http.expectOne('/api/about'));
+
+      expect(all('[data-testid="disconnected"]').length).toBe(1);
+    });
+
+    it('comes back with the Session as the server stored it once the server is back', async () => {
+      vi.useFakeTimers();
+      await openGroup();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true }));
+      await settle();
+      await loseServer(http.expectOne('/api/frames/1/override'));
+
+      await nextReconnectAttempt();
+      await loseServer(http.expectOne('/api/about'));
+      expect(all('[data-testid="disconnected"]').length).toBe(1);
+
+      await nextReconnectAttempt();
+      http.expectOne('/api/about').flush(about);
+      await settle();
+      await respond(summary, reviewed());
+
+      expect(all('[data-testid="disconnected"]')).toEqual([]);
+      expect(all('[data-testid="group-view"]').length).toBe(1);
+      expect(all('[data-testid="frame-tile"] img')[0].getAttribute('src')).toBe(
+        '/api/frames/1/thumbnail',
+      );
+      await nextReconnectAttempt();
+      http.expectNone('/api/about');
+    });
+  });
 });
 
 const SCORES: Frame['scores'] = {
@@ -2943,6 +3379,7 @@ const SCORES: Frame['scores'] = {
   exposure: 1,
   aesthetics: 0.5,
   face_quality: null,
+  expression: null,
   camera_rating: 0,
   total: 0.8,
 };
@@ -2954,8 +3391,8 @@ function group(id: number, frames: Frame[], fixed = false): Group {
 function frame(id: number, kind: Frame['kind'], overrides: Partial<Frame> = {}): Frame {
   return {
     id,
-    jpg_path: `DSCF000${id}.JPG`,
-    raw_path: kind === 'raw+jpg' ? `DSCF000${id}.RAF` : null,
+    main_path: kind === 'raw-only' ? `DSCF000${id}.RAF` : `DSCF000${id}.JPG`,
+    raw_path: kind === 'jpg-only' ? null : `DSCF000${id}.RAF`,
     kind,
     camera_rating: { stars: null, label: null },
     thumbnail_url: `/api/frames/${id}/thumbnail`,
@@ -2973,6 +3410,7 @@ function frame(id: number, kind: Frame['kind'], overrides: Partial<Frame> = {}):
       high_key: false,
       aesthetics: 0,
     },
+    sharpness_measured_on: 'frame',
     faces: [],
     ...overrides,
   };

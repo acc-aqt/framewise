@@ -18,12 +18,31 @@ class ExifToolResult:
     errors: list[str]
 
 
+def find_exiftool() -> str | None:
+    """The ExifTool executable framewise runs, or None if it is not installed."""
+    found = shutil.which("exiftool")
+    if found is not None:
+        return found
+    return HOMEBREW_EXIFTOOL if Path(HOMEBREW_EXIFTOOL).is_file() else None
+
+
+def exiftool_install_hint(platform: str) -> str:
+    """How to install ExifTool on `platform`, as named by sys.platform."""
+    if platform == "darwin":
+        command = "brew install exiftool"
+    elif platform == "win32":
+        command = "winget install --id OliverBetz.ExifTool, then open a new terminal"
+    else:
+        command = "sudo apt install libimage-exiftool-perl, or your distro's ExifTool package"
+    return f"Install it with: {command}. Or download it from https://exiftool.org."
+
+
 class ExifTool:
     """One persistent `exiftool -stay_open` process that runs commands one batch at a time.
     It starts on the first command, so creating it touches nothing."""
 
     def __init__(self, executable: str | None = None):
-        self._executable = executable or shutil.which("exiftool") or HOMEBREW_EXIFTOOL
+        self._executable = executable or find_exiftool() or "exiftool"
         self._process: subprocess.Popen[str] | None = None
         self._lock = threading.Lock()
         # Unguessable, so no file name or metadata ExifTool echoes can pass for the end of output.

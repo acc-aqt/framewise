@@ -18,12 +18,14 @@ import { CameraRating, ColorLabel, Frame } from './session-api';
       <app-frame-picture
         class="picture"
         [src]="frame().thumbnail_url"
-        [alt]="frame().jpg_path"
+        [alt]="frame().main_path"
         [faces]="showFaces() ? frame().faces : null"
         [lazy]="true"
       />
       @if (showKind() && frame().kind === 'jpg-only') {
         <span class="badge kind" data-testid="kind-badge">JPG-only</span>
+      } @else if (showKind() && frame().kind === 'raw-only') {
+        <span class="badge kind" data-testid="kind-badge">RAW-only</span>
       }
       @if (ratingText(frame().camera_rating); as rating) {
         <span class="badge rating" data-testid="camera-rating">{{ rating }}</span>
@@ -54,7 +56,7 @@ import { CameraRating, ColorLabel, Frame } from './session-api';
       <ng-content />
     </div>
     <span class="caption">
-      <span class="file">{{ frame().jpg_path }}</span>
+      <span class="file">{{ frame().main_path }}</span>
       <ng-content select="[tile-caption]" />
     </span>
   `,

@@ -89,7 +89,7 @@ def test_a_restored_frame_comes_back_with_its_overrides(session_dir, review, ana
         frame
         for group in client.get("/api/groups").json()
         for frame in group["frames"]
-        if frame["jpg_path"] == "DSCF0003.JPG"
+        if frame["main_path"] == "DSCF0003.JPG"
     ]
     assert restored["override"] == {"verdict": "reject", "stars": 4, "label": None}
 
@@ -126,7 +126,7 @@ def test_a_frame_trashed_while_it_is_analyzed_is_skipped_quietly(
     [frame_id] = [
         frame["id"]
         for frame in client.get("/api/frames").json()
-        if frame["jpg_path"] == "DSCF0004.JPG"
+        if frame["main_path"] == "DSCF0004.JPG"
     ]
 
     client.post("/api/frames/trash", json={"frame_ids": [frame_id]})

@@ -21,27 +21,47 @@ A Frame backed by a single JPG file.
 A Frame backed by a RAW file and the JPG the camera saved alongside it.
 _Avoid_: Pair, twin, stack
 
+**RAW-only Frame**:
+A Frame backed by a single RAW file, with no JPG of the same name in its folder. framewise judges it by the largest preview JPG embedded in the RAW.
+_Avoid_: Orphan RAW, lone RAW
+
+**Main file**:
+The file that identifies a Frame. It is the JPG of a JPG-only or RAW+JPG Frame, and the RAW of a RAW-only Frame. The photographer's Overrides and fixed Groups follow a Frame by its main file, which need not be its Analysis source.
+_Avoid_: Master, primary, JPG path
+
 **Analysis source**:
-The file whose pixels framewise judges a Frame by. It is always the Frame's JPG.
-_Avoid_: Preview
+The pixels framewise judges a Frame by: the JPG, or the RAW's embedded preview. A JPG-only or RAW+JPG Frame is judged by its JPG, and a RAW-only Frame by its RAW's embedded preview, which framewise keeps in its own data folder, never in the Session folder.
+_Avoid_: Preview, on its own, for the Analysis source in general
+
+**Embedded preview**:
+The largest JPG a camera stores inside a RAW, which framewise extracts with ExifTool and judges a RAW-only Frame by. It is that Frame's Analysis source; a JPG-only or RAW+JPG Frame's JPG is not an embedded preview.
+_Avoid_: Thumbnail, JpgFromRaw, PreviewImage
 
 **Camera rating**:
 A star rating or color label that was already on a Frame's files before framewise saw them, for example stars set in-camera.
 _Avoid_: Existing rating, prior rating
 
 **Session store**:
-The per-Session SQLite database in framewise's own data folder (`~/Library/Application Support/framewise/` on macOS, `~/.local/share/framewise/` on Linux by default) that holds a Session's Frames and their thumbnails. framewise never writes it into the Session folder.
+The per-Session SQLite database in framewise's own data folder (`~/Library/Application Support/framewise/` on macOS, `~/.local/share/framewise/` on Linux and `%LOCALAPPDATA%\framewise\` on Windows by default) that holds a Session's Frames and their thumbnails, with the RAW-only Frames' embedded previews in a folder beside it. framewise never writes it into the Session folder.
 _Avoid_: Cache, catalog, index
 
 ## Analysis
 
 **Capability**:
-One kind of signal framewise reads from a Frame's Analysis source, such as its fingerprint, its faces, whether those faces' eyes are open, face quality or aesthetics.
+One kind of signal framewise reads from a Frame's Analysis source, such as its fingerprint, its faces, whether those faces' eyes are open, face quality, the faces' expression, aesthetics or its main subject.
 _Avoid_: Feature, model, check
 
 **Provider**:
 An interchangeable implementation of one Capability, built into framewise or installed as a plug-in. Each Capability is served by one Provider at a time.
 _Avoid_: Backend, engine, analyzer, model
+
+**Focus point**:
+The area of a Frame the camera recorded focusing on, in the maker notes of its Analysis source. framewise reads it from Fujifilm cameras for now.
+_Avoid_: AF point, AF area
+
+**Subject**:
+What a Frame without faces is judged on for sharpness: its Focus point, else the area a `subject` Provider masks as the main object, else the whole Frame. A Focus point too small to measure sends the Frame straight to the whole Frame.
+_Avoid_: Foreground, subject mask, main object
 
 ## Judging
 
@@ -126,3 +146,13 @@ _Avoid_: Delete, remove, discard
 **Rating write-back**:
 The explicit, opt-in and reversible step that writes the reviewed Verdicts into the Frames' files so Lightroom Classic can read them.
 _Avoid_: Export, sync, apply
+
+## Releases
+
+**Release**:
+A numbered version of framewise, such as `0.1.0`: a `vX.Y.Z` tag on `main` with its release notes on GitHub. Each Release publishes its wheel to PyPI, as `framewise-cull`, and to its GitHub Release, and photographers install and update from there.
+_Avoid_: Build, drop, ship
+
+**Changelog**:
+The hand-written list of user-visible changes in each Release, newest first, with changes not yet in a Release under Unreleased. The Review UI shows it under What's new.
+_Avoid_: Release log, history, news

@@ -12,8 +12,10 @@ import {
   viewChild,
 } from '@angular/core';
 import { Observable } from 'rxjs';
+import { About } from './about-api';
 import { AnalysisProgressView } from './analysis-progress';
 import { AnalysisSettings } from './analysis-settings';
+import { Disconnected } from './disconnected';
 import { GroupGrid } from './group-grid';
 import { GroupView } from './group-view';
 import { Icon } from './icon';
@@ -26,6 +28,7 @@ import { AnalysisProgress, Frame, Group, OverrideChange, SessionSummary } from '
 import { SessionChangeApi } from './session-change-api';
 import { SessionPicker } from './session-picker';
 import { SessionSummaryView } from './session-summary';
+import { ServerConnection } from './server-connection';
 import { CommandPalette } from './command-palette';
 import {
   Command,
@@ -40,7 +43,8 @@ import {
 } from './shortcuts';
 import { Tooltip, TooltipContent } from './tooltip';
 import { TrashApi, TrashResult } from './trash-api';
-import { TrashConfirmation } from './trash-confirmation';
+import { TrashConfirmation, trashableFrames } from './trash-confirmation';
+import { WhatsNew } from './whats-new';
 import { WriteBackView } from './write-back';
 
 export const POLL_INTERVAL_MS = 1000;
@@ -63,6 +67,7 @@ interface PendingTrash {
     AnalysisProgressView,
     AnalysisSettings,
     CommandPalette,
+    Disconnected,
     GroupGrid,
     GroupView,
     Icon,
@@ -73,12 +78,14 @@ interface PendingTrash {
     SessionSummaryView,
     Tooltip,
     TrashConfirmation,
+    WhatsNew,
     WriteBackView,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
 export class App {
+  protected readonly about = httpResource<About>(() => '/api/about');
   protected readonly summary = httpResource<SessionSummary>(() => '/api/session');
   // framewise started without a Session folder, so the photographer chooses one here.
   protected readonly noSession = computed(() => {
@@ -164,7 +171,10 @@ export class App {
     this.summary.hasValue() ? this.summary.value().keeper_budget : null,
   );
   protected readonly keeperBudgetFailed = signal(false);
-  /** Rating write-back writes to a JPG-only Frame's file and to both files of a RAW+JPG Frame. */
+  /**
+   * Rating write-back writes to a JPG-only Frame's file and to both files of a RAW+JPG Frame. It
+   * leaves RAW-only Frames out for now.
+   */
   protected readonly sessionFileCount = computed(() => {
     if (!this.summary.hasValue()) {
       return null;
@@ -181,6 +191,7 @@ export class App {
   private readonly groupGrid = viewChild(GroupGrid);
   protected readonly trashError = signal<string | null>(null);
   protected readonly paletteOpen = signal(false);
+  protected readonly whatsNewOpen = signal(false);
   protected readonly paletteAvailable = computed(
     () => !this.noSession() && !this.writingBack() && this.trashing() === null,
   );
@@ -202,6 +213,8 @@ export class App {
   protected readonly paletteKey = PALETTE_KEY;
   protected readonly paletteTooltip: TooltipContent = { label: 'Commands', key: PALETTE_KEY };
 
+  protected readonly disconnected = inject(ServerConnection).disconnected;
+
   private readonly overrideApi = inject(OverrideApi);
   private readonly sessionChangeApi = inject(SessionChangeApi);
   private readonly trashApi = inject(TrashApi);
@@ -219,6 +232,14 @@ export class App {
         this.groupsNeedReload.set(false);
         this.groupsResource.reload();
       }
+    });
+    let wasDisconnected = false;
+    effect(() => {
+      const disconnected = this.disconnected();
+      if (wasDisconnected && !disconnected) {
+        this.openSession();
+      }
+      wasDisconnected = disconnected;
     });
     const injector = inject(Injector);
     effect(() => {
@@ -274,6 +295,9 @@ export class App {
     this.paletteOpen.set(false);
     if (command.shortcut.kind === 'writeBack') {
       return this.openWriteBack();
+    }
+    if (command.shortcut.kind === 'whatsNew') {
+      return this.whatsNewOpen.set(true);
     }
     if (command.shortcut.kind === 'trashGroups') {
       return this.askToTrashGroups(this.selectedGroups());
@@ -350,10 +374,11 @@ export class App {
   protected confirmTrash(): void {
     const trash = this.trashing();
     this.trashing.set(null);
-    if (trash === null) {
+    const frames = trash === null ? [] : trashableFrames(trash.frames);
+    if (trash === null || frames.length === 0) {
       return;
     }
-    this.trashApi.trash(trash.frames.map((frame) => frame.id)).subscribe({
+    this.trashApi.trash(frames.map((frame) => frame.id)).subscribe({
       next: (result) => {
         if (trash.fromGrid !== null) {
           this.tileToFocus.set(trash.fromGrid.tileIndex);

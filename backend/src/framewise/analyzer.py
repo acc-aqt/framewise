@@ -6,7 +6,7 @@ from typing import Literal, Protocol
 # Bump whenever the built-in image maths or the shape of FrameSignals changes, so a re-run
 # re-analyzes Frames whose saved analysis predates it. A Provider's own changes are covered by
 # its version, in the ProviderSignature.
-ANALYSIS_VERSION = 5
+ANALYSIS_VERSION = 9
 
 ProviderSignature = Mapping[str, str]
 """The Provider that served each Capability of an analysis, as "<id>@<version>" by Capability."""
@@ -53,6 +53,23 @@ class SimilarityThresholds:
 
 
 @dataclass(frozen=True)
+class Expression:
+    """How a face looks, as the expression Provider reads it."""
+
+    smile: float | None
+    """From 0 for a neutral or downturned mouth to 1 for a broad smile, or None where the
+    Provider cannot tell."""
+    looking: float | None = None
+    """From 0 for eyes looking fully aside to 1 for eyes looking into the lens, or None where the
+    Provider cannot tell. It is the gaze from the camera, whatever the head does: a head turned
+    away whose eyes look back into the lens scores high. A Provider that reads gaze relative to
+    the head, as MediaPipe's blendshapes do, adds the head's turn to it."""
+    facing: float | None = None
+    """From 0 for a head turned fully away to 1 for a head facing the camera, or None where the
+    Provider cannot tell."""
+
+
+@dataclass(frozen=True)
 class Face:
     """One face the face detection Provider found in a Frame. Its box is a fraction of the
     Frame's width and height, measured from the top left."""
@@ -67,6 +84,28 @@ class Face:
     """Like the Frame's sharpness, measured on the face alone."""
     quality: float | None
     """The face quality Provider's score from 0 to 1, or None where it is unavailable."""
+    expression: Expression | None
+    """None where the expression Provider could not read the face, or there is none."""
+
+
+SubjectSource = Literal["focus-point", "subject-mask"]
+
+
+@dataclass(frozen=True)
+class Subject:
+    """The part of a Frame that matters most, as a box measured like a face's. Frames without
+    faces are judged on it rather than on the whole Frame."""
+
+    x: float
+    y: float
+    width: float
+    height: float
+    sharpness: float
+    """Like the Frame's sharpness, measured on the subject alone."""
+    found_by: SubjectSource
+    """"focus-point" where the camera recorded the area it focused on, else "subject-mask" where
+    the subject Provider found the Frame's main subject. A subject mask's box is the box around
+    it, but its sharpness is measured on the mask alone."""
 
 
 @dataclass(frozen=True)
@@ -80,7 +119,8 @@ class FrameSignals:
     exposure_stops: float
     """How far the Frame is over (positive) or under (negative) a mid-gray exposure."""
     low_key: bool
-    """Dark overall but with bright highlights, so deliberately dark rather than underexposed."""
+    """Dark overall but with bright highlights that aren't clipped, such as a lit face, so
+    deliberately dark rather than underexposed. A blown-out lamp or screen alone doesn't count."""
     high_key: bool
     """Bright overall but with its highlights intact, so deliberately bright rather than
     overexposed. With faces, only the faces' highlights count, so a person against a blown-out
@@ -88,6 +128,8 @@ class FrameSignals:
     aesthetics: float | None
     """The aesthetics Provider's score from 0 to 1, or None where it is unavailable."""
     faces: list[Face]
+    subject: Subject | None = None
+    """None where framewise can't tell where the subject is."""
 
 
 class FrameAnalyzer(Protocol):

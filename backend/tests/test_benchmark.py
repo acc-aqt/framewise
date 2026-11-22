@@ -2,13 +2,15 @@ import hashlib
 import json
 import plistlib
 import sqlite3
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 from conftest import FakeAnalyzer, make_jpg
+from test_previews import make_dng_with_previews
 
-from framewise.analyzer import SimilarityThresholds
+from framewise.analyzer import SimilarityThresholds, Subject
 from framewise.benchmark import (
     active_catalog,
     agreement,
@@ -20,6 +22,7 @@ from framewise.benchmark import (
     winner_agreement,
 )
 from framewise.camera_rating import CameraRating
+from framewise.exiftool import find_exiftool
 from framewise.judge import Judgement, Scores, Verdict
 from framewise.store import Frame
 
@@ -37,6 +40,10 @@ CREATE TABLE Adobe_images (
 """
 DUPLICATE = [1.0] + [0.0] * 63
 OTHER_DUPLICATE = [0.0, 1.0] + [0.0] * 62
+
+runs_the_benchmark = pytest.mark.skipif(
+    sys.platform == "win32", reason="framewise-benchmark does not run on Windows"
+)
 
 
 class FakeCatalog:
@@ -110,14 +117,15 @@ def judgement(verdict: Verdict) -> Judgement:
         exposure=1,
         aesthetics=None,
         face_quality=None,
+        expression=None,
         camera_rating=0,
         total=1,
     )
-    return Judgement(verdict, [], scores, faces=[])
+    return Judgement(verdict, [], scores, faces=[], sharpness_measured_on="frame")
 
 
-def frame(frame_id: int, jpg_path: str) -> Frame:
-    return Frame(frame_id, jpg_path, None, CameraRating(None, None))
+def frame(frame_id: int, main_path: str) -> Frame:
+    return Frame(frame_id, main_path, main_path, None, CameraRating(None, None))
 
 
 def test_the_active_catalog_is_the_one_lightroom_classic_loads(tmp_path):
@@ -140,6 +148,7 @@ def test_copying_the_catalog_takes_its_write_ahead_log_along(catalog, tmp_path):
     assert Path(f"{copy}-wal").exists()
 
 
+@runs_the_benchmark
 def test_reference_ratings_are_read_for_the_session_only_by_file_path(catalog, session_dir):
     rated = session_dir / "DSCF0001.JPG"
     catalog.add_photo(rated, 3.0)
@@ -159,7 +168,7 @@ def test_virtual_copies_carry_no_reference_rating(catalog, session_dir):
     assert read_reference_ratings(catalog.path, session_dir) == {}
 
 
-def test_frames_match_reference_ratings_by_their_jpg_path(session_dir):
+def test_frames_match_reference_ratings_by_their_main_file(session_dir):
     frames = [frame(1, "DSCF0001.JPG"), frame(2, "sub/DSCF0002.JPG"), frame(3, "DSCF0003.JPG")]
     ratings = {session_dir / "DSCF0001.JPG": 2, session_dir / "sub" / "dscf0002.jpg": 3}
 
@@ -252,6 +261,7 @@ def test_timing_is_measured_against_15_minutes_per_200_frames():
     assert result.within_budget
 
 
+@runs_the_benchmark
 def test_benchmark_reports_agreement_and_timing_without_touching_session_or_catalog(
     session_dir, catalog, tmp_path, monkeypatch, capsys
 ):
@@ -320,8 +330,8 @@ def test_fitting_the_weights_reports_them_with_held_out_agreement_and_writes_not
 
     out = capsys.readouterr().out
     assert (
-        "  Proposed weights: sharpness 0.00, steadiness 1.20, exposure 0.00, aesthetics 0.00, "
-        "face_quality 0.00" in out
+        "  Proposed weights: sharpness 0.00, steadiness 1.30, exposure 0.00, aesthetics 0.00, "
+        "face_quality 0.00, expression 0.00" in out
     )
     assert "  Held-out pairs ranked as rated: current 0 of 2 (0%), proposed 2 of 2 (100%)" in out
     assert (
@@ -333,6 +343,7 @@ def test_fitting_the_weights_reports_them_with_held_out_agreement_and_writes_not
     assert not data_dir.exists()
 
 
+@runs_the_benchmark
 def test_benchmark_refuses_to_write_its_report_into_the_session_folder(
     session_dir, catalog, tmp_path
 ):
@@ -377,6 +388,7 @@ def run_benchmark(session_dir, catalog, tmp_path, *options, providers) -> dict:
     return json.loads(report.read_text())
 
 
+@runs_the_benchmark
 def test_a_provider_override_serves_its_capability_and_the_report_names_it(
     session_dir, catalog, tmp_path, isolated_data_dir, capsys
 ):
@@ -390,6 +402,7 @@ def test_a_provider_override_serves_its_capability_and_the_report_names_it(
     assert "fingerprint: chosen@1" in capsys.readouterr().out
 
 
+@runs_the_benchmark
 def test_a_provider_override_wins_over_the_config_file(
     session_dir, catalog, tmp_path, isolated_data_dir
 ):
@@ -404,6 +417,7 @@ def test_a_provider_override_wins_over_the_config_file(
     assert report["providers"] == {"fingerprint": "chosen@1"}
 
 
+@runs_the_benchmark
 @pytest.mark.parametrize(
     ("override", "error"),
     [
@@ -433,6 +447,7 @@ def test_an_override_without_a_capability_and_id_is_a_usage_error(
     assert exit_info.value.code == 2
 
 
+@runs_the_benchmark
 def test_a_provider_override_replaces_a_config_choice_that_cannot_be_honoured(
     session_dir, catalog, tmp_path, isolated_data_dir
 ):
@@ -445,3 +460,76 @@ def test_a_provider_override_replaces_a_config_choice_that_cannot_be_honoured(
     )
 
     assert report["providers"] == {"fingerprint": "chosen@1"}
+
+
+@runs_the_benchmark
+def test_each_frame_result_names_what_its_sharpness_was_measured_on_and_the_measure(
+    session_dir, catalog, tmp_path, isolated_data_dir
+):
+    analyzer = FakeAnalyzer()
+    focused = Subject(0.4, 0.4, 0.2, 0.2, sharpness=0.8, found_by="focus-point")
+    analyzer.script(make_jpg(session_dir / "DSCF0001.JPG"), sharpness=0.3, subject=focused)
+    analyzer.script(make_jpg(session_dir / "DSCF0002.JPG"), sharpness=0.3)
+    report = tmp_path / "report.json"
+
+    main(
+        [str(session_dir), "--catalog", str(catalog.path), "--report", str(report)],
+        analyzer=analyzer,
+    )
+
+    results = {
+        Path(result["main_path"]).name: result
+        for result in json.loads(report.read_text())["frame_results"]
+    }
+    assert results["DSCF0001.JPG"]["sharpness_measured_on"] == "focus-point"
+    assert results["DSCF0001.JPG"]["sharpness"] == pytest.approx(0.8)
+    assert results["DSCF0002.JPG"]["sharpness_measured_on"] == "frame"
+    assert results["DSCF0002.JPG"]["sharpness"] == pytest.approx(0.3)
+
+
+def test_benchmark_refuses_to_run_on_windows(session_dir, catalog, tmp_path, capsys):
+    with pytest.raises(SystemExit) as exit_info:
+        main(
+            [str(session_dir), "--catalog", str(catalog.path), "--report", str(tmp_path / "r")],
+            analyzer=FakeAnalyzer(),
+            platform="win32",
+        )
+
+    assert exit_info.value.code == 2
+    assert "does not run on Windows" in capsys.readouterr().err
+
+
+@runs_the_benchmark
+@pytest.mark.skipif(find_exiftool() is None, reason="ExifTool is not installed")
+def test_benchmark_skips_raws_by_the_minimum_preview_size_in_the_config(
+    session_dir, catalog, tmp_path, isolated_data_dir
+):
+    make_dng_with_previews(session_dir / "L1000001.DNG", [(32, 24), (32, 24), (400, 300)])
+    make_dng_with_previews(session_dir / "L1000002.DNG", [(32, 24), (32, 24), (300, 200)])
+    isolated_data_dir.mkdir()
+    (isolated_data_dir / "config.toml").write_text("[raw_only]\nmin_preview_long_edge = 400\n")
+    report = tmp_path / "report.json"
+
+    main(
+        [str(session_dir), "--catalog", str(catalog.path), "--report", str(report)],
+        analyzer=FakeAnalyzer(),
+    )
+
+    assert json.loads(report.read_text())["frames"] == 1
+
+
+@runs_the_benchmark
+def test_benchmark_refuses_to_run_with_an_invalid_minimum_preview_size(
+    session_dir, catalog, tmp_path, isolated_data_dir, capsys
+):
+    isolated_data_dir.mkdir()
+    (isolated_data_dir / "config.toml").write_text("[raw_only]\nmin_preview_long_edge = 0\n")
+
+    with pytest.raises(SystemExit) as exit_info:
+        main(
+            [str(session_dir), "--catalog", str(catalog.path), "--report", str(tmp_path / "r")],
+            analyzer=FakeAnalyzer(),
+        )
+
+    assert exit_info.value.code == 1
+    assert "framewise-benchmark: error:" in capsys.readouterr().err

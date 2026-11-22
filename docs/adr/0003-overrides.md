@@ -1,6 +1,6 @@
 # ADR-0003: Overrides
 
-**Status:** Accepted — 2026-11-14
+**Status:** Accepted — 2026-11-14. Amended — 2026-11-20: an Override is keyed by its Frame's main file, which is the JPG for JPG-only and RAW+JPG Frames (#148).
 
 ## Context
 
@@ -8,7 +8,7 @@ The photographer reviews the Proposal with Lightroom Classic's shortcuts and Ove
 
 ## Decision
 
-1. **An Override belongs to a Frame and is keyed by its JPG path** in an `overrides` table of the Session store. It never refers to a Group id. Overrides of Frames that vanish from the Session folder are kept, so they come back with the files.
+1. **An Override belongs to a Frame and is keyed by its main file** in an `overrides` table of the Session store. It never refers to a Group id. Overrides of Frames that vanish from the Session folder are kept, so they come back with the files.
 2. **An Override has three independent, optional fields.** A field left empty keeps framewise's judgment.
    - `verdict`: Winner, Keeper, Reject or Unsure. `P` sets Keeper (or confirms the Winner), `X` sets Reject.
    - `stars`: 0–5, set with `1`–`5`. `0` clears it.
@@ -24,5 +24,5 @@ The photographer reviews the Proposal with Lightroom Classic's shortcuts and Ove
 
 ## Consequences
 
-- Group Overrides (split, merge, move) can be added as further fields or a further table keyed by JPG path, without changing Verdict Overrides.
+- Group Overrides (split, merge, move) can be added as further fields or a further table keyed by main file, without changing Verdict Overrides.
 - Because stars and labels are independent of the Verdict, a Frame can be a Reject with 4 stars. Rating write-back must decide how to show such a Frame in its diff.

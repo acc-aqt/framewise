@@ -26,11 +26,14 @@ class CameraRating:
 
 
 def read_camera_rating(
-    jpg_path: Path, raw_path: Path | None, originals: Mapping[Path, CameraRating]
+    jpg_path: Path | None, raw_path: Path | None, originals: Mapping[Path, CameraRating]
 ) -> CameraRating:
-    """Reads the rating and label the camera wrote. `originals` holds the XMP values files had
-    before Rating write-back changed them; they are read instead of those files' XMP."""
-    rating = _read_xmp(jpg_path, originals).or_else(_read_exif(jpg_path))
+    """Reads the rating and label the camera wrote, from the JPG first, then from the RAW and its
+    sidecar. `originals` holds the XMP values files had before Rating write-back changed them;
+    they are read instead of those files' XMP."""
+    rating = CameraRating()
+    if jpg_path is not None:
+        rating = _read_xmp(jpg_path, originals).or_else(_read_exif(jpg_path))
     if raw_path is not None:
         rating = rating.or_else(_read_xmp(raw_path, originals))
         rating = rating.or_else(_read_sidecar(raw_path, originals))

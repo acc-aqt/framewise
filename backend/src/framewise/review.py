@@ -1,5 +1,6 @@
 import hashlib
 import os
+import shutil
 import sys
 import threading
 import time
@@ -14,8 +15,20 @@ from framewise.camera_rating import CameraRating, read_camera_rating
 from framewise.capture_time import read_capture_time
 from framewise.exiftool import ExifTool
 from framewise.grouper import group_frames
+from framewise.previews import (
+    DEFAULT_MIN_PREVIEW_LONG_EDGE,
+    ExifToolPreviews,
+    ExtractPreview,
+    cache_previews,
+)
 from framewise.scan import scan_session
-from framewise.store import AnalyzedFrame, SessionStore
+from framewise.store import (
+    AnalyzedFrame,
+    Frame,
+    SessionStore,
+    preview_cache_dir,
+    upgrade_backups,
+)
 from framewise.thumbnails import make_thumbnail
 from framewise.write_back import RatingWriteBack, WriteBackResult
 
@@ -24,9 +37,12 @@ LOWEST_PRIORITY_NICENESS = 19
 
 
 def default_data_dir(platform: str, environ: Mapping[str, str], home: Path) -> Path:
-    """Application Support on macOS, the XDG data directory elsewhere."""
+    """Application Support on macOS, local application data on Windows, the XDG data directory
+    elsewhere."""
     if platform == "darwin":
         return home / "Library" / "Application Support" / "framewise"
+    if platform == "win32":
+        return Path(environ.get("LOCALAPPDATA") or home / "AppData" / "Local") / "framewise"
     return Path(environ.get("XDG_DATA_HOME") or home / ".local" / "share") / "framewise"
 
 
@@ -41,14 +57,17 @@ def resolve_config_path() -> Path:
 
 
 def session_database_path(root: Path, data_dir: Path) -> Path:
-    digest = hashlib.sha256(str(root).encode()).hexdigest()[:16]
+    """One store per Session folder. On Windows, where paths ignore case, a folder reached
+    through a differently cased path is the same Session."""
+    digest = hashlib.sha256(os.path.normcase(root).encode()).hexdigest()[:16]
     return data_dir / f"{root.name}-{digest}.sqlite"
 
 
 def hard_reset_session(folder: Path, data_dir: Path, exiftool: ExifTool) -> WriteBackResult | None:
-    """Undoes Rating write-back, then deletes the Session store, so the next review analyzes
-    every Frame again. Keeps the store if a file fails to restore, so the reset can be retried.
-    None if the folder has no Session store."""
+    """Undoes Rating write-back, then deletes the Session store with its preview cache and the
+    backups made before its upgrades, so the next review analyzes every Frame again. Keeps the
+    store if a file fails to restore, so the reset can be retried. None if the folder has no
+    Session store."""
     root = folder.resolve()
     database = session_database_path(root, data_dir)
     if not database.exists():
@@ -61,21 +80,41 @@ def hard_reset_session(folder: Path, data_dir: Path, exiftool: ExifTool) -> Writ
     if not result.failed:
         for suffix in ("", "-wal", "-shm"):
             database.with_name(database.name + suffix).unlink(missing_ok=True)
+        shutil.rmtree(preview_cache_dir(database), ignore_errors=True)
+        for backup in upgrade_backups(database):
+            backup.unlink(missing_ok=True)
     return result
 
 
-def open_session(folder: Path, data_dir: Path) -> SessionStore:
+def open_session(
+    folder: Path,
+    data_dir: Path,
+    extract_preview: ExtractPreview | None = None,
+    min_preview_long_edge: int = DEFAULT_MIN_PREVIEW_LONG_EDGE,
+) -> SessionStore:
+    """Scans the Session folder into its Session store. RAW-only Frames get their embedded
+    preview cached first, with ExifTool unless `extract_preview` is given; a RAW without a usable
+    preview, or with one whose long edge is below `min_preview_long_edge`, is skipped."""
     root = folder.resolve()
     store = SessionStore(session_database_path(root, data_dir), root)
-    scan = scan_session(root)
-    store.remove_frames_except(scan.frames)
+    exiftool = ExifTool()
+    try:
+        frames, skipped = cache_previews(
+            store,
+            scan_session(root),
+            extract_preview or ExifToolPreviews(exiftool),
+            min_preview_long_edge,
+        )
+    finally:
+        exiftool.close()
+    store.remove_frames_except(frames)
     originals = {
         root / original.path: CameraRating(original.stars, original.label)
         for original in store.write_back_originals()
     }
-    for frame in scan.frames:
+    for frame in frames:
         store.save_frame(frame, read_camera_rating(frame.jpg_path, frame.raw_path, originals))
-    store.save_skipped_files(scan.skipped)
+    store.save_skipped_files(skipped)
     return store
 
 
@@ -88,14 +127,16 @@ class AnalysisProgress:
 
 @dataclass(frozen=True)
 class _FrameWork:
-    jpg_path: Path
+    frame: Frame
+    source: Path
+    """The Frame's Analysis source: its JPG, or a RAW-only Frame's cached embedded preview."""
     needs_thumbnail: bool
     needs_analysis: bool
 
 
 @dataclass(frozen=True)
 class _FrameResult:
-    jpg_path: Path
+    frame: Frame
     thumbnail: bytes | None
     signals: FrameSignals | None
     captured_at: datetime | None
@@ -118,12 +159,12 @@ class SessionAnalysis:
         self._clock = clock
         self._workers = self._worker_count()
         self._lock = threading.Lock()
-        work = [self._work_for(store.root / frame.jpg_path) for frame in store.frames()]
+        work = [self._work_for(frame) for frame in store.frames()]
         self._pending = [item for item in work if item.needs_thumbnail or item.needs_analysis]
         self._frames_total = len(work)
         self._frames_done = len(work) - len(self._pending)
         self._analyses_left = sum(item.needs_analysis for item in self._pending)
-        self._analyses_started_at: dict[Path, float] = {}
+        self._analyses_started_at: dict[str, float] = {}
         self._analysis_seconds_total = 0.0
         self._analyses_done = 0
 
@@ -138,9 +179,9 @@ class SessionAnalysis:
                     self._save(future.result())
                 except Exception as error:
                     # A Frame trashed while it was analyzed fails quietly.
-                    if item.jpg_path.exists():
+                    if item.source.exists():
                         print(
-                            f"framewise: warning: could not analyze {item.jpg_path}: {error}",
+                            f"framewise: warning: could not analyze {item.source}: {error}",
                             file=sys.stderr,
                         )
                 self._count_done(item)
@@ -174,37 +215,38 @@ class SessionAnalysis:
         work_left = self._analyses_left * seconds_per_analysis - head_start
         return work_left / min(self._workers, self._analyses_left)
 
-    def _work_for(self, jpg_path: Path) -> _FrameWork:
+    def _work_for(self, frame: Frame) -> _FrameWork:
         return _FrameWork(
-            jpg_path=jpg_path,
-            needs_thumbnail=not self._store.has_current_thumbnail(jpg_path),
-            needs_analysis=not self._store.has_current_analysis(jpg_path, self._analyzer.signature),
+            frame=frame,
+            source=self._store.analysis_image(frame),
+            needs_thumbnail=not self._store.has_current_thumbnail(frame),
+            needs_analysis=not self._store.has_current_analysis(frame, self._analyzer.signature),
         )
 
     def _process(self, item: _FrameWork) -> _FrameResult:
         if item.needs_analysis:
             with self._lock:
-                self._analyses_started_at[item.jpg_path] = self._clock()
+                self._analyses_started_at[item.frame.main_path] = self._clock()
         return _FrameResult(
-            jpg_path=item.jpg_path,
-            thumbnail=make_thumbnail(item.jpg_path) if item.needs_thumbnail else None,
-            signals=self._analyzer.analyze(item.jpg_path) if item.needs_analysis else None,
-            captured_at=read_capture_time(item.jpg_path) if item.needs_analysis else None,
+            frame=item.frame,
+            thumbnail=make_thumbnail(item.source) if item.needs_thumbnail else None,
+            signals=self._analyzer.analyze(item.source) if item.needs_analysis else None,
+            captured_at=read_capture_time(item.source) if item.needs_analysis else None,
         )
 
     def _save(self, result: _FrameResult) -> None:
         if result.thumbnail is not None:
-            self._store.save_thumbnail(result.jpg_path, result.thumbnail)
+            self._store.save_thumbnail(result.frame, result.thumbnail)
         if result.signals is not None:
             self._store.save_analysis(
-                result.jpg_path, result.signals, result.captured_at, self._analyzer.signature
+                result.frame, result.signals, result.captured_at, self._analyzer.signature
             )
 
     def _count_done(self, item: _FrameWork) -> None:
         with self._lock:
             self._frames_done += 1
             if item.needs_analysis:
-                started_at = self._analyses_started_at.pop(item.jpg_path)
+                started_at = self._analyses_started_at.pop(item.frame.main_path)
                 self._analysis_seconds_total += self._clock() - started_at
                 self._analyses_done += 1
                 self._analyses_left -= 1
@@ -218,6 +260,21 @@ class SessionAnalysis:
             return
         if sys.platform == "darwin":
             os.setpriority(os.PRIO_DARWIN_THREAD, 0, os.PRIO_DARWIN_BG)
+        elif sys.platform == "win32":
+            _enter_windows_background_mode()
         elif sys.platform == "linux":
             # Linux keeps a niceness per thread, addressed by its thread id.
             os.setpriority(os.PRIO_PROCESS, threading.get_native_id(), LOWEST_PRIORITY_NICENESS)
+
+
+THREAD_MODE_BACKGROUND_BEGIN = 0x00010000
+
+
+def _enter_windows_background_mode() -> None:
+    """Lowers this thread's CPU and I/O priority, like macOS's background thread priority."""
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32
+    kernel32.GetCurrentThread.restype = ctypes.c_void_p
+    kernel32.SetThreadPriority.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    kernel32.SetThreadPriority(kernel32.GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN)

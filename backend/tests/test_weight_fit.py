@@ -10,8 +10,9 @@ KNOWN_WEIGHTS = {
     "sharpness": 0.5,
     "steadiness": 0.1,
     "exposure": 0.2,
-    "aesthetics": 0.4,
+    "aesthetics": 0.3,
     "face_quality": 0.0,
+    "expression": 0.2,
 }
 
 
@@ -22,6 +23,7 @@ def random_scores(rng: random.Random) -> Scores:
         exposure=rng.random(),
         aesthetics=rng.random() if rng.random() < 0.8 else None,
         face_quality=rng.random() if rng.random() < 0.5 else None,
+        expression=rng.random() if rng.random() < 0.5 else None,
         camera_rating=0,
         total=0,
     )

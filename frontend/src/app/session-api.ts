@@ -3,13 +3,20 @@ export interface SessionSummary {
   total_frames: number;
   jpg_only_count: number;
   raw_jpg_count: number;
-  skipped: string[];
+  raw_only_count: number;
+  skipped: SkippedFile[];
   /** The share of the Session's Frames the photographer roughly wants to keep, from 0 to 1. */
   keeper_budget: number;
   /** What serves each Capability in new analyses, not in the stored ones. */
   providers: ProviderLineup;
   /** The absolute path of the config.toml framewise reads, whether or not it exists. */
   config_path: string;
+}
+
+export interface SkippedFile {
+  path: string;
+  /** Why framewise skipped the file, such as a RAW without an embedded preview it can read. */
+  reason: string;
 }
 
 export interface ActiveProvider {
@@ -52,6 +59,7 @@ export interface Scores {
   exposure: number;
   aesthetics: number | null;
   face_quality: number | null;
+  expression: number | null;
   /** What a Camera rating added to the total, or 0 without one. */
   camera_rating: number;
   total: number;
@@ -94,9 +102,9 @@ export interface Face {
 
 export interface Frame {
   id: number;
-  jpg_path: string;
+  main_path: string;
   raw_path: string | null;
-  kind: 'jpg-only' | 'raw+jpg';
+  kind: 'jpg-only' | 'raw+jpg' | 'raw-only';
   camera_rating: CameraRating;
   thumbnail_url: string;
   image_url: string;
@@ -107,6 +115,8 @@ export interface Frame {
   reasons: Reason[];
   scores: Scores;
   signals: Signals;
+  /** What framewise judged the Frame's sharpness on: its softest face, the area its camera focused on, the mask of its main subject, or the whole Frame. */
+  sharpness_measured_on: 'faces' | 'focus-point' | 'subject-mask' | 'frame';
   faces: Face[];
 }
 
@@ -140,6 +150,8 @@ export interface WriteBackFile {
 export interface WriteBackDryRun {
   label_set: { red: string; yellow: string; from_lightroom: boolean };
   notice: string | null;
+  /** Says how many RAW-only Frames write-back leaves out, since it can't write them yet. */
+  raw_only_notice: string | null;
   files: WriteBackFile[];
   can_undo: boolean;
 }

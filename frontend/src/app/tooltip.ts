@@ -1,5 +1,6 @@
 import { DOCUMENT } from '@angular/common';
 import { Directive, ElementRef, OnDestroy, effect, inject, input } from '@angular/core';
+import { platformKey } from './shortcuts';
 
 export const TOOLTIP_DELAY_MS = 400;
 
@@ -103,7 +104,7 @@ export class Tooltip implements OnDestroy {
     if (key !== undefined) {
       const chip = this.document.createElement('kbd');
       chip.className = 'key';
-      chip.textContent = key;
+      chip.textContent = platformKey(key);
       this.element.appendChild(chip);
     }
     if (explanation === undefined) {

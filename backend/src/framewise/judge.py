@@ -7,7 +7,10 @@ Unsure or Rejects. The Keeper budget decides how many of the remaining Frames, b
 the whole Session, become Keepers; the rest are Rejects.
 
 A Frame with faces is judged on its faces: its sharpness is that of its softest face, and every
-face must have open eyes and be sharp for the Frame to pass.
+face must have open eyes and be sharp for the Frame to pass. Its face quality and expression are
+those of its weakest face, and only rank it, never Flaw it. A Frame without faces is judged on
+the sharpness of the area its camera focused on where it recorded one, else of its main subject
+where the subject Provider found one, else of the whole Frame.
 
 The photographer's Verdict Overrides steer the Winner: a Frame they made the Winner wins its
 Group, and a Frame they overrode to another Verdict is not picked, so the rest of the Group is
@@ -19,8 +22,9 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import PurePosixPath
+from typing import Literal
 
-from framewise.analyzer import Face, FrameSignals
+from framewise.analyzer import Expression, Face, FrameSignals
 from framewise.camera_rating import CameraRating
 from framewise.store import AnalyzedFrame, FrameKind
 
@@ -34,12 +38,25 @@ SOFT_BELOW = 0.4
 FACE_BLURRY_BELOW = 0.25
 FACE_SOFT_BELOW = 0.5
 FACE_SHARP_FROM = 0.67
+# The area a camera focused on and a subject mask are measured on their own like a face, and keep
+# the face's blurry and soft thresholds: on 34 Fujifilm Frames the soft ones measure below 0.5 at
+# the focus point, and smooth subjects that are sharp measure as low as 0.61 (#175). Unlike faces,
+# most sharp subjects measure 0.9 or more (22 of 34 Fujifilm focus points, 292 of 343 Leica subject
+# masks), so full sharpness starts there, leaving room to rank sharp Frames within a Burst.
+FOCUS_BLURRY_BELOW = FACE_BLURRY_BELOW
+FOCUS_SOFT_BELOW = FACE_SOFT_BELOW
+FOCUS_SHARP_FROM = 0.9
 MOTION_BLUR_FROM = 0.5
 POSSIBLE_MOTION_BLUR_FROM = 0.35
 EXPOSURE_TOLERANCE_STOPS = 0.7
-# Beyond these, a Frame is a Reject; between the tolerance and these, it is Unsure. A RAW+JPG
-# Frame is judged more leniently because its RAW holds detail its JPG has clipped.
-EXPOSURE_REJECT_BEYOND_STOPS: dict[FrameKind, float] = {"jpg-only": 1.25, "raw+jpg": 2.0}
+# Beyond these, a Frame is a Reject; between the tolerance and these, it is Unsure. A RAW+JPG or
+# RAW-only Frame is judged more leniently because its RAW holds detail its JPG or embedded
+# preview has clipped.
+EXPOSURE_REJECT_BEYOND_STOPS: dict[FrameKind, float] = {
+    "jpg-only": 1.25,
+    "raw+jpg": 2.0,
+    "raw-only": 2.0,
+}
 # The share of a Session's Frames kept as Winners or Keepers until the photographer moves it.
 DEFAULT_KEEPER_BUDGET = 0.4
 # Added to the total Score of a Frame with in-camera stars.
@@ -50,7 +67,14 @@ WEIGHTS = {
     "exposure": 0.2,
     "aesthetics": 0.3,
     "face_quality": 0.2,
+    "expression": 0.1,
 }
+# How a face's smile, its eyes looking into the lens and its head facing the camera weigh into
+# its expression. A part the Provider cannot read is left out and the others are weighed alone,
+# so a neutral face looking into the camera still scores well. The smile weighs least: in blind
+# tests on two Sessions, looking and facing agreed with the photographer, while a bigger smile
+# lost as often as it won, and posed portraits often mean a neutral face.
+EXPRESSION_WEIGHTS = {"smile": 0.2, "looking": 0.4, "facing": 0.4}
 EYES_CLOSED = "eyes-closed"
 
 
@@ -71,6 +95,51 @@ class Reason:
     text: str
 
 
+SharpnessMeasuredOn = Literal["faces", "focus-point", "subject-mask", "frame"]
+
+
+@dataclass(frozen=True)
+class SharpnessRule:
+    blurry_below: float
+    soft_below: float
+    sharp_from: float
+    """The sharpness from which the sharpness Score is full."""
+    blurry: Reason
+    soft: Reason
+
+
+SHARPNESS_RULES: dict[SharpnessMeasuredOn, SharpnessRule] = {
+    "faces": SharpnessRule(
+        FACE_BLURRY_BELOW,
+        FACE_SOFT_BELOW,
+        FACE_SHARP_FROM,
+        Reason("blurry-face", "Blurry face", "Blurry face"),
+        Reason("soft-face", "Soft face", "Soft face"),
+    ),
+    "focus-point": SharpnessRule(
+        FOCUS_BLURRY_BELOW,
+        FOCUS_SOFT_BELOW,
+        FOCUS_SHARP_FROM,
+        Reason("blurry", "Blurry", "Blurry at focus point"),
+        Reason("soft", "Slightly soft", "Slightly soft at focus point"),
+    ),
+    "subject-mask": SharpnessRule(
+        FOCUS_BLURRY_BELOW,
+        FOCUS_SOFT_BELOW,
+        FOCUS_SHARP_FROM,
+        Reason("blurry", "Blurry", "Blurry subject"),
+        Reason("soft", "Slightly soft", "Slightly soft subject"),
+    ),
+    "frame": SharpnessRule(
+        BLURRY_BELOW,
+        SOFT_BELOW,
+        1.0,
+        Reason("blurry", "Blurry", "Blurry"),
+        Reason("soft", "Slightly soft", "Slightly soft"),
+    ),
+}
+
+
 @dataclass(frozen=True)
 class Scores:
     """Each Frame's score components from 0 (worst) to 1 (best), and their weighted total."""
@@ -81,6 +150,8 @@ class Scores:
     aesthetics: float | None
     face_quality: float | None
     """The quality of the Frame's weakest face, or None without faces."""
+    expression: float | None
+    """The expression of the Frame's weakest face, or None without faces."""
     camera_rating: float
     """The hint a Camera rating adds to the total, or 0 without one."""
     total: float
@@ -99,6 +170,7 @@ class Judgement:
     reasons: list[Reason]
     scores: Scores
     faces: list[FaceCheck]
+    sharpness_measured_on: SharpnessMeasuredOn
 
 
 Proposal = dict[int, Judgement]
@@ -144,7 +216,8 @@ class _Assessment:
         return self.worst is None and bool(faces) and all(face.eyes_open for face in faces)
 
     def judgement(self, verdict: Verdict, reasons: list[Reason]) -> Judgement:
-        return Judgement(verdict, reasons, self.scores, self.faces)
+        measured_on, _ = judged_sharpness(self.analyzed.signals)
+        return Judgement(verdict, reasons, self.scores, self.faces, measured_on)
 
 
 def judge(
@@ -154,7 +227,7 @@ def judge(
     weights: Mapping[str, float] = WEIGHTS,
 ) -> Proposal:
     """Judges each Group, then keeps roughly `keeper_budget` of the Frames as Winners and
-    Keepers. `verdict_overrides` holds the photographer's Verdict Overrides by JPG path; the
+    Keepers. `verdict_overrides` holds the photographer's Verdict Overrides by main file; the
     Frames they kept count towards the budget and those they overrode are never re-judged by it.
     `weights` weigh the Score components into the total; only the benchmark tries others."""
     overrides = verdict_overrides or {}
@@ -187,7 +260,7 @@ def _non_winner_override(
 ) -> Verdict | None:
     """The photographer's Verdict Override of the Frame unless it is Winner, which only steers
     the Winner and falls back to framewise's Verdict when it lost to another one."""
-    override = overrides.get(assessment.analyzed.frame.jpg_path)
+    override = overrides.get(assessment.analyzed.frame.main_path)
     return None if override == Verdict.WINNER else override
 
 
@@ -202,7 +275,7 @@ def _judge_by_keeper_budget(
         if index < keeper_slots:
             judgement = assessment.judgement(Verdict.KEEPER, [])
         else:
-            winner_name = PurePosixPath(winner.analyzed.frame.jpg_path).stem
+            winner_name = PurePosixPath(winner.analyzed.frame.main_path).stem
             reason = Reason(
                 "weaker-duplicate", "Weaker duplicate", f"Weaker duplicate of {winner_name}"
             )
@@ -212,7 +285,7 @@ def _judge_by_keeper_budget(
 
 
 def _keeper_rank(assessment: _Assessment) -> tuple[float, str]:
-    return -assessment.scores.total, assessment.analyzed.frame.jpg_path
+    return -assessment.scores.total, assessment.analyzed.frame.main_path
 
 
 def _pick_winner(assessments: list[_Assessment], overrides: Mapping[str, Verdict]) -> _Assessment:
@@ -220,19 +293,19 @@ def _pick_winner(assessments: list[_Assessment], overrides: Mapping[str, Verdict
     those without a Verdict Override. If every Frame has one, framewise's best Frame is the
     Winner only for the others to be judged against."""
     for assessment in assessments:
-        if overrides.get(assessment.analyzed.frame.jpg_path) == Verdict.WINNER:
+        if overrides.get(assessment.analyzed.frame.main_path) == Verdict.WINNER:
             return assessment
     candidates = [
         assessment
         for assessment in assessments
-        if assessment.analyzed.frame.jpg_path not in overrides
+        if assessment.analyzed.frame.main_path not in overrides
     ]
     return min(candidates or assessments, key=_winner_rank)
 
 
 def _winner_rank(assessment: _Assessment) -> tuple[int, float, str]:
     flaw_rank = {None: 0, Verdict.UNSURE: 1, Verdict.REJECT: 2}[assessment.worst]
-    return flaw_rank, -assessment.scores.total, assessment.analyzed.frame.jpg_path
+    return flaw_rank, -assessment.scores.total, assessment.analyzed.frame.main_path
 
 
 def _judge_flaws_against_winner(assessment: _Assessment, winner: _Assessment) -> Judgement | None:
@@ -259,6 +332,7 @@ def _scores(analyzed: AnalyzedFrame, weights: Mapping[str, float]) -> Scores:
         "exposure": _exposure_score(signals, analyzed.frame.kind),
         "aesthetics": None if signals.aesthetics is None else _clamp(signals.aesthetics),
         "face_quality": _face_quality(signals.faces),
+        "expression": _expression(signals.faces),
     }
     available = {name: value for name, value in components.items() if value is not None}
     total_weight = sum(weights[name] for name in available)
@@ -282,20 +356,48 @@ def _exposure_score(signals: FrameSignals, kind: FrameKind) -> float:
 
 
 def _sharpness_score(signals: FrameSignals) -> float:
-    if signals.faces:
-        return _clamp(_judged_sharpness(signals) / FACE_SHARP_FROM)
-    return _clamp(signals.sharpness)
+    measured_on, sharpness = judged_sharpness(signals)
+    return _clamp(sharpness / SHARPNESS_RULES[measured_on].sharp_from)
 
 
-def _judged_sharpness(signals: FrameSignals) -> float:
+def judged_sharpness(signals: FrameSignals) -> tuple[SharpnessMeasuredOn, float]:
+    """What the Frame's sharpness is judged on, and that sharpness."""
     if signals.faces:
-        return min(face.sharpness for face in signals.faces)
-    return signals.sharpness
+        return "faces", min(face.sharpness for face in signals.faces)
+    if signals.subject is not None:
+        return signals.subject.found_by, signals.subject.sharpness
+    return "frame", signals.sharpness
 
 
 def _face_quality(faces: list[Face]) -> float | None:
     qualities = [face.quality for face in faces if face.quality is not None]
     return _clamp(min(qualities)) if qualities else None
+
+
+def _expression(faces: list[Face]) -> float | None:
+    expressions = [
+        expression
+        for face in faces
+        if face.expression is not None
+        and (expression := _face_expression(face.expression)) is not None
+    ]
+    return _clamp(min(expressions)) if expressions else None
+
+
+def _face_expression(expression: Expression) -> float | None:
+    """The weighted mean of the parts of the face's expression that the Provider could read."""
+    parts = [
+        (value, EXPRESSION_WEIGHTS[name])
+        for name, value in (
+            ("smile", expression.smile),
+            ("looking", expression.looking),
+            ("facing", expression.facing),
+        )
+        if value is not None
+    ]
+    if not parts:
+        return None
+    return sum(value * weight for value, weight in parts) / sum(weight for _, weight in parts)
 
 
 def _check_face(face: Face) -> FaceCheck:
@@ -304,19 +406,12 @@ def _check_face(face: Face) -> FaceCheck:
 
 
 def _sharpness_flaws(analyzed: AnalyzedFrame) -> list[Flaw]:
-    sharpness = _judged_sharpness(analyzed.signals)
-    if analyzed.signals.faces:
-        blurry = Reason("blurry-face", "Blurry face", "Blurry face")
-        soft = Reason("soft-face", "Soft face", "Soft face")
-        blurry_below, soft_below = FACE_BLURRY_BELOW, FACE_SOFT_BELOW
-    else:
-        blurry = Reason("blurry", "Blurry", "Blurry")
-        soft = Reason("soft", "Slightly soft", "Slightly soft")
-        blurry_below, soft_below = BLURRY_BELOW, SOFT_BELOW
-    if sharpness < blurry_below:
-        return [Flaw(blurry, Verdict.REJECT)]
-    if sharpness < soft_below:
-        return [Flaw(soft, Verdict.UNSURE)]
+    measured_on, sharpness = judged_sharpness(analyzed.signals)
+    rule = SHARPNESS_RULES[measured_on]
+    if sharpness < rule.blurry_below:
+        return [Flaw(rule.blurry, Verdict.REJECT)]
+    if sharpness < rule.soft_below:
+        return [Flaw(rule.soft, Verdict.UNSURE)]
     return []
 
 

@@ -77,17 +77,25 @@ export function stillSelected(before: Group[], selected: Group[], after: Group[]
   });
 }
 
+const SHARPNESS_NOTES: Record<Frame['sharpness_measured_on'], string> = {
+  faces: ' (softest face)',
+  'focus-point': ' (at focus point)',
+  'subject-mask': ' (on subject)',
+  frame: '',
+};
+
 export function scoreBreakdown(frame: Frame): string[] {
   const { scores } = frame;
   return [
     `Total ${score(scores.total)}`,
-    `Sharpness ${score(scores.sharpness)}`,
+    `Sharpness ${score(scores.sharpness)}${SHARPNESS_NOTES[frame.sharpness_measured_on]}`,
     `Steadiness ${score(scores.steadiness)}`,
     `Exposure ${score(scores.exposure)} (${exposureNote(frame)})`,
     scores.aesthetics === null
       ? 'Aesthetics unavailable'
       : `Aesthetics ${score(scores.aesthetics)}`,
     ...(scores.face_quality === null ? [] : [`Face quality ${score(scores.face_quality)}`]),
+    ...(scores.expression === null ? [] : [`Expression ${score(scores.expression)}`]),
     ...(scores.camera_rating > 0 ? [`Camera rating +${score(scores.camera_rating)}`] : []),
   ];
 }

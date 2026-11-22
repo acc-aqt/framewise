@@ -40,7 +40,7 @@ export interface LoupePosition {
               class="picture"
               imageTestId="loupe-image"
               [src]="frame.image_url"
-              [alt]="frame.jpg_path"
+              [alt]="frame.main_path"
               [faces]="frame.faces"
               [fit]="zoom() === 'fit'"
             />
@@ -50,7 +50,7 @@ export interface LoupePosition {
               <span class="dot"></span>
               {{ verdictLabels[frame.verdict] }}
             </span>
-            <span class="file">{{ frame.jpg_path }}</span>
+            <span class="file">{{ frame.main_path }}</span>
             @if ($first && position(); as position) {
               <span class="position" data-testid="loupe-position">
                 {{ position.index }} / {{ position.total }}
@@ -218,7 +218,7 @@ export class Loupe {
   protected readonly verdictLabels = VERDICT_LABELS;
   protected readonly label = computed(() =>
     this.frames()
-      .map((frame) => frame.jpg_path)
+      .map((frame) => frame.main_path)
       .join(' and '),
   );
 

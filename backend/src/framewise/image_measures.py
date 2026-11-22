@@ -1,11 +1,11 @@
 """Sharpness, motion blur and exposure from image maths on a Frame's downscaled JPG, turned the
-way it is displayed, and the sharpness of the faces in it."""
+way it is displayed, and the sharpness of the faces and the subject in it."""
 
 import math
 from dataclasses import dataclass
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageOps
+from PIL import Image, ImageChops, ImageFilter, ImageOps
 
 MEASURE_BOX = (1024, 1024)
 EDGE_MARGIN = 8
@@ -18,21 +18,35 @@ SMEARED_RATIO = 1 / 16
 MID_GREY_LINEAR = 0.18
 DARKEST_STOPS = -6.0
 KEY_FROM_STOPS = 0.7
-# A low-key Frame is dark yet keeps some bright highlights; an underexposed one has none.
-LOW_KEY_HIGHLIGHT_TONE = 200
-LOW_KEY_MIN_HIGHLIGHT_SHARE = 0.005
 # A high-key Frame is bright yet keeps its highlights; an overexposed one clips them. With faces,
 # the highlights that count are the faces': a white wall behind a person may clip, their skin
 # must not. A face's center leaves out the hair and background at the edges of its box.
 CLIPPED_TONE = 250
+# A low-key Frame is dark yet keeps some bright highlights that aren't clipped, such as a lit face;
+# an underexposed one has none, or only a blown-out light source such as a lamp or a screen.
+LOW_KEY_HIGHLIGHT_TONE = 200
+LOW_KEY_MIN_HIGHLIGHT_SHARE = 0.005
 HIGH_KEY_MAX_CLIPPED_SHARE = 0.01
 HIGH_KEY_MAX_CLIPPED_FACE_SHARE = 0.1
 FACE_CENTRE_INSET = 0.2
 # Regions narrower or shorter than this, in pixels of the downscaled JPG, are too small to measure.
 MIN_REGION_SIDE = 32
+# A subject mask counts the pixels it covers at least half. It is shrunk by 4 pixels all round, as
+# far as the edge shifts reach, so the edge of its outline against the background doesn't count.
+MASK_INSIDE_FROM = 128
+MASK_SHRINK_FILTER_SIZE = 2 * FAR_STEP + 1
+MIN_SUBJECT_PIXELS = MIN_REGION_SIDE * MIN_REGION_SIDE
 
 Region = tuple[float, float, float, float]
 """x, y, width and height as fractions of the image, measured from the top left."""
+
+
+@dataclass(frozen=True)
+class SubjectMeasures:
+    box: Region
+    """The box around the subject mask."""
+    sharpness: float
+    """Measured on the subject mask's pixels alone."""
 
 
 @dataclass(frozen=True)
@@ -44,10 +58,21 @@ class ImageMeasures:
     high_key: bool
     face_sharpness: list[float | None]
     """The sharpness of each face asked for, or None where it is too small to measure."""
+    focus_sharpness: float | None = None
+    """The sharpness of the focus area asked for, or None without one it can measure."""
+    subject: SubjectMeasures | None = None
+    """The subject of the mask asked for, or None without one it can measure."""
 
 
-def measure_image(jpg_path: Path, faces: list[Region] | None = None) -> ImageMeasures:
-    """`faces` are boxes in the Frame as it is displayed, after its EXIF orientation."""
+def measure_image(
+    jpg_path: Path,
+    faces: list[Region] | None = None,
+    focus_area: Region | None = None,
+    subject_mask: Image.Image | None = None,
+) -> ImageMeasures:
+    """`faces` and `focus_area` are boxes in the Frame as it is displayed, after its EXIF
+    orientation. `subject_mask` covers the Frame as it is displayed, at any size, from 0 outside
+    the subject to 255 inside it."""
     with Image.open(jpg_path) as image:
         image.draft("L", MEASURE_BOX)
         grey = ImageOps.exif_transpose(image).convert("L")
@@ -57,14 +82,16 @@ def measure_image(jpg_path: Path, faces: list[Region] | None = None) -> ImageMea
     histogram = grey.histogram()
     stops = _exposure_stops(histogram)
     face_boxes = [_pixel_box(grey, face) for face in faces or []]
+    focus_box = None if focus_area is None else _pixel_box(grey, focus_area)
     return ImageMeasures(
         sharpness=_sharpness(ratios),
         motion_blur=0.0 if sharpest == 0 else 1 - softest / sharpest,
         exposure_stops=stops,
-        low_key=stops <= -KEY_FROM_STOPS
-        and _share_from(histogram, LOW_KEY_HIGHLIGHT_TONE) >= LOW_KEY_MIN_HIGHLIGHT_SHARE,
+        low_key=stops <= -KEY_FROM_STOPS and _has_lit_highlights(histogram),
         high_key=stops >= KEY_FROM_STOPS and _keeps_highlights(grey, histogram, face_boxes),
         face_sharpness=[None if box is None else _box_sharpness(grey, box) for box in face_boxes],
+        focus_sharpness=None if focus_box is None else _box_sharpness(grey, focus_box),
+        subject=None if subject_mask is None else _subject(grey, subject_mask),
     )
 
 
@@ -85,6 +112,11 @@ def _pixel_box(grey: Image.Image, region: Region) -> Box | None:
     if min(right - left, bottom - top) < MIN_REGION_SIDE:
         return None
     return left, top, right, bottom
+
+
+def _has_lit_highlights(histogram: list[int]) -> bool:
+    lit = _share_from(histogram, LOW_KEY_HIGHLIGHT_TONE) - _share_from(histogram, CLIPPED_TONE)
+    return lit >= LOW_KEY_MIN_HIGHLIGHT_SHARE
 
 
 def _keeps_highlights(grey: Image.Image, histogram: list[int], faces: list[Box | None]) -> bool:
@@ -122,14 +154,31 @@ def _box_sharpness(grey: Image.Image, box: Box) -> float:
     return _sharpness(_edge_ratios(crop))
 
 
-def _edge_ratios(grey: Image.Image) -> list[float]:
-    """For each direction, how much of the edge energy sits in 1-pixel steps. Defocus lowers it
-    in every direction; motion blur lowers it only along the direction of motion."""
+def _subject(grey: Image.Image, mask: Image.Image) -> SubjectMeasures | None:
+    inside = mask.convert("L").resize(grey.size)
+    inside = inside.point(lambda value: 255 if value >= MASK_INSIDE_FROM else 0)
+    box = inside.getbbox()
+    core = inside.filter(ImageFilter.MinFilter(MASK_SHRINK_FILTER_SIZE))
+    if box is None or core.histogram()[255] < MIN_SUBJECT_PIXELS:
+        return None
+    width, height = grey.size
+    left, top, right, bottom = box
+    return SubjectMeasures(
+        box=(left / width, top / height, (right - left) / width, (bottom - top) / height),
+        sharpness=_sharpness(_edge_ratios(grey, core)),
+    )
+
+
+def _edge_ratios(grey: Image.Image, mask: Image.Image | None = None) -> list[float]:
+    """For each direction, how much of the edge energy sits in 1-pixel steps, from the pixels
+    inside `mask` where given. Defocus lowers it in every direction; motion blur lowers it only
+    along the direction of motion."""
     base = _shifted(grey, 0, 0)
+    inside = None if mask is None else _shifted(mask, 0, 0)
     ratios = []
     for dx, dy in DIRECTIONS:
-        near = _energy(base, _shifted(grey, dx, dy))
-        far = _energy(base, _shifted(grey, FAR_STEP * dx, FAR_STEP * dy))
+        near = _energy(base, _shifted(grey, dx, dy), inside)
+        far = _energy(base, _shifted(grey, FAR_STEP * dx, FAR_STEP * dy), inside)
         ratios.append(0.0 if far == 0 else near / far)
     return ratios
 
@@ -140,8 +189,8 @@ def _shifted(grey: Image.Image, dx: int, dy: int) -> Image.Image:
     return grey.crop((margin + dx, margin + dy, width - margin + dx, height - margin + dy))
 
 
-def _energy(first: Image.Image, second: Image.Image) -> float:
-    histogram = ImageChops.difference(first, second).histogram()
+def _energy(first: Image.Image, second: Image.Image, mask: Image.Image | None) -> float:
+    histogram = ImageChops.difference(first, second).histogram(mask)
     return sum(count * value * value for value, count in enumerate(histogram)) / sum(histogram)
 
 

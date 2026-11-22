@@ -1,6 +1,16 @@
-@if (noSession()) {
+@if (disconnected()) {
   <header>
     <h1><img src="logo.svg" alt="" width="20" height="20" />framewise</h1>
+  </header>
+  <main>
+    <app-disconnected />
+  </main>
+} @else if (noSession()) {
+  <header>
+    <h1><img src="logo.svg" alt="" width="20" height="20" />framewise</h1>
+    @if (about.hasValue()) {
+      <app-whats-new [about]="about.value()" [(open)]="whatsNewOpen" />
+    }
   </header>
   <main>
     <app-session-picker (opened)="openSession()" />
@@ -9,6 +19,9 @@
   <header>
     <div class="identity">
       <h1><img src="logo.svg" alt="" width="20" height="20" />framewise</h1>
+      @if (about.hasValue()) {
+        <app-whats-new [about]="about.value()" [(open)]="whatsNewOpen" />
+      }
       @if (summary.hasValue()) {
         <span class="divider" aria-hidden="true"></span>
         <p class="root" [title]="summary.value().root">

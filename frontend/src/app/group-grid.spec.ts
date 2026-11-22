@@ -69,7 +69,7 @@ function group(id: number): Group {
 function frame(id: number): Frame {
   return {
     id,
-    jpg_path: `DSCF${String(id).padStart(4, '0')}.JPG`,
+    main_path: `DSCF${String(id).padStart(4, '0')}.JPG`,
     raw_path: null,
     kind: 'jpg-only',
     camera_rating: { stars: null, label: null },
@@ -85,6 +85,7 @@ function frame(id: number): Frame {
       exposure: 1,
       aesthetics: 0.5,
       face_quality: null,
+      expression: null,
       camera_rating: 0,
       total: 0.8,
     },
@@ -96,6 +97,7 @@ function frame(id: number): Frame {
       high_key: false,
       aesthetics: 0,
     },
+    sharpness_measured_on: 'frame',
     faces: [],
   };
 }

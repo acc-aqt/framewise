@@ -40,7 +40,7 @@ class DinoV2Fingerprint:
     similarity = SimilarityThresholds(burst=0.7, near_duplicate=0.82)
 
     def is_available(self) -> bool:
-        return onnxruntime is not None and _onnxruntime_supports_this_os()
+        return onnxruntime is not None and onnxruntime_supports_this_os()
 
     def fingerprint(self, jpg_path: Path) -> list[float]:
         """DINOv2's class token: the embedding it learns to describe the whole image."""
@@ -48,7 +48,7 @@ class DinoV2Fingerprint:
         return hidden_states[0, 0].tolist()
 
 
-def _onnxruntime_supports_this_os() -> bool:
+def onnxruntime_supports_this_os() -> bool:
     if sys.platform != "darwin":
         return True
     try:

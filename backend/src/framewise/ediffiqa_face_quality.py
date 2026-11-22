@@ -8,7 +8,7 @@ from pathlib import Path
 from PIL import Image, ImageOps
 
 from framewise import mediapipe_faces
-from framewise.dinov2_fingerprint import _onnxruntime_supports_this_os
+from framewise.dinov2_fingerprint import onnxruntime_supports_this_os
 from framewise.image_measures import Region
 from framewise.models import EDIFFIQA_TINY, ensure_model
 from framewise.providers import FACE_QUALITY
@@ -42,7 +42,7 @@ class EDifFIQAFaceQuality:
     def is_available(self) -> bool:
         return (
             onnxruntime is not None
-            and _onnxruntime_supports_this_os()
+            and onnxruntime_supports_this_os()
             and mediapipe_faces.MediaPipeFaceDetection().is_available()
         )
 

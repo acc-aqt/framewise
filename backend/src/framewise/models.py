@@ -45,7 +45,29 @@ EDIFFIQA_TINY = Model(
     url="https://huggingface.co/opencv/face_image_quality_assessment_ediffiqa/resolve/4fce5f6a5438b55a9f996a4e02164b63b849c587/ediffiqa_tiny_jun2024.onnx",
     sha256="9426c899cc0f01665240cb7d9e7f98e18e24e456c178326c771a43da289bfc6a",
 )
-MODELS = (FACE_LANDMARKER, DINOV2_SMALL, EDIFFIQA_TINY)
+# OpenAI's CLIP ViT-B/32 image encoder, its weights stored as 16-bit floats and exported to ONNX
+# for Transformers.js. Its model card states "license: mit", as does OpenAI's original:
+# https://huggingface.co/Xenova/clip-vit-base-patch32, https://github.com/openai/CLIP
+CLIP_VIT_B_32_IMAGE = Model(
+    file_name="clip_vit_b_32_vision_fp16.onnx",
+    url="https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/6b7c523703ae26e39be4b03774966f8571c7f523/onnx/vision_model_fp16.onnx",
+    sha256="35c4e0fb0aeee527dcde1693520b214a34424a786babd530f35366bad5844efd",
+)
+# LAION's Aesthetics Predictor V1 for CLIP ViT-B/32: one linear layer over its image embedding,
+# trained on people's ratings of how much they like an image. MIT licensed:
+# https://github.com/LAION-AI/aesthetic-predictor/blob/6d122adad522ab246644d9dc1c6d7a3810ee255f/LICENSE
+LAION_AESTHETICS_VIT_B_32 = Model(
+    file_name="laion_aesthetics_vit_b_32_linear.pth",
+    url="https://raw.githubusercontent.com/LAION-AI/aesthetic-predictor/6d122adad522ab246644d9dc1c6d7a3810ee255f/sa_0_4_vit_b_32_linear.pth",
+    sha256="c7b14cead230694acc7b9447974d3cad78003c72da032e402a303b6c2429e85f",
+)
+MODELS = (
+    FACE_LANDMARKER,
+    DINOV2_SMALL,
+    EDIFFIQA_TINY,
+    CLIP_VIT_B_32_IMAGE,
+    LAION_AESTHETICS_VIT_B_32,
+)
 """Every model the portable Providers need."""
 
 

@@ -37,6 +37,7 @@ mediapipe-eye-state = "framewise.mediapipe_faces:MediaPipeEyeState"
 mediapipe-expression = "framewise.mediapipe_faces:MediaPipeExpression"
 dinov2-small-fingerprint = "framewise.dinov2_fingerprint:DinoV2Fingerprint"
 ediffiqa-face-quality = "framewise.ediffiqa_face_quality:EDifFIQAFaceQuality"
+laion-aesthetics = "framewise.laion_aesthetics:LaionAesthetics"
 
 [build-system]
 requires = ["hatchling>=1.27.0"]

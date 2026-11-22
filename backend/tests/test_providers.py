@@ -185,6 +185,36 @@ def test_without_a_measurable_focus_area_there_is_no_subject(tmp_path, focus_are
     assert analyzer.analyze(frame).subject is None
 
 
+def draw_near_black_with_a_lamp(path: Path) -> Path:
+    """An almost black Frame whose only bright pixels are a lamp, blown out to white."""
+    image = Image.new("L", (800, 600), 6)
+    ImageDraw.Draw(image).ellipse((340, 240, 460, 360), fill=255)
+    image = image.filter(ImageFilter.GaussianBlur(20))
+    ImageDraw.Draw(image).ellipse((358, 258, 442, 342), fill=255)
+    image.save(path, "JPEG", quality=90)
+    return path
+
+
+def draw_low_key_portrait(path: Path) -> Path:
+    """A lit face against a black background."""
+    image = Image.new("RGB", (800, 600), (12, 12, 14))
+    draw = ImageDraw.Draw(image)
+    draw.ellipse((330, 150, 470, 330), fill=(235, 200, 175))
+    draw.rectangle((300, 330, 500, 600), fill=(40, 40, 48))
+    image.save(path, "JPEG", quality=90)
+    return path
+
+
+@pytest.mark.parametrize(
+    ("draw", "low_key"), [(draw_low_key_portrait, True), (draw_near_black_with_a_lamp, False)]
+)
+def test_a_dark_frame_is_low_key_only_when_its_highlights_are_lit_detail(tmp_path, draw, low_key):
+    signals = compose_analyzer(full_stack()).analyze(draw(tmp_path / "frame.jpg"))
+
+    assert signals.exposure_stops < -1
+    assert signals.low_key is low_key
+
+
 # The subject's left, top, right and bottom as fractions of the Frame.
 SUBJECT_BOX = (0.375, 0.25, 0.625, 0.75)
 

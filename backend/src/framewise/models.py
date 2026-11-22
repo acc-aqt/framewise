@@ -38,7 +38,23 @@ DINOV2_SMALL = Model(
     url="https://huggingface.co/onnx-community/dinov2-small/resolve/8b1f705a3a7f6f062f6bdd21986c1583d3ef105d/onnx/model_quantized.onnx",
     sha256="c179f8f7f592449c4c1bca4cd124a7538021428c5ffb89afde9503935b197efb",
 )
-MODELS = (FACE_LANDMARKER, DINOV2_SMALL)
+# OpenAI's CLIP ViT-B/32 image encoder, its weights stored as 16-bit floats and exported to ONNX
+# for Transformers.js. Its model card states "license: mit", as does OpenAI's original:
+# https://huggingface.co/Xenova/clip-vit-base-patch32, https://github.com/openai/CLIP
+CLIP_VIT_B_32_IMAGE = Model(
+    file_name="clip_vit_b_32_vision_fp16.onnx",
+    url="https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/6b7c523703ae26e39be4b03774966f8571c7f523/onnx/vision_model_fp16.onnx",
+    sha256="35c4e0fb0aeee527dcde1693520b214a34424a786babd530f35366bad5844efd",
+)
+# LAION's Aesthetics Predictor V1 for CLIP ViT-B/32: one linear layer over its image embedding,
+# trained on people's ratings of how much they like an image. MIT licensed:
+# https://github.com/LAION-AI/aesthetic-predictor/blob/6d122adad522ab246644d9dc1c6d7a3810ee255f/LICENSE
+LAION_AESTHETICS_VIT_B_32 = Model(
+    file_name="laion_aesthetics_vit_b_32_linear.pth",
+    url="https://raw.githubusercontent.com/LAION-AI/aesthetic-predictor/6d122adad522ab246644d9dc1c6d7a3810ee255f/sa_0_4_vit_b_32_linear.pth",
+    sha256="c7b14cead230694acc7b9447974d3cad78003c72da032e402a303b6c2429e85f",
+)
+MODELS = (FACE_LANDMARKER, DINOV2_SMALL, CLIP_VIT_B_32_IMAGE, LAION_AESTHETICS_VIT_B_32)
 """Every model the portable Providers need."""
 
 

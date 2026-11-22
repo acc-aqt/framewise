@@ -4,7 +4,8 @@ What changed in framewise, written for photographers. The Review UI shows this l
 
 ## Unreleased
 
-- On Linux and Windows, every face now gets a face quality, as on macOS: a blurred, badly lit or turned-away face scores lower, and within a Group a Frame whose faces are clearer ranks higher. The portable eDifFIQA Provider serves `face-quality` with the `portable` extra; its model is downloaded on first use or with `framewise models download`.
+- On Linux and Windows, faces now get a face quality Score, as on macOS: a blurred, badly lit or turned-away face scores lower, so within a Group the Frame whose faces are clearer ranks higher. It needs the `portable` extra; its model, about 7 MB, is downloaded on first use or with `framewise models download`.
+- On Linux, Windows and macOS 14, Frames now get an aesthetics Score, as on macOS 15: a more pleasing image scores higher, which helps pick the Winner in a Group and the Keepers in a Session. It needs the `portable` extra; its model, about 180 MB, is downloaded on first use or with `framewise models download`.
 - Faces are read for their expression: a smile, eyes looking into the lens and a head facing the camera. Within a Group, a Frame where everyone faces and looks at the camera ranks above one where someone does not, and a smile adds a little; expression never makes a Frame a Reject. An open Group and the loupe show a badge on each face. Needs an `expression` Provider, which the portable MediaPipe Provider serves on macOS, Linux and Windows.
 - Someone who glances back over their shoulder into the lens counts as looking at the camera, whichever way their head is turned. A Frame where they do ranks above one where they look away.
 - Face badges appear together with the Frame's image in the loupe, the Compare loupe and an open Group, instead of floating over an empty area while the image loads. Stepping to the next Frame no longer shows the previous Frame's badges over it.
@@ -13,7 +14,6 @@ What changed in framewise, written for photographers. The Review UI shows this l
 - Skipped files are listed with the reason, such as a RAW without an embedded preview framewise can read.
 - A **RAW-only Frame** whose embedded preview is less than 1600 px on its long edge is skipped instead of getting a misleading Verdict, and the Review UI lists it under **Skipped** with the preview's size. Change the minimum with `min_preview_long_edge` under `[raw_only]` in `config.toml`.
 - A Frame that is almost black apart from a blown-out lamp or phone screen is no longer taken for a deliberate low-key shot. It gets an "Underexposed" Reason and can no longer beat a well-exposed Frame to Winner in its Group. Dark Frames with a lit subject, such as a lit face, still count as low-key. Frames analyzed by an earlier version are re-analyzed.
-- On Linux, Windows and macOS 14, Frames now get an aesthetics score, which helps pick the Winner in a Group and the Keepers in a Session as on macOS 15. It needs the `portable` extra; its model, about 180 MB, is downloaded on first use or with `framewise models download`.
 
 ## 0.2.0 — 2026-11-19
 

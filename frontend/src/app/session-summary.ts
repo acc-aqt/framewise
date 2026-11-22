@@ -20,14 +20,16 @@ import { SessionSummary } from './session-api';
           <dd data-testid="raw-jpg-count">{{ summary().raw_jpg_count }}</dd>
           <dt>JPG-only</dt>
           <dd data-testid="jpg-only-count">{{ summary().jpg_only_count }}</dd>
+          <dt>RAW-only</dt>
+          <dd data-testid="raw-only-count">{{ summary().raw_only_count }}</dd>
           <dt>Skipped</dt>
           <dd data-testid="skipped-count">{{ summary().skipped.length }}</dd>
         </dl>
         @if (summary().skipped.length > 0) {
-          <p>Skipped RAW files without a matching JPG</p>
+          <p>Skipped files</p>
           <ul data-testid="skipped-files">
-            @for (path of summary().skipped; track path) {
-              <li>{{ path }}</li>
+            @for (skipped of summary().skipped; track skipped.path) {
+              <li>{{ skipped.path }}: {{ skipped.reason }}</li>
             }
           </ul>
         }

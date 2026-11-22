@@ -22,6 +22,7 @@ from pathlib import Path
 from framewise.analyzer import FrameAnalyzer, FrameSignals
 from framewise.judge import KEPT, Proposal, Verdict, judge, judged_sharpness
 from framewise.lightroom import LIGHTROOM_PREFERENCES
+from framewise.previews import PreviewConfigError, read_min_preview_long_edge
 from framewise.providers import Provider, ProviderError, resolve_analyzer
 from framewise.review import SessionAnalysis, open_session, resolve_config_path
 from framewise.store import Frame
@@ -98,12 +99,12 @@ def read_reference_ratings(catalog_copy: Path, session_root: Path) -> dict[Path,
 def match_references(
     frames: list[Frame], session_root: Path, ratings: dict[Path, int]
 ) -> dict[int, int]:
-    """Each Frame's Reference rating, by Frame id, matched on its JPG's path. Paths compare
+    """Each Frame's Reference rating, by Frame id, matched on its main file's path. Paths compare
     case-insensitively, as macOS file systems do."""
     by_path = {_path_key(path): stars for path, stars in ratings.items()}
     references = {}
     for frame in frames:
-        stars = by_path.get(_path_key(session_root / frame.jpg_path))
+        stars = by_path.get(_path_key(session_root / frame.main_path))
         if stars is not None:
             references[frame.id] = stars
     return references
@@ -189,11 +190,19 @@ def main(
 
     if analyzer is None:
         analyzer = _resolve_analyzer(dict(args.overrides), providers)
+    min_preview_long_edge = _read_min_preview_long_edge()
 
     with tempfile.TemporaryDirectory(prefix="framewise-benchmark-") as temp:
         catalog_copy = copy_catalog(catalog, Path(temp))
         ratings = read_reference_ratings(catalog_copy, session_root)
-        report = _run(session_root, Path(temp) / "session-store", analyzer, ratings, clock)
+        report = _run(
+            session_root,
+            Path(temp) / "session-store",
+            analyzer,
+            ratings,
+            clock,
+            min_preview_long_edge,
+        )
 
     args.report.write_text(json.dumps(report, indent=2))
     print(_summary(report, catalog, args.report))
@@ -205,10 +214,11 @@ def _run(
     analyzer: FrameAnalyzer,
     ratings: dict[Path, int],
     clock: Callable[[], float],
+    min_preview_long_edge: int,
 ) -> dict:
     """A cold first pass: a fresh Session store, so every Frame is analyzed."""
     started = clock()
-    store = open_session(session_root, data_dir)
+    store = open_session(session_root, data_dir, min_preview_long_edge=min_preview_long_edge)
     analysis = SessionAnalysis(store, analyzer)
     analysis.run()
     analysed = clock()
@@ -242,7 +252,7 @@ def _frame_result(
     judgement = proposal[frame.id]
     measured_on, sharpness = judged_sharpness(signals)
     return {
-        "jpg_path": frame.jpg_path,
+        "main_path": frame.main_path,
         "reference_stars": references.get(frame.id),
         "verdict": judgement.verdict.value,
         "reasons": [reason.code for reason in judgement.reasons],
@@ -317,6 +327,14 @@ def _provider_override(text: str) -> tuple[str, str]:
     if not separator or not capability or not provider_id:
         raise argparse.ArgumentTypeError(f"expected CAPABILITY=ID, got {text!r}")
     return capability, provider_id
+
+
+def _read_min_preview_long_edge() -> int:
+    try:
+        return read_min_preview_long_edge(resolve_config_path())
+    except PreviewConfigError as error:
+        print(f"framewise-benchmark: error: {error}", file=sys.stderr)
+        sys.exit(1)
 
 
 def _resolve_analyzer(overrides: dict[str, str], providers: list[Provider] | None) -> FrameAnalyzer:

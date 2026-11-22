@@ -21,16 +21,28 @@ A Frame backed by a single JPG file.
 A Frame backed by a RAW file and the JPG the camera saved alongside it.
 _Avoid_: Pair, twin, stack
 
+**RAW-only Frame**:
+A Frame backed by a single RAW file, with no JPG of the same name in its folder. framewise judges it by the largest preview JPG embedded in the RAW.
+_Avoid_: Orphan RAW, lone RAW
+
+**Main file**:
+The file that identifies a Frame. It is the JPG of a JPG-only or RAW+JPG Frame, and the RAW of a RAW-only Frame. The photographer's Overrides and fixed Groups follow a Frame by its main file, which need not be its Analysis source.
+_Avoid_: Master, primary, JPG path
+
 **Analysis source**:
-The file whose pixels framewise judges a Frame by. It is always the Frame's JPG.
-_Avoid_: Preview
+The pixels framewise judges a Frame by: the JPG, or the RAW's embedded preview. A JPG-only or RAW+JPG Frame is judged by its JPG, and a RAW-only Frame by its RAW's embedded preview, which framewise keeps in its own data folder, never in the Session folder.
+_Avoid_: Preview, on its own, for the Analysis source in general
+
+**Embedded preview**:
+The largest JPG a camera stores inside a RAW, which framewise extracts with ExifTool and judges a RAW-only Frame by. It is that Frame's Analysis source; a JPG-only or RAW+JPG Frame's JPG is not an embedded preview.
+_Avoid_: Thumbnail, JpgFromRaw, PreviewImage
 
 **Camera rating**:
 A star rating or color label that was already on a Frame's files before framewise saw them, for example stars set in-camera.
 _Avoid_: Existing rating, prior rating
 
 **Session store**:
-The per-Session SQLite database in framewise's own data folder (`~/Library/Application Support/framewise/` on macOS, `~/.local/share/framewise/` on Linux and `%LOCALAPPDATA%\framewise\` on Windows by default) that holds a Session's Frames and their thumbnails. framewise never writes it into the Session folder.
+The per-Session SQLite database in framewise's own data folder (`~/Library/Application Support/framewise/` on macOS, `~/.local/share/framewise/` on Linux and `%LOCALAPPDATA%\framewise\` on Windows by default) that holds a Session's Frames and their thumbnails, with the RAW-only Frames' embedded previews in a folder beside it. framewise never writes it into the Session folder.
 _Avoid_: Cache, catalog, index
 
 ## Analysis

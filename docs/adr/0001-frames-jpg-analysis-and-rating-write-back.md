@@ -1,6 +1,6 @@
 # ADR-0001: Frames, JPG analysis and rating write-back
 
-**Status:** Accepted — 2026-11-13
+**Status:** Accepted — 2026-11-13. Amended — 2026-11-20: a RAW without a matching JPG is a RAW-only Frame analyzed from the preview embedded in it, so analysis no longer always reads the JPG and RAW-only Sessions are in scope (ADR-0011, #150).
 
 ## Context
 

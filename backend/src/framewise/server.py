@@ -79,7 +79,7 @@ def create_app(
         return analysis.groups(store.group_overrides())
 
     def _group_paths() -> list[list[str]]:
-        return [[analyzed.frame.jpg_path for analyzed in group] for group in _groups()]
+        return [[analyzed.frame.main_path for analyzed in group] for group in _groups()]
 
     def reviewed_proposal() -> tuple[list[list[AnalyzedFrame]], dict[str, Override], Proposal]:
         groups = _groups()
@@ -96,9 +96,9 @@ def create_app(
         reviewed = []
         for analyzed in sorted(
             (analyzed for group in groups for analyzed in group),
-            key=lambda analyzed: analyzed.frame.jpg_path,
+            key=lambda analyzed: analyzed.frame.main_path,
         ):
-            override = overrides.get(analyzed.frame.jpg_path) or Override()
+            override = overrides.get(analyzed.frame.main_path) or Override()
             verdict, _ = _reviewed_verdict(proposal[analyzed.frame.id], override)
             reviewed.append(ReviewedFrame(analyzed.frame, verdict, override.stars, override.label))
         return reviewed
@@ -117,7 +117,8 @@ def create_app(
             "total_frames": summary.total_frames,
             "jpg_only_count": summary.jpg_only_count,
             "raw_jpg_count": summary.raw_jpg_count,
-            "skipped": summary.skipped,
+            "raw_only_count": summary.raw_only_count,
+            "skipped": [asdict(skipped) for skipped in summary.skipped],
             "keeper_budget": _keeper_budget(),
             "providers": providers_json,
             "config_path": str(config_path),
@@ -143,12 +144,12 @@ def create_app(
         return [
             {
                 "id": group[0].frame.id,
-                "fixed": any(analyzed.frame.jpg_path in group_overrides for analyzed in group),
+                "fixed": any(analyzed.frame.main_path in group_overrides for analyzed in group),
                 "frames": [
                     _judged_frame_json(
                         analyzed,
                         proposal[analyzed.frame.id],
-                        overrides.get(analyzed.frame.jpg_path),
+                        overrides.get(analyzed.frame.main_path),
                     )
                     for analyzed in group
                 ],
@@ -168,22 +169,27 @@ def create_app(
     @app.patch("/api/frames/{frame_id}/override")
     def change_override(frame_id: int, change: OverrideChange) -> dict:
         frame = _known_frame(frame_id)
-        current = store.overrides().get(frame.jpg_path, Override())
+        current = store.overrides().get(frame.main_path, Override())
         updated = replace(current, **change.model_dump(mode="json", exclude_unset=True))
-        store.save_override(frame.jpg_path, updated)
+        store.save_override(frame.main_path, updated)
         if updated.verdict == Verdict.WINNER:
             _unchoose_other_winners(frame)
         return _override_json(updated)
 
     @app.delete("/api/frames/{frame_id}/override", status_code=204)
     def clear_override(frame_id: int) -> None:
-        store.save_override(_known_frame(frame_id).jpg_path, Override())
+        store.save_override(_known_frame(frame_id).main_path, Override())
 
     @app.get("/api/frames/{frame_id}/image")
     def frame_image(frame_id: int) -> FileResponse:
-        path = store.root / _known_frame(frame_id).jpg_path
-        if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(store.root):
-            raise HTTPException(status_code=404, detail="JPG not found")
+        """The Frame's Analysis source: its JPG, or a RAW-only Frame's embedded preview."""
+        path = store.analysis_image(_known_frame(frame_id))
+        resolved = path.resolve()
+        inside = resolved.is_relative_to(store.root) or resolved.is_relative_to(
+            store.preview_dir.resolve()
+        )
+        if path.is_symlink() or not path.is_file() or not inside:
+            raise HTTPException(status_code=404, detail="Image not found")
         return FileResponse(path, media_type="image/jpeg")
 
     def _known_frame(frame_id: int) -> Frame:
@@ -196,15 +202,15 @@ def create_app(
         """Keeps one Winner per Group: the Frames the photographer made the Winner before in the
         new Winner's Group are judged by framewise again."""
         overrides = store.overrides()
-        for path in _group_of(winner.jpg_path, _group_paths()) or []:
+        for path in _group_of(winner.main_path, _group_paths()) or []:
             override = overrides.get(path)
-            if path != winner.jpg_path and override and override.verdict == Verdict.WINNER:
+            if path != winner.main_path and override and override.verdict == Verdict.WINNER:
                 store.save_override(path, replace(override, verdict=None))
 
     @app.post("/api/groups/split", status_code=204)
     def split_group(selection: FrameSelection) -> None:
         """Splits the selected Frames off their Group into a Group of their own."""
-        selected = {frame.jpg_path for frame in _known_frames(selection.frame_ids)}
+        selected = {frame.main_path for frame in _known_frames(selection.frame_ids)}
         holding = _groups_holding(selected, _group_paths())
         if len(holding) != 1:
             raise HTTPException(status_code=422, detail="The Frames must lie in one Group")
@@ -217,7 +223,7 @@ def create_app(
     @app.post("/api/groups/merge", status_code=204)
     def merge_groups(selection: FrameSelection) -> None:
         """Merges the Groups holding the selected Frames into one."""
-        selected = {frame.jpg_path for frame in _known_frames(selection.frame_ids)}
+        selected = {frame.main_path for frame in _known_frames(selection.frame_ids)}
         merged = _groups_holding(selected, _group_paths())
         if len(merged) < 2:
             raise HTTPException(status_code=422, detail="The Frames must lie in two Groups or more")
@@ -232,14 +238,14 @@ def create_app(
         target = _grouped(_known_frame(move.to_frame_id), groups)
         if source == target:
             raise HTTPException(status_code=422, detail="The Frame is in that Group already")
-        rest = [path for path in source if path != frame.jpg_path]
-        store.save_group_overrides([group for group in (rest, [*target, frame.jpg_path]) if group])
+        rest = [path for path in source if path != frame.main_path]
+        store.save_group_overrides([group for group in (rest, [*target, frame.main_path]) if group])
 
     @app.post("/api/groups/reset", status_code=204)
     def reset_groups(selection: FrameSelection) -> None:
         """Hands the fixed Groups of the selected Frames back to framewise's grouping."""
         store.clear_group_overrides(
-            [frame.jpg_path for frame in _known_frames(selection.frame_ids)]
+            [frame.main_path for frame in _known_frames(selection.frame_ids)]
         )
 
     def _known_frames(frame_ids: list[int]) -> list[Frame]:
@@ -255,12 +261,13 @@ def create_app(
     @app.get("/api/write-back")
     def write_back_dry_run() -> dict:
         label_set = read_label_set(lightroom_preferences)
+        reviewed = reviewed_frames()
         return {
             "label_set": asdict(label_set),
             "notice": None if label_set.from_lightroom else ENGLISH_DEFAULTS_NOTICE,
+            "raw_only_notice": _raw_only_notice(reviewed),
             "files": [
-                _file_change_json(change)
-                for change in write_back.dry_run(reviewed_frames(), label_set)
+                _file_change_json(change) for change in write_back.dry_run(reviewed, label_set)
             ],
             "can_undo": write_back.can_undo(),
         }
@@ -389,13 +396,13 @@ def _mount_review_ui(app: FastAPI, ui_dir: Path | None) -> None:
         app.mount("/", StaticFiles(directory=ui_dir, html=True), name="review-ui")
 
 
-def _group_of(jpg_path: str, groups: list[list[str]]) -> list[str] | None:
-    return next((group for group in groups if jpg_path in group), None)
+def _group_of(main_path: str, groups: list[list[str]]) -> list[str] | None:
+    return next((group for group in groups if main_path in group), None)
 
 
 def _grouped(frame: Frame, groups: list[list[str]]) -> list[str]:
     """The Group of a Frame, which must be analyzed already to be in one."""
-    group = _group_of(frame.jpg_path, groups)
+    group = _group_of(frame.main_path, groups)
     if group is None:
         raise HTTPException(status_code=422, detail="The Frame is not in a Group yet")
     return group
@@ -412,13 +419,22 @@ def _groups_holding(paths: set[str], groups: list[list[str]]) -> list[list[str]]
 def _frame_json(frame: Frame) -> dict:
     return {
         "id": frame.id,
-        "jpg_path": frame.jpg_path,
+        "main_path": frame.main_path,
         "raw_path": frame.raw_path,
         "kind": frame.kind,
         "camera_rating": {"stars": frame.camera_rating.stars, "label": frame.camera_rating.label},
         "thumbnail_url": f"/api/frames/{frame.id}/thumbnail",
         "image_url": f"/api/frames/{frame.id}/image",
     }
+
+
+def _raw_only_notice(reviewed: list[ReviewedFrame]) -> str | None:
+    """Says that Rating write-back leaves RAW-only Frames out, until it supports them (#151)."""
+    count = sum(1 for item in reviewed if item.frame.kind == "raw-only")
+    if count == 0:
+        return None
+    frames = "1 RAW-only Frame is" if count == 1 else f"{count} RAW-only Frames are"
+    return f"{frames} left out: framewise can't write ratings into RAW-only Frames yet."
 
 
 def _file_change_json(change: FileChange) -> dict:

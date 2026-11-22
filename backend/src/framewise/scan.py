@@ -9,19 +9,17 @@ IGNORE_MARKER = ".framewise-ignore"
 
 @dataclass(frozen=True)
 class ScannedFrame:
-    jpg_path: Path
+    jpg_path: Path | None
     raw_path: Path | None = None
 
+    @property
+    def main_path(self) -> Path:
+        """The file that identifies the Frame: its JPG, or the RAW of a RAW-only Frame."""
+        return self.jpg_path or self.raw_path
 
-@dataclass(frozen=True)
-class Scan:
-    frames: list[ScannedFrame]
-    skipped: list[Path]
 
-
-def scan_session(root: Path) -> Scan:
+def scan_session(root: Path) -> list[ScannedFrame]:
     frames: list[ScannedFrame] = []
-    skipped: list[Path] = []
     for folder, subfolders, names in os.walk(root):
         if IGNORE_MARKER in names:
             subfolders.clear()
@@ -32,10 +30,8 @@ def scan_session(root: Path) -> Scan:
             for name in names
             if not name.startswith(".") and _is_plain_file(Path(folder) / name)
         ]
-        result = _pair_folder(files)
-        frames.extend(result.frames)
-        skipped.extend(result.skipped)
-    return Scan(frames=frames, skipped=skipped)
+        frames.extend(_pair_folder(files))
+    return frames
 
 
 def _is_plain_file(path: Path) -> bool:
@@ -44,15 +40,17 @@ def _is_plain_file(path: Path) -> bool:
     return not path.is_symlink() and path.is_file() and not any(c in path.name for c in "\r\n")
 
 
-def _pair_folder(files: list[Path]) -> Scan:
+def _pair_folder(files: list[Path]) -> list[ScannedFrame]:
+    """A RAW and a JPG with the same base name make a RAW+JPG Frame. Each JPG and RAW left over
+    makes a Frame of its own."""
     raws_by_stem: dict[str, list[Path]] = {}
     for path in sorted(files):
         if path.suffix.lower() in RAW_EXTENSIONS:
             raws_by_stem.setdefault(path.stem.lower(), []).append(path)
     jpgs = sorted(path for path in files if path.suffix.lower() in JPG_EXTENSIONS)
     frames = [ScannedFrame(jpg_path=jpg, raw_path=_take_raw(raws_by_stem, jpg)) for jpg in jpgs]
-    skipped = sorted(raw for raws in raws_by_stem.values() for raw in raws)
-    return Scan(frames=frames, skipped=skipped)
+    lone_raws = sorted(raw for raws in raws_by_stem.values() for raw in raws)
+    return frames + [ScannedFrame(jpg_path=None, raw_path=raw) for raw in lone_raws]
 
 
 def _take_raw(raws_by_stem: dict[str, list[Path]], jpg: Path) -> Path | None:

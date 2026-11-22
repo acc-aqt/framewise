@@ -15,13 +15,13 @@ def group_frames(
     group_overrides: Mapping[str, str] | None = None,
 ) -> list[list[AnalyzedFrame]]:
     """Groups Frames in capture order, by the similarity of their fingerprints. `group_overrides`
-    holds the Groups the photographer fixed, as a Group key by JPG path: Frames sharing a key
+    holds the Groups the photographer fixed, as a Group key by main file: Frames sharing a key
     form one Group, and only the other Frames are grouped by similarity."""
     group_overrides = group_overrides or {}
     fixed: dict[str, list[AnalyzedFrame]] = {}
     free: list[AnalyzedFrame] = []
     for frame in frames:
-        key = group_overrides.get(frame.frame.jpg_path)
+        key = group_overrides.get(frame.frame.main_path)
         if key is None:
             free.append(frame)
         else:
@@ -86,7 +86,7 @@ def _capture_order(analyzed: AnalyzedFrame) -> tuple[bool, datetime, str]:
     return (
         analyzed.captured_at is None,
         analyzed.captured_at or datetime.min,
-        analyzed.frame.jpg_path,
+        analyzed.frame.main_path,
     )
 
 

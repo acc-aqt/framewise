@@ -13,6 +13,7 @@ from framewise.write_back import SIDECAR_EXTENSION
 
 MoveToTrash = Callable[[Path], None]
 OUTSIDE_SESSION_ERROR = "File is outside the Session folder"
+RAW_ONLY_ERROR = "framewise can't trash RAW-only Frames yet"
 
 
 @dataclass(frozen=True)
@@ -29,8 +30,8 @@ class TrashResult:
 
 
 def files_to_trash(frame: Frame) -> list[str]:
-    """The Frame's files relative to the Session folder, the JPG last. A RAW's sidecar belongs
-    to the Frame, so it is trashed with it."""
+    """The files of a JPG-only or RAW+JPG Frame relative to the Session folder, its main file last.
+    A RAW's sidecar belongs to the Frame, so it is trashed with it."""
     if frame.raw_path is None:
         return [frame.jpg_path]
     sidecar = Path(frame.raw_path).with_suffix(SIDECAR_EXTENSION).as_posix()
@@ -40,20 +41,23 @@ def files_to_trash(frame: Frame) -> list[str]:
 def trash_frames(
     store: SessionStore, frames: list[Frame], move_to_trash: MoveToTrash = send2trash
 ) -> TrashResult:
-    """Trashes each Frame's files. A Frame leaves the Session once its JPG is in the Trash;
+    """Trashes each Frame's files. A Frame leaves the Session once its main file is in the Trash;
     its Overrides are kept, as for any Frame that vanishes, so they come back if it is
-    restored."""
+    restored. RAW-only Frames are refused and stay, until #151."""
     trashed, failed = [], []
     for frame in frames:
+        if frame.kind == "raw-only":
+            failed.append(TrashFailure(frame.main_path, RAW_ONLY_ERROR))
+            continue
         errors = [
             TrashFailure(path, error)
             for path in files_to_trash(frame)
             if (error := _trash(store.root, path, move_to_trash)) is not None
         ]
         failed.extend(errors)
-        if not (store.root / frame.jpg_path).exists():
+        if not (store.root / frame.main_path).exists():
             trashed.append(frame)
-    store.remove_frames([frame.jpg_path for frame in trashed])
+    store.remove_frames([frame.main_path for frame in trashed])
     return TrashResult([frame.id for frame in trashed], failed)
 
 

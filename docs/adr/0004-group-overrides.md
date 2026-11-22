@@ -1,6 +1,6 @@
 # ADR-0004: Group Overrides
 
-**Status:** Accepted — 2026-11-14
+**Status:** Accepted — 2026-11-14. Amended — 2026-11-20: Group Overrides and Verdict Overrides are keyed by the Frame's main file, which is the JPG for JPG-only and RAW+JPG Frames (#148).
 
 ## Context
 
@@ -8,14 +8,14 @@ The photographer fixes wrong grouping in the Review UI by splitting a Group, mer
 
 ## Decision
 
-1. **A Group Override pins a Frame to a fixed Group.** It is stored in a `group_overrides` table of the Session store, keyed by JPG path, with a random Group key. Frames sharing a key form one Group. It never refers to a Group id.
+1. **A Group Override pins a Frame to a fixed Group.** It is stored in a `group_overrides` table of the Session store, keyed by the Frame's main file, with a random Group key. Frames sharing a key form one Group. It never refers to a Group id.
 2. **A fix pins every Frame of every Group it touches.**
    - Split: the selected Frames get one new key, the rest of their Group another.
    - Merge: every Frame of the merged Groups gets one new key.
    - Move: the Frame and its target Group get one new key, the rest of its old Group another.
 3. **Pinned Frames are taken out of automatic grouping.** The Grouper only groups the other Frames by similarity, so re-analysis or newly analyzed Frames never undo a fix. A Frame analyzed after a fix that would have joined a fixed Group forms a Group with the other unpinned Frames instead; the photographer can move or merge it.
 4. **Groups are shown in capture order of their first Frame,** fixed or not.
-5. **The Judge re-judges each Group as usual.** Each Group gets one Winner. Verdict Overrides are kept by JPG path, so they still win after a fix. If a merge or move brings two Winner Overrides into one Group, the first in the Group wins and the other falls back to framewise's Verdict, as ADR-0003 already says; its stored Override is kept, so it wins again if the Groups are split apart.
+5. **The Judge re-judges each Group as usual.** Each Group gets one Winner. Verdict Overrides are kept by main file, so they still win after a fix. If a merge or move brings two Winner Overrides into one Group, the first in the Group wins and the other falls back to framewise's Verdict, as ADR-0003 already says; its stored Override is kept, so it wins again if the Groups are split apart.
 6. **Group Overrides of Frames that vanish from the Session folder are kept**, as Verdict Overrides are.
 
 ## Consequences

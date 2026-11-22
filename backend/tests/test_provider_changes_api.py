@@ -16,7 +16,7 @@ def analysed_names(analyzer) -> list[str]:
 
 def group_paths(client) -> list[list[str]]:
     return [
-        [frame["jpg_path"] for frame in group["frames"]]
+        [frame["main_path"] for frame in group["frames"]]
         for group in client.get("/api/groups").json()
     ]
 

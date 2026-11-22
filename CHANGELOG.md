@@ -8,6 +8,9 @@ What changed in framewise, written for photographers. The Review UI shows this l
 - Someone who glances back over their shoulder into the lens counts as looking at the camera, whichever way their head is turned. A Frame where they do ranks above one where they look away.
 - Face badges appear together with the Frame's image in the loupe, the Compare loupe and an open Group, instead of floating over an empty area while the image loads. Stepping to the next Frame no longer shows the previous Frame's badges over it.
 - When `framewise review` stops, an open Review UI tab says it lost the connection and how to start it again, instead of showing broken thumbnails. It also notices when you come back to the tab. It reconnects on its own once the server is back, keeping every Override that was saved before it stopped.
+- A RAW with no JPG of the same name is now a **RAW-only Frame** instead of being skipped, so a Session shot in RAW only, or a merge such as a `-Pano.dng`, is grouped, judged and reviewed like any other. framewise judges it by the largest preview JPG embedded in the RAW and marks it RAW-only in the Review UI. **Rating write-back** and Trash leave RAW-only Frames alone for now, and say how many RAW-only Frames they leave out.
+- Skipped files are listed with the reason, such as a RAW without an embedded preview framewise can read.
+- A **RAW-only Frame** whose embedded preview is less than 1600 px on its long edge is skipped instead of getting a misleading Verdict, and the Review UI lists it under **Skipped** with the preview's size. Change the minimum with `min_preview_long_edge` under `[raw_only]` in `config.toml`.
 
 ## 0.2.0 — 2026-11-19
 

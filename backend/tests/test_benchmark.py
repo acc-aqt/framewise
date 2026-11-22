@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from conftest import FakeAnalyzer, make_jpg
+from test_previews import make_dng_with_previews
 
 from framewise.analyzer import SimilarityThresholds, Subject
 from framewise.benchmark import (
@@ -20,6 +21,7 @@ from framewise.benchmark import (
     timing,
 )
 from framewise.camera_rating import CameraRating
+from framewise.exiftool import find_exiftool
 from framewise.judge import Judgement, Scores, Verdict
 from framewise.store import Frame
 
@@ -120,8 +122,8 @@ def judgement(verdict: Verdict) -> Judgement:
     return Judgement(verdict, [], scores, faces=[], sharpness_measured_on="frame")
 
 
-def frame(frame_id: int, jpg_path: str) -> Frame:
-    return Frame(frame_id, jpg_path, None, CameraRating(None, None))
+def frame(frame_id: int, main_path: str) -> Frame:
+    return Frame(frame_id, main_path, main_path, None, CameraRating(None, None))
 
 
 def test_the_active_catalog_is_the_one_lightroom_classic_loads(tmp_path):
@@ -164,7 +166,7 @@ def test_virtual_copies_carry_no_reference_rating(catalog, session_dir):
     assert read_reference_ratings(catalog.path, session_dir) == {}
 
 
-def test_frames_match_reference_ratings_by_their_jpg_path(session_dir):
+def test_frames_match_reference_ratings_by_their_main_file(session_dir):
     frames = [frame(1, "DSCF0001.JPG"), frame(2, "sub/DSCF0002.JPG"), frame(3, "DSCF0003.JPG")]
     ratings = {session_dir / "DSCF0001.JPG": 2, session_dir / "sub" / "dscf0002.jpg": 3}
 
@@ -374,7 +376,7 @@ def test_each_frame_result_names_what_its_sharpness_was_measured_on_and_the_meas
     )
 
     results = {
-        Path(result["jpg_path"]).name: result
+        Path(result["main_path"]).name: result
         for result in json.loads(report.read_text())["frame_results"]
     }
     assert results["DSCF0001.JPG"]["sharpness_measured_on"] == "focus-point"
@@ -393,3 +395,39 @@ def test_benchmark_refuses_to_run_on_windows(session_dir, catalog, tmp_path, cap
 
     assert exit_info.value.code == 2
     assert "does not run on Windows" in capsys.readouterr().err
+
+
+@runs_the_benchmark
+@pytest.mark.skipif(find_exiftool() is None, reason="ExifTool is not installed")
+def test_benchmark_skips_raws_by_the_minimum_preview_size_in_the_config(
+    session_dir, catalog, tmp_path, isolated_data_dir
+):
+    make_dng_with_previews(session_dir / "L1000001.DNG", [(32, 24), (32, 24), (400, 300)])
+    make_dng_with_previews(session_dir / "L1000002.DNG", [(32, 24), (32, 24), (300, 200)])
+    isolated_data_dir.mkdir()
+    (isolated_data_dir / "config.toml").write_text("[raw_only]\nmin_preview_long_edge = 400\n")
+    report = tmp_path / "report.json"
+
+    main(
+        [str(session_dir), "--catalog", str(catalog.path), "--report", str(report)],
+        analyzer=FakeAnalyzer(),
+    )
+
+    assert json.loads(report.read_text())["frames"] == 1
+
+
+@runs_the_benchmark
+def test_benchmark_refuses_to_run_with_an_invalid_minimum_preview_size(
+    session_dir, catalog, tmp_path, isolated_data_dir, capsys
+):
+    isolated_data_dir.mkdir()
+    (isolated_data_dir / "config.toml").write_text("[raw_only]\nmin_preview_long_edge = 0\n")
+
+    with pytest.raises(SystemExit) as exit_info:
+        main(
+            [str(session_dir), "--catalog", str(catalog.path), "--report", str(tmp_path / "r")],
+            analyzer=FakeAnalyzer(),
+        )
+
+    assert exit_info.value.code == 1
+    assert "framewise-benchmark: error:" in capsys.readouterr().err

@@ -19,6 +19,7 @@ from framewise.benchmark import (
     match_references,
     read_reference_ratings,
     timing,
+    winner_agreement,
 )
 from framewise.camera_rating import CameraRating
 from framewise.exiftool import find_exiftool
@@ -38,6 +39,7 @@ CREATE TABLE Adobe_images (
 );
 """
 DUPLICATE = [1.0] + [0.0] * 63
+OTHER_DUPLICATE = [0.0, 1.0] + [0.0] * 62
 
 runs_the_benchmark = pytest.mark.skipif(
     sys.platform == "win32", reason="framewise-benchmark does not run on Windows"
@@ -198,6 +200,59 @@ def test_agreement_counts_kept_and_rejected_frames_with_a_reference_rating():
     }
 
 
+def test_winner_agreement_counts_groups_whose_winner_is_among_the_top_rated_frames():
+    proposal = {
+        1: judgement(Verdict.WINNER),
+        2: judgement(Verdict.KEEPER),
+        3: judgement(Verdict.REJECT),
+        4: judgement(Verdict.WINNER),
+        5: judgement(Verdict.KEEPER),
+    }
+    groups = [[1, 2, 3], [4, 5]]
+    references = {1: 4, 2: 2, 4: 1, 5: 3}
+
+    result = winner_agreement(proposal, groups, references)
+
+    assert result.agreeing == 1
+    assert result.groups == 2
+    assert result.share == 0.5
+
+
+def test_a_winner_tied_for_the_top_rating_agrees():
+    proposal = {1: judgement(Verdict.KEEPER), 2: judgement(Verdict.WINNER)}
+
+    result = winner_agreement(proposal, [[1, 2]], {1: 3, 2: 3})
+
+    assert result.agreeing == 1
+    assert result.groups == 1
+
+
+def test_groups_without_a_reference_rating_are_not_counted():
+    proposal = {1: judgement(Verdict.WINNER), 2: judgement(Verdict.KEEPER)}
+
+    result = winner_agreement(proposal, [[1, 2]], {})
+
+    assert result.groups == 0
+    assert result.share is None
+
+
+def test_an_unrated_winner_disagrees_with_a_rated_frame_in_its_group():
+    proposal = {1: judgement(Verdict.WINNER), 2: judgement(Verdict.REJECT)}
+
+    result = winner_agreement(proposal, [[1, 2]], {2: 1})
+
+    assert result.agreeing == 0
+    assert result.groups == 1
+
+
+def test_groups_of_one_frame_are_not_counted():
+    proposal = {1: judgement(Verdict.WINNER)}
+
+    result = winner_agreement(proposal, [[1]], {1: 3})
+
+    assert result.groups == 0
+
+
 def test_timing_is_measured_against_15_minutes_per_200_frames():
     result = timing(frames=261, seconds=900.0)
 
@@ -235,7 +290,54 @@ def test_benchmark_reports_agreement_and_timing_without_touching_session_or_cata
     assert result["agreement"]["rejected_with_reference"] == 1
     assert result["timing"]["budget_seconds"] == pytest.approx(3 * 4.5)
     assert result["providers"] == {"fingerprint": "fake-fingerprint@1"}
-    assert "Rated Frames proposed as Reject or Unsure: 1 of 2" in capsys.readouterr().out
+    assert result["winner_agreement"] == {"agreeing": 0, "groups": 1, "share": 0.0}
+    out = capsys.readouterr().out
+    assert "Rated Frames proposed as Reject or Unsure: 1 of 2" in out
+    assert "Winners among their Group's top-rated Frames: 0 of 1 (0%)" in out
+    assert fingerprint_of(session_dir) == session_before
+    assert fingerprint_of(catalog.path.parent) == catalog_before
+    assert not data_dir.exists()
+
+
+def test_fitting_the_weights_reports_them_with_held_out_agreement_and_writes_nothing(
+    session_dir, catalog, tmp_path, monkeypatch, capsys
+):
+    data_dir = tmp_path / "app-support"
+    monkeypatch.setenv("FRAMEWISE_DATA_DIR", str(data_dir))
+    analyzer = FakeAnalyzer()
+    for number, fingerprint in ((1, DUPLICATE), (3, OTHER_DUPLICATE)):
+        sharper_but_shaken = session_dir / f"DSCF000{number}.JPG"
+        steady = session_dir / f"DSCF000{number + 1}.JPG"
+        analyzer.script(make_jpg(sharper_but_shaken), fingerprint, sharpness=1.0, motion_blur=0.3)
+        analyzer.script(make_jpg(steady), fingerprint, sharpness=0.8, motion_blur=0.0)
+        catalog.add_photo(sharper_but_shaken, 2.0)
+        catalog.add_photo(steady, 4.0)
+    catalog.close()
+    session_before = fingerprint_of(session_dir)
+    catalog_before = fingerprint_of(catalog.path.parent)
+
+    main(
+        [
+            str(session_dir),
+            "--catalog",
+            str(catalog.path),
+            "--report",
+            str(tmp_path / "report.json"),
+            "--fit-weights",
+        ],
+        analyzer=analyzer,
+    )
+
+    out = capsys.readouterr().out
+    assert (
+        "  Proposed weights: sharpness 0.00, steadiness 1.30, exposure 0.00, aesthetics 0.00, "
+        "face_quality 0.00, expression 0.00" in out
+    )
+    assert "  Held-out pairs ranked as rated: current 0 of 2 (0%), proposed 2 of 2 (100%)" in out
+    assert (
+        "  Held-out Winners among their Group's top-rated Frames: "
+        "current 0 of 2 (0%), proposed 2 of 2 (100%)" in out
+    )
     assert fingerprint_of(session_dir) == session_before
     assert fingerprint_of(catalog.path.parent) == catalog_before
     assert not data_dir.exists()

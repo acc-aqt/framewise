@@ -112,7 +112,7 @@ Install your package into the same environment as framewise. An entry point that
 
 ## Choosing Providers
 
-To use a Provider other than the highest-priority one, name its id in the `[providers]` table of `config.toml`, in the same folder as the Session stores (`~/Library/Application Support/framewise/` on macOS, `~/.local/share/framewise/` on Linux by default):
+To use a Provider other than the highest-priority one, name its id in the `[providers]` table of `config.toml`, in the same folder as the Session stores (`~/Library/Application Support/framewise/` on macOS, `%LOCALAPPDATA%\framewise\` on Windows, `~/.local/share/framewise/` on Linux by default):
 
 ```toml
 [providers]

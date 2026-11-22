@@ -85,6 +85,7 @@ function frame(id: number): Frame {
       exposure: 1,
       aesthetics: 0.5,
       face_quality: null,
+      expression: null,
       camera_rating: 0,
       total: 0.8,
     },

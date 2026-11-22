@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from conftest import review_app
+from PIL import Image
 from test_apple_vision import (
     FIXTURE_FACE_BOX,
     draw_landscape,
@@ -14,9 +15,13 @@ from test_apple_vision import (
 from test_groups_api import BEACH, ScriptedFingerprint
 from test_verdicts_api import frames_by_name, reasons
 
-from framewise.analyzer import SimilarityThresholds
+from framewise.analyzer import Expression, SimilarityThresholds
 from framewise.apple_vision import PRIORITY
-from framewise.mediapipe_faces import MediaPipeEyeState, MediaPipeFaceDetection
+from framewise.mediapipe_faces import (
+    MediaPipeExpression,
+    MediaPipeEyeState,
+    MediaPipeFaceDetection,
+)
 from framewise.models import FACE_LANDMARKER, is_verified
 from framewise.providers import compose_analyzer, discover_providers, select_providers
 from framewise.review import SessionAnalysis, open_session, resolve_data_dir
@@ -48,6 +53,45 @@ def test_eye_state_tells_open_from_closed_eyes():
     assert eyes_open(FACES / "eyes-closed.jpg") == [False]
 
 
+def expression(jpg_path: Path) -> Expression:
+    faces = MediaPipeFaceDetection().detect_faces(jpg_path)
+    [expression] = MediaPipeExpression().expression(jpg_path, faces)
+    return expression
+
+
+def smile(jpg_path: Path) -> float | None:
+    return expression(jpg_path).smile
+
+
+def test_a_smiling_face_scores_a_higher_smile_than_a_neutral_one():
+    assert smile(FACES / "eyes-open.jpg") > 0.5 > smile(FACES / "neutral.jpg")
+
+
+def test_a_face_turned_away_scores_lower_facing_than_one_facing_the_camera():
+    assert (
+        expression(FACES / "turned-away.jpg").facing
+        < 0.5
+        < expression(FACES / "eyes-open.jpg").facing
+    )
+
+
+def test_a_face_looking_aside_scores_lower_looking_than_one_looking_into_the_lens():
+    assert (
+        expression(FACES / "looking-aside.jpg").looking
+        < 0.5
+        < expression(FACES / "eyes-open.jpg").looking
+    )
+
+
+def test_a_head_turned_away_whose_eyes_look_back_into_the_lens_scores_high_looking():
+    glancing_back = expression(FACES / "glancing-back.jpg")
+    assert glancing_back.looking > 0.5 > glancing_back.facing
+
+
+def test_a_head_turned_away_whose_eyes_follow_it_scores_low_looking():
+    assert expression(FACES / "turned-away.jpg").looking < 0.5
+
+
 def test_a_frame_without_faces_has_none(tmp_path):
     assert MediaPipeFaceDetection().detect_faces(draw_landscape(tmp_path / "landscape.jpg")) == []
 
@@ -71,6 +115,42 @@ def test_eye_state_reads_the_eyes_inside_boxes_from_another_detector():
         None,
     ]
     assert eye_state.eyes_open(FACES / "eyes-closed.jpg", [FIXTURE_FACE_BOX]) == [False]
+
+
+def small_face(path: Path, face: Path) -> tuple[Path, tuple[float, float, float, float]]:
+    """The reference face pasted at about 12% of a large canvas's width, like a person far from
+    the camera, and the box around it a face detector reports."""
+    canvas = Image.new("RGB", (2133, 1422), (128, 128, 128))
+    left, top = 1200, 500
+    with Image.open(face) as face_image:
+        canvas.paste(face_image.convert("RGB"), (left, top))
+    canvas.save(path, "JPEG", quality=90)
+    x, y, width, height = FIXTURE_FACE_BOX
+    box = (
+        (left + x * 256) / canvas.width,
+        (top + y * 256) / canvas.height,
+        width * 256 / canvas.width,
+        height * 256 / canvas.height,
+    )
+    return path, box
+
+
+def test_eye_state_reads_a_small_face_from_the_detectors_box(tmp_path):
+    eyes_open_frame, box = small_face(tmp_path / "eyes-open.jpg", FACES / "eyes-open.jpg")
+    eyes_closed_frame, _ = small_face(tmp_path / "eyes-closed.jpg", FACES / "eyes-closed.jpg")
+
+    assert MediaPipeEyeState().eyes_open(eyes_open_frame, [box]) == [True]
+    assert MediaPipeEyeState().eyes_open(eyes_closed_frame, [box]) == [False]
+
+
+def test_expression_reads_a_small_face_from_the_detectors_box(tmp_path):
+    smiling, box = small_face(tmp_path / "smiling.jpg", FACES / "eyes-open.jpg")
+    neutral, _ = small_face(tmp_path / "neutral.jpg", FACES / "neutral.jpg")
+
+    [smiling_expression] = MediaPipeExpression().expression(smiling, [box])
+    [neutral_expression] = MediaPipeExpression().expression(neutral, [box])
+
+    assert smiling_expression.smile > 0.5 > neutral_expression.smile
 
 
 def test_a_face_is_found_where_it_appears_in_a_frame_stored_on_its_side(tmp_path):
@@ -109,3 +189,4 @@ def test_framewise_registers_its_mediapipe_providers_below_apple_vision():
     expected = "apple-vision" if sys.platform == "darwin" else "mediapipe"
     assert chosen["face-detection"].id == f"{expected}-face-detection"
     assert chosen["eye-state"].id == f"{expected}-eye-state"
+    assert chosen["expression"].id == "mediapipe-expression"

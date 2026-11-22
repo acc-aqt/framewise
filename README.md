@@ -71,8 +71,8 @@ To build the wheel a Release publishes, run `uv build --wheel` in `backend/` of 
 
 ## Platform support
 
-- **macOS**: the Apple Vision Providers serve every Capability. `subject` needs macOS 14 or later and `aesthetics` macOS 15 or later.
-- **Linux**: the [portable Providers](#providers) serve `fingerprint`, `face-detection` and `eye-state`. There is no `face-quality`, `aesthetics` or `subject` Provider for Linux yet.
+- **macOS**: the Apple Vision Providers serve every Capability but `expression`, which only the portable MediaPipe Provider serves. `subject` needs macOS 14 or later and `aesthetics` macOS 15 or later.
+- **Linux**: the [portable Providers](#providers) serve `fingerprint`, `face-detection`, `eye-state` and `expression`. There is no `face-quality`, `aesthetics` or `subject` Provider for Linux yet.
 - **Windows** (preview): x64 only; Windows on ARM is not supported. The portable Providers serve the same Capabilities as on Linux. Windows is tested in CI but not yet checked end to end with Lightroom Classic on a real machine ([ADR-0008](docs/adr/0008-windows-as-a-native-platform.md)).
 - The portable Providers also run on macOS 14 or later, which onnxruntime needs.
 
@@ -117,7 +117,7 @@ It must be a whole number of pixels, 1 or more; any other value, or another sett
 
 - **Groups**: near-duplicate and burst Frames are grouped together.
 - **Verdicts**: each Frame gets a proposed Verdict (Winner, Keeper, Reject or Unsure) with Reasons, judged from its sharpness, motion blur, exposure and, where an `aesthetics` Provider is available, an aesthetics score.
-- **Faces**: in Frames with faces, every face is checked for closed eyes, sharpness and, where a `face-quality` Provider is available, face quality. Sharpness is then judged on the faces rather than the whole image.
+- **Faces**: in Frames with faces, every face is checked for closed eyes, sharpness and, where a `face-quality` Provider is available, face quality. Sharpness is then judged on the faces rather than the whole image. Where an `expression` Provider is available, a Frame where everyone smiles ranks above one where someone does not; a missing smile is never a flaw. An open Group and the loupe show a badge on each face.
 - **Focus point**: in Frames without faces, sharpness is judged on the area the camera focused on, where its maker notes record one (Fujifilm for now, read with [ExifTool](https://exiftool.org)), rather than the whole Frame. The score breakdown says which one it was measured on.
 - **Camera rating**: a rating already on the file, such as in-camera stars, nudges a Frame up a little but never past a technical flaw.
 - **Keeper budget**: the slider sets roughly what share of the Session's Frames to keep (40% to start, stored per Session). Each Group's Winner always stays, then the best Frames without flaws become Keepers until the budget is spent.
@@ -136,7 +136,7 @@ Trashing a Frame moves every file of it (RAW, JPG and any `.xmp` sidecar) to the
 
 ## Providers
 
-By default each Capability (`fingerprint`, `face-detection`, `eye-state`, `face-quality`, `aesthetics`, `subject`) uses its highest-priority Provider available on the machine ([ADR-0005](docs/adr/0005-pluggable-analysis-providers.md)). To choose one yourself, name its Provider id in a `config.toml` in the same folder as the Session store:
+By default each Capability (`fingerprint`, `face-detection`, `eye-state`, `face-quality`, `expression`, `aesthetics`, `subject`) uses its highest-priority Provider available on the machine ([ADR-0005](docs/adr/0005-pluggable-analysis-providers.md)). To choose one yourself, name its Provider id in a `config.toml` in the same folder as the Session store:
 
 ```toml
 [providers]

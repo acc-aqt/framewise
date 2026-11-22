@@ -111,7 +111,7 @@ def test_a_frame_with_faces_is_still_judged_on_its_faces(session_dir, review, an
         session_dir,
         analyzer,
         ("DSCF0001", {}),
-        ("DSCF0002", {"faces": [face()], "subject": at_focus_point(0.1)}),
+        ("DSCF0002", {"faces": [face(smile=1.0)], "subject": at_focus_point(0.1)}),
     )
 
     frame = frames_by_name(review())["DSCF0002.JPG"]

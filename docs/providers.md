@@ -10,6 +10,7 @@ framewise analyzes each Frame's Analysis source with one Provider per Capability
 | `face-detection` | `detect_faces(jpg_path)` | One box per face. |
 | `eye-state` | `eyes_open(jpg_path, faces)` | For each box, `True` (open), `False` (closed) or `None` (cannot tell). |
 | `face-quality` | `face_quality(jpg_path, faces)` | For each box, a score from 0 to 1, or `None`. |
+| `expression` | `expression(jpg_path, faces)` | For each box, an `Expression`, or `None` (cannot read the face). |
 | `aesthetics` | `aesthetics(jpg_path)` | A score from 0 to 1, or `None`. |
 | `subject` | `subject_mask(jpg_path)` | A mask of the Frame's main subject, or `None` where it finds none. |
 
@@ -25,7 +26,19 @@ A box is a tuple `(x, y, width, height)`:
 - measured as fractions from 0 to 1 of the Frame as it is displayed, after its EXIF orientation;
 - measured from the top left.
 
-The face detection Provider alone decides which faces a Frame has. The eye state and face quality Providers receive its boxes, possibly from a different Provider, and must return exactly one value per box, in the same order. framewise leaves out faces too small to measure.
+The face detection Provider alone decides which faces a Frame has. The eye state, face quality and expression Providers receive its boxes, possibly from a different Provider, and must return exactly one value per box, in the same order. framewise leaves out faces too small to measure.
+
+### Expressions
+
+`Expression`, from `framewise.analyzer`, holds what an expression Provider reads from a face:
+
+- `smile`: from 0 for a neutral or downturned mouth to 1 for a broad smile.
+- `looking`: from 0 for eyes looking fully aside to 1 for eyes looking into the lens, whatever the head does.
+- `facing`: from 0 for a head turned fully away to 1 for a head facing the camera.
+
+`looking` is the gaze from the camera, so a head turned away whose eyes look back into the lens scores high on `looking` and low on `facing`. MediaPipe's blendshapes give the eyes' direction relative to the head, so framewise's MediaPipe Provider estimates the eyes' angle from them and adds the head's yaw and pitch to it.
+
+Leave any part your Provider cannot tell as `None`; `looking` and `facing` default to it. framewise weighs the parts a face has into one expression, looking and facing 0.4 each and the smile 0.2, and ranks a Frame by its weakest face's expression. Expression never counts as a flaw.
 
 ### Subject masks
 
@@ -38,7 +51,7 @@ framewise measures sharpness on the mask's pixels alone, shrunk by a few pixels 
 
 ### Scales
 
-Return face quality and aesthetics on the 0 to 1 scale, whatever your model's own scale is. Any threshold your Provider applies, such as the openness below which eyes count as closed, is yours to choose and calibrate.
+Return face quality, smiles and aesthetics on the 0 to 1 scale, whatever your model's own scale is. Any threshold your Provider applies, such as the openness below which eyes count as closed, is yours to choose and calibrate.
 
 ### Similarity thresholds
 

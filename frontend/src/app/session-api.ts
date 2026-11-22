@@ -59,6 +59,7 @@ export interface Scores {
   exposure: number;
   aesthetics: number | null;
   face_quality: number | null;
+  expression: number | null;
   /** What a Camera rating added to the total, or 0 without one. */
   camera_rating: number;
   total: number;

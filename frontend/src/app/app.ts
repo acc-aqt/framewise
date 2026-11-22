@@ -15,6 +15,7 @@ import { Observable } from 'rxjs';
 import { About } from './about-api';
 import { AnalysisProgressView } from './analysis-progress';
 import { AnalysisSettings } from './analysis-settings';
+import { Disconnected } from './disconnected';
 import { GroupGrid } from './group-grid';
 import { GroupView } from './group-view';
 import { Icon } from './icon';
@@ -27,6 +28,7 @@ import { AnalysisProgress, Frame, Group, OverrideChange, SessionSummary } from '
 import { SessionChangeApi } from './session-change-api';
 import { SessionPicker } from './session-picker';
 import { SessionSummaryView } from './session-summary';
+import { ServerConnection } from './server-connection';
 import { CommandPalette } from './command-palette';
 import {
   Command,
@@ -65,6 +67,7 @@ interface PendingTrash {
     AnalysisProgressView,
     AnalysisSettings,
     CommandPalette,
+    Disconnected,
     GroupGrid,
     GroupView,
     Icon,
@@ -210,6 +213,8 @@ export class App {
   protected readonly paletteKey = PALETTE_KEY;
   protected readonly paletteTooltip: TooltipContent = { label: 'Commands', key: PALETTE_KEY };
 
+  protected readonly disconnected = inject(ServerConnection).disconnected;
+
   private readonly overrideApi = inject(OverrideApi);
   private readonly sessionChangeApi = inject(SessionChangeApi);
   private readonly trashApi = inject(TrashApi);
@@ -227,6 +232,14 @@ export class App {
         this.groupsNeedReload.set(false);
         this.groupsResource.reload();
       }
+    });
+    let wasDisconnected = false;
+    effect(() => {
+      const disconnected = this.disconnected();
+      if (wasDisconnected && !disconnected) {
+        this.openSession();
+      }
+      wasDisconnected = disconnected;
     });
     const injector = inject(Injector);
     effect(() => {

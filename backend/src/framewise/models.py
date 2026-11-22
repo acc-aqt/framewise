@@ -38,7 +38,14 @@ DINOV2_SMALL = Model(
     url="https://huggingface.co/onnx-community/dinov2-small/resolve/8b1f705a3a7f6f062f6bdd21986c1583d3ef105d/onnx/model_quantized.onnx",
     sha256="c179f8f7f592449c4c1bca4cd124a7538021428c5ffb89afde9503935b197efb",
 )
-MODELS = (FACE_LANDMARKER, DINOV2_SMALL)
+# eDifFIQA(T) by Žiga Babnik, Peter Peer and Vitomir Štruc, from the OpenCV Model Zoo, licensed
+# under CC BY 4.0: https://huggingface.co/opencv/face_image_quality_assessment_ediffiqa/blob/4fce5f6a5438b55a9f996a4e02164b63b849c587/LICENSE
+EDIFFIQA_TINY = Model(
+    file_name="ediffiqa_tiny_jun2024.onnx",
+    url="https://huggingface.co/opencv/face_image_quality_assessment_ediffiqa/resolve/4fce5f6a5438b55a9f996a4e02164b63b849c587/ediffiqa_tiny_jun2024.onnx",
+    sha256="9426c899cc0f01665240cb7d9e7f98e18e24e456c178326c771a43da289bfc6a",
+)
+MODELS = (FACE_LANDMARKER, DINOV2_SMALL, EDIFFIQA_TINY)
 """Every model the portable Providers need."""
 
 

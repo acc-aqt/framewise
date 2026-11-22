@@ -12,7 +12,7 @@ from test_write_back_api import files_by_path, lightroom_preferences
 
 from framewise.exiftool import ExifTool
 from framewise.previews import PreviewConfigError, read_min_preview_long_edge
-from framewise.review import hard_reset_session, session_database_path
+from framewise.review import hard_reset_session, open_session, session_database_path
 from framewise.store import preview_cache_dir
 
 
@@ -240,12 +240,17 @@ def test_a_vanished_raw_takes_its_cached_preview_with_it(session_dir, data_dir, 
     assert len(list(cache.iterdir())) == 1
 
 
-def test_hard_reset_deletes_the_preview_cache(session_dir, data_dir, review):
+def test_hard_reset_deletes_the_preview_cache(session_dir, data_dir, previews):
     make_raw(session_dir / "DSCF0001.RAF")
-    review()
+    open_session(session_dir, data_dir, previews).close()
     cache = preview_cache_dir(session_database_path(session_dir.resolve(), data_dir))
+    assert cache.exists()
 
-    hard_reset_session(session_dir, data_dir, ExifTool())
+    exiftool = ExifTool()
+    try:
+        hard_reset_session(session_dir, data_dir, exiftool)
+    finally:
+        exiftool.close()
 
     assert not cache.exists()
 

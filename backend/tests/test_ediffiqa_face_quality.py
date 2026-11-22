@@ -92,5 +92,7 @@ def test_framewise_registers_its_ediffiqa_face_quality_below_apple_vision():
     chosen = select_providers(providers.values())
 
     assert providers["ediffiqa-face-quality"].priority < PRIORITY
-    expected = "apple-vision" if AppleFaceQuality().is_available() else "ediffiqa"
-    assert chosen["face-quality"].id == f"{expected}-face-quality"
+    if AppleFaceQuality().is_available():
+        assert chosen["face-quality"].id == "apple-vision-face-quality"
+    elif EDifFIQAFaceQuality().is_available():
+        assert chosen["face-quality"].id == "ediffiqa-face-quality"

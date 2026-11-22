@@ -75,7 +75,7 @@ Besides its Capability's method, a Provider has:
 | `capability` | One of the Capability names above. |
 | `id` | A stable, unique name such as `"acme-eye-state"`. Saved analyses record it, and `config.toml` chooses by it. Never change it. |
 | `version` | An integer. Bump it whenever your Provider's output may change, such as a new model or threshold. framewise then analyzes the Frames your old version analyzed again. |
-| `priority` | An integer. By default each Capability uses its highest-priority available Provider. framewise's Apple Vision Providers use 100 and its portable ones (MediaPipe and DINOv2) 50. |
+| `priority` | An integer. By default each Capability uses its highest-priority available Provider. framewise's Apple Vision Providers use 100 and its portable ones (MediaPipe, DINOv2 and eDifFIQA) 50. |
 | `is_available()` | Whether the Provider can run on this machine, for example whether its dependencies and models are present. It must never raise. A Provider whose check raises is treated as unavailable. |
 
 framewise may call a Provider from several threads at once, one Frame per thread.
@@ -135,3 +135,11 @@ uv run framewise-benchmark /path/to/session --provider eye-state=acme-eye-state 
 ## Testing
 
 `backend/tests/test_providers.py` composes analysis from fake Providers and is a good model for testing yours.
+
+## framewise's portable models
+
+framewise does not ship model files: each is downloaded on first use, or with `framewise models download`, from a pinned URL and checked against its SHA-256 (`backend/src/framewise/models.py`).
+
+- **MediaPipe Face Landmarker** (`face-detection`, `eye-state`, `expression`): Google's BlazeFace, Face Mesh V2 and Blendshape V2, [Apache License 2.0](https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker#models).
+- **DINOv2-small** (`fingerprint`): Meta's DINOv2, quantized and exported to ONNX by onnx-community, [Apache License 2.0](https://huggingface.co/facebook/dinov2-small).
+- **eDifFIQA(T)** (`face-quality`): eDifFIQA(T) by Žiga Babnik, Peter Peer and Vitomir Štruc ("eDifFIQA: Towards Efficient Face Image Quality Assessment based on Denoising Diffusion Probabilistic Models", IEEE T-BIOM 2024), as published in the [OpenCV Model Zoo](https://huggingface.co/opencv/face_image_quality_assessment_ediffiqa) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). framewise uses the model unchanged; it aligns each face to the model's 112 pixel template by five MediaPipe landmarks (iris centres, nose tip, mouth corners) and clamps the score to 0 to 1. It was chosen because it is the only face image quality model found whose weights are licensed for any use, already in ONNX at a pinnable URL, and small (7 MB, about 10 ms a face on one CPU thread). CR-FIQA and SER-FIQ are licensed for non-commercial use only, insightface's models for non-commercial research only, MagFace's weights are about 250 MB with no ONNX export, and SDD-FIQA has no license. Like Apple Vision's face quality, it responds to blur, low resolution, poor light, extreme pose and occlusion; unlike it, closed eyes barely lower its score. Its quality head was trained on VGGFace2, a dataset scraped from the web that is no longer distributed, as with most face models.

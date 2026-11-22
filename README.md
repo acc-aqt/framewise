@@ -72,8 +72,8 @@ To build the wheel a Release publishes, run `uv build --wheel` in `backend/` of 
 ## Platform support
 
 - **macOS**: the Apple Vision Providers serve every Capability but `expression`, which only the portable MediaPipe Provider serves. `subject` needs macOS 14 or later and `aesthetics` macOS 15 or later.
-- **Linux**: the [portable Providers](#providers) serve `fingerprint`, `face-detection`, `eye-state` and `expression`. There is no `face-quality`, `aesthetics` or `subject` Provider for Linux yet.
-- **Windows** (preview): x64 only; Windows on ARM is not supported. The portable Providers serve the same Capabilities as on Linux. Windows is tested in CI but not yet checked end to end with Lightroom Classic on a real machine ([ADR-0008](docs/adr/0008-windows-as-a-native-platform.md)).
+- **Linux**: the [portable Providers](#providers) serve `fingerprint`, `face-detection`, `eye-state`, `face-quality` and `expression`. There is no `aesthetics` or `subject` Provider for Linux yet.
+- **Windows** (preview): x64 only; Windows on ARM is not supported. The portable Providers serve the same Capabilities as on Linux, `face-quality` included; there is no `aesthetics` or `subject` Provider for Windows yet. Windows is tested in CI but not yet checked end to end with Lightroom Classic on a real machine ([ADR-0008](docs/adr/0008-windows-as-a-native-platform.md)).
 - The portable Providers also run on macOS 14 or later, which onnxruntime needs.
 
 ## Running it
@@ -151,6 +151,9 @@ The portable Providers run on Linux and macOS with free, local models:
 
 - DINOv2-small, run by onnxruntime, serves `fingerprint` (`dinov2-small-fingerprint`).
 - MediaPipe's Face Landmarker serves `face-detection` (`mediapipe-face-detection`) and `eye-state` (`mediapipe-eye-state`).
+- eDifFIQA(T) by Žiga Babnik, Peter Peer and Vitomir Štruc, from the [OpenCV Model Zoo](https://huggingface.co/opencv/face_image_quality_assessment_ediffiqa) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), run by onnxruntime on faces aligned by MediaPipe's landmarks, serves `face-quality` (`ediffiqa-face-quality`). Unlike Apple Vision's face quality, it barely lowers the score of closed eyes; `eye-state` catches those.
+
+The models are downloaded on first use, or ahead of time with `framewise models download`; [docs/providers.md](docs/providers.md#framewises-portable-models) says why each was chosen and under which license.
 
 On Linux and Windows, install them with the `portable` extra, as under [Install](#install); in a checkout the [setup script](#from-a-checkout) installs them. On macOS, add the same extra (in a checkout, `cd backend && uv sync --extra portable`); the setup script keeps them when you run it again. They rank below Apple Vision, so on macOS Apple Vision stays the default ([Platform support](#platform-support)).
 

@@ -96,7 +96,7 @@ def measure_image(
 
 
 def _sharpness(ratios: list[float]) -> float:
-    return _clamp((max(ratios) - SMEARED_RATIO) / (CRISP_RATIO - SMEARED_RATIO))
+    return clamp((max(ratios) - SMEARED_RATIO) / (CRISP_RATIO - SMEARED_RATIO))
 
 
 Box = tuple[int, int, int, int]
@@ -212,5 +212,5 @@ def _share_from(histogram: list[int], tone: int) -> float:
     return sum(histogram[tone:]) / sum(histogram)
 
 
-def _clamp(value: float) -> float:
+def clamp(value: float) -> float:
     return min(1.0, max(0.0, value))

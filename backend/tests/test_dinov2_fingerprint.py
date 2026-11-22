@@ -9,7 +9,7 @@ from test_apple_vision import a_moment_later, draw_landscape, draw_still_life, s
 from test_groups_api import group_paths
 from test_verdicts_api import frames_by_name, reasons
 
-from framewise import dinov2_fingerprint
+from framewise import onnx_runtime
 from framewise.apple_vision import PRIORITY
 from framewise.dinov2_fingerprint import DinoV2Fingerprint
 from framewise.mediapipe_faces import MediaPipeEyeState, MediaPipeFaceDetection
@@ -73,7 +73,7 @@ def test_a_session_analysed_only_with_portable_providers_gets_a_proposal(session
 
 @pytest.mark.parametrize(("macos", "available"), [("13.6.1", False), ("14.0", True), ("", False)])
 def test_on_macos_the_provider_needs_macos_14(monkeypatch, macos, available):
-    monkeypatch.setattr(dinov2_fingerprint, "onnxruntime", object())
+    monkeypatch.setattr(onnx_runtime, "onnxruntime", object())
     monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setattr(platform, "mac_ver", lambda: (macos, ("", "", ""), ""))
 

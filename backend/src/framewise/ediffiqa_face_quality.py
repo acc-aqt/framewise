@@ -2,23 +2,19 @@
 faces aligned by MediaPipe's landmarks. It needs the framewise-cull[portable] extra and reports
 itself unavailable without it."""
 
-import threading
 from pathlib import Path
 
 from PIL import Image, ImageOps
 
-from framewise import mediapipe_faces
-from framewise.dinov2_fingerprint import onnxruntime_supports_this_os
-from framewise.image_measures import Region
-from framewise.models import EDIFFIQA_TINY, ensure_model
+from framewise import mediapipe_faces, onnx_runtime
+from framewise.image_measures import Region, clamp
+from framewise.models import EDIFFIQA_TINY
 from framewise.providers import FACE_QUALITY
-from framewise.review import resolve_data_dir
 
 try:
     import numpy
-    import onnxruntime
 except ImportError:
-    onnxruntime = None
+    numpy = None
 
 PRIORITY = 50
 ALIGNED_SIZE = 112
@@ -41,9 +37,7 @@ class EDifFIQAFaceQuality:
 
     def is_available(self) -> bool:
         return (
-            onnxruntime is not None
-            and onnxruntime_supports_this_os()
-            and mediapipe_faces.MediaPipeFaceDetection().is_available()
+            onnx_runtime.is_available() and mediapipe_faces.MediaPipeFaceDetection().is_available()
         )
 
     def face_quality(self, jpg_path: Path, faces: list[Region]) -> list[float | None]:
@@ -56,37 +50,16 @@ class EDifFIQAFaceQuality:
         with Image.open(jpg_path) as image:
             frame = ImageOps.exif_transpose(image).convert("RGB")
         batch = numpy.stack([_aligned(frame, face_points) for face_points in found])
-        [scores] = _session().run(None, {"input": batch})
-        qualities = iter(_clamp(float(score)) for score in scores[:, 0])
+        [scores] = onnx_runtime.session(EDIFFIQA_TINY).run(None, {"input": batch})
+        qualities = iter(clamp(float(score)) for score in scores[:, 0])
         return [None if face_points is None else next(qualities) for face_points in points]
-
-
-_session_lock = threading.Lock()
-_shared_session = None
-
-
-def _session():
-    """One session for every analysis thread, made on first use, when its model is downloaded
-    if it is missing. See dinov2_fingerprint._session."""
-    global _shared_session
-    with _session_lock:
-        if _shared_session is None:
-            options = onnxruntime.SessionOptions()
-            options.intra_op_num_threads = 1
-            options.inter_op_num_threads = 1
-            _shared_session = onnxruntime.InferenceSession(
-                str(ensure_model(EDIFFIQA_TINY, resolve_data_dir())),
-                sess_options=options,
-                providers=["CPUExecutionProvider"],
-            )
-    return _shared_session
 
 
 def _aligned(frame: Image.Image, points: tuple[tuple[float, float], ...]):
     """The face turned, scaled and moved so its five points land on REFERENCE_POINTS, as
     eDifFIQA was trained: RGB from -1 to 1, channels first."""
     matrix = numpy.vstack(
-        [_similarity(numpy.asarray(points), numpy.asarray(REFERENCE_POINTS)), [0, 0, 1]]
+        [_alignment_matrix(numpy.asarray(points), numpy.asarray(REFERENCE_POINTS)), [0, 0, 1]]
     )
     inverse = numpy.linalg.inv(matrix)[:2]
     face = frame.transform(
@@ -99,7 +72,7 @@ def _aligned(frame: Image.Image, points: tuple[tuple[float, float], ...]):
     return ((pixels - 0.5) / 0.5).transpose(2, 0, 1)
 
 
-def _similarity(source, target):
+def _alignment_matrix(source, target):
     """The rotation, uniform scale and shift that best map the source points onto the target
     points, as a 2 by 3 matrix, by Umeyama's least squares method."""
     source_mean, target_mean = source.mean(axis=0), target.mean(axis=0)
@@ -112,7 +85,3 @@ def _similarity(source, target):
     scale = (spread * numpy.diag(reflection)).sum() / (centred_source**2).sum(axis=1).mean()
     shift = target_mean - scale * rotation @ source_mean
     return numpy.hstack([scale * rotation, shift[:, numpy.newaxis]])
-
-
-def _clamp(value: float) -> float:
-    return min(1.0, max(0.0, value))

@@ -7,7 +7,8 @@ import zipfile
 from pathlib import Path
 
 from framewise import clip_image
-from framewise.models import LAION_AESTHETICS_VIT_B_32, ensure_model
+from framewise.image_measures import clamp
+from framewise.models import LAION_AESTHETICS_VIT_B_32, ModelError, ensure_model
 from framewise.providers import AESTHETICS
 from framewise.review import resolve_data_dir
 
@@ -32,12 +33,12 @@ class LaionAesthetics:
     priority = PRIORITY
 
     def is_available(self) -> bool:
-        return numpy is not None and clip_image.is_available()
+        return clip_image.is_available()
 
     def aesthetics(self, jpg_path: Path) -> float | None:
         weight, bias = _head()
         rating = float(clip_image.image_embedding(jpg_path) @ weight + bias)
-        return _clamp((rating - LOWEST_RATING) / (HIGHEST_RATING - LOWEST_RATING))
+        return clamp((rating - LOWEST_RATING) / (HIGHEST_RATING - LOWEST_RATING))
 
 
 _head_lock = threading.Lock()
@@ -55,10 +56,7 @@ def _head():
             with zipfile.ZipFile(path) as archive:
                 weight = numpy.frombuffer(archive.read("archive/data/0"), "<f4")
                 bias = numpy.frombuffer(archive.read("archive/data/1"), "<f4")
-            assert weight.shape == (EMBEDDING_SIZE,) and bias.shape == (1,)
+            if weight.shape != (EMBEDDING_SIZE,) or bias.shape != (1,):
+                raise ModelError(f"{path} is not the aesthetics predictor framewise expects")
             _shared_head = (weight, float(bias[0]))
     return _shared_head
-
-
-def _clamp(value: float) -> float:
-    return min(1.0, max(0.0, value))

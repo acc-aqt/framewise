@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from test_apple_vision import FIXTURE_FACE_BOX, gaussian_blurred, portrait, side_by_side
 
-from framewise import ediffiqa_face_quality
+from framewise import mediapipe_faces, onnx_runtime
 from framewise.apple_vision import PRIORITY, AppleFaceQuality
 from framewise.ediffiqa_face_quality import EDifFIQAFaceQuality
 from framewise.models import EDIFFIQA_TINY, FACE_LANDMARKER, is_verified
@@ -71,8 +71,8 @@ def test_each_face_in_a_group_shot_keeps_its_own_quality(tmp_path):
 
 @pytest.mark.parametrize(("macos", "available"), [("13.6.1", False), ("14.0", True)])
 def test_on_macos_the_provider_needs_macos_14(monkeypatch, macos, available):
-    monkeypatch.setattr(ediffiqa_face_quality, "onnxruntime", object())
-    monkeypatch.setattr(ediffiqa_face_quality.mediapipe_faces, "mediapipe", object())
+    monkeypatch.setattr(onnx_runtime, "onnxruntime", object())
+    monkeypatch.setattr(mediapipe_faces, "mediapipe", object())
     monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setattr(platform, "mac_ver", lambda: (macos, ("", "", ""), ""))
 
@@ -80,8 +80,8 @@ def test_on_macos_the_provider_needs_macos_14(monkeypatch, macos, available):
 
 
 def test_without_mediapipe_the_provider_is_unavailable(monkeypatch):
-    monkeypatch.setattr(ediffiqa_face_quality, "onnxruntime", object())
-    monkeypatch.setattr(ediffiqa_face_quality.mediapipe_faces, "mediapipe", None)
+    monkeypatch.setattr(onnx_runtime, "onnxruntime", object())
+    monkeypatch.setattr(mediapipe_faces, "mediapipe", None)
     monkeypatch.setattr(sys, "platform", "linux")
 
     assert EDifFIQAFaceQuality().is_available() is False

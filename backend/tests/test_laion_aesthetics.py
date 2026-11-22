@@ -6,7 +6,7 @@ import pytest
 from PIL import Image
 from test_apple_vision import gaussian_blurred
 
-from framewise import apple_vision, clip_image
+from framewise import apple_vision, onnx_runtime
 from framewise.apple_vision import AppleAesthetics
 from framewise.laion_aesthetics import LaionAesthetics
 from framewise.models import CLIP_VIT_B_32_IMAGE, LAION_AESTHETICS_VIT_B_32, is_verified
@@ -64,7 +64,7 @@ def test_framewise_registers_its_laion_aesthetics_below_apple_vision():
 
 @pytest.mark.parametrize(("macos", "available"), [("13.6.1", False), ("14.0", True), ("", False)])
 def test_on_macos_the_provider_needs_macos_14(monkeypatch, macos, available):
-    monkeypatch.setattr(clip_image, "onnxruntime", object())
+    monkeypatch.setattr(onnx_runtime, "onnxruntime", object())
     monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setattr(platform, "mac_ver", lambda: (macos, ("", "", ""), ""))
 

@@ -71,8 +71,8 @@ To build the wheel a Release publishes, run `uv build --wheel` in `backend/` of 
 
 ## Platform support
 
-- **macOS**: the Apple Vision Providers serve every Capability but `expression`, which only the portable MediaPipe Provider serves. `subject` needs macOS 14 or later and `aesthetics` macOS 15 or later.
-- **Linux**: the [portable Providers](#providers) serve `fingerprint`, `face-detection`, `eye-state` and `expression`. There is no `face-quality`, `aesthetics` or `subject` Provider for Linux yet.
+- **macOS**: the Apple Vision Providers serve every Capability but `expression`, which only the portable MediaPipe Provider serves. `subject` needs macOS 14 or later and `aesthetics` macOS 15 or later; on macOS 14 the portable aesthetics Provider serves `aesthetics` instead.
+- **Linux**: the [portable Providers](#providers) serve `fingerprint`, `face-detection`, `eye-state`, `expression` and `aesthetics`. There is no `face-quality` or `subject` Provider for Linux yet.
 - **Windows** (preview): x64 only; Windows on ARM is not supported. The portable Providers serve the same Capabilities as on Linux. Windows is tested in CI but not yet checked end to end with Lightroom Classic on a real machine ([ADR-0008](docs/adr/0008-windows-as-a-native-platform.md)).
 - The portable Providers also run on macOS 14 or later, which onnxruntime needs.
 
@@ -151,6 +151,7 @@ The portable Providers run on Linux and macOS with free, local models:
 
 - DINOv2-small, run by onnxruntime, serves `fingerprint` (`dinov2-small-fingerprint`).
 - MediaPipe's Face Landmarker serves `face-detection` (`mediapipe-face-detection`) and `eye-state` (`mediapipe-eye-state`).
+- LAION's Aesthetics Predictor V1 over OpenAI's CLIP ViT-B/32 image encoder, run by onnxruntime, serves `aesthetics` (`laion-aesthetics`). Both are MIT licensed ([CLIP](https://github.com/openai/CLIP/blob/main/LICENSE), [the predictor](https://github.com/LAION-AI/aesthetic-predictor/blob/main/LICENSE)). The predictor learned from people's ratings of how much they like an image, mostly of generated art rather than photos, so like Apple's score it is a general sense of a pleasing image. It was chosen because it is freely licensed, takes about 0.15 s per Frame on one CPU core and its 176 MB encoder can serve other CLIP-based Capabilities later; the larger CLIP ViT-L/14 predictors cost about twenty times as long per Frame. Its 1 to 10 rating is mapped from 3..8 onto 0..1.
 
 On Linux and Windows, install them with the `portable` extra, as under [Install](#install); in a checkout the [setup script](#from-a-checkout) installs them. On macOS, add the same extra (in a checkout, `cd backend && uv sync --extra portable`); the setup script keeps them when you run it again. They rank below Apple Vision, so on macOS Apple Vision stays the default ([Platform support](#platform-support)).
 

@@ -12,6 +12,7 @@ What changed in framewise, written for photographers. The Review UI shows this l
 - Skipped files are listed with the reason, such as a RAW without an embedded preview framewise can read.
 - A **RAW-only Frame** whose embedded preview is less than 1600 px on its long edge is skipped instead of getting a misleading Verdict, and the Review UI lists it under **Skipped** with the preview's size. Change the minimum with `min_preview_long_edge` under `[raw_only]` in `config.toml`.
 - A Frame that is almost black apart from a blown-out lamp or phone screen is no longer taken for a deliberate low-key shot. It gets an "Underexposed" Reason and can no longer beat a well-exposed Frame to Winner in its Group. Dark Frames with a lit subject, such as a lit face, still count as low-key. Frames analyzed by an earlier version are re-analyzed.
+- On Linux, Windows and macOS 14, Frames now get an aesthetics score, which helps pick the Winner in a Group and the Keepers in a Session as on macOS 15. It needs the `portable` extra; its model, about 180 MB, is downloaded on first use or with `framewise models download`.
 
 ## 0.2.0 — 2026-11-19
 

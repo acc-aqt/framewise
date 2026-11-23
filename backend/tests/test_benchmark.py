@@ -299,6 +299,7 @@ def test_benchmark_reports_agreement_and_timing_without_touching_session_or_cata
     assert not data_dir.exists()
 
 
+@runs_the_benchmark
 def test_fitting_the_weights_reports_them_with_held_out_agreement_and_writes_nothing(
     session_dir, catalog, tmp_path, monkeypatch, capsys
 ):

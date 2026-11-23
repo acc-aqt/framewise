@@ -58,6 +58,9 @@ LOOKING_WITHIN_DEGREES = 12.0
 LOOKING_ASIDE_FROM_DEGREES = 22.0
 MIN_OVERLAP = 0.3
 """How much a box from another detector must overlap a landmarked face to be read as it."""
+FIVE_POINTS = (468, 473, 1, 61, 291)
+"""The Face Mesh landmarks of the five points faces are aligned by: the centres of the irises on
+the image's left and right, the nose tip and the mouth corners on the image's left and right."""
 CROP_SIZE = 2.0
 """How many times the longer side of a face's box its crop spans, so the whole face and its
 landmarks fit and the face is large enough for the landmarker's detector."""
@@ -69,6 +72,14 @@ class _MediaPipeProvider:
 
     def is_available(self) -> bool:
         return mediapipe is not None
+
+
+def five_points(
+    jpg_path: Path, faces: list[Region]
+) -> list[tuple[tuple[float, float], ...] | None]:
+    """The five points of the face in each box, in pixels of the Frame as it is displayed, or
+    None where the landmarker finds no face in the box. See FIVE_POINTS."""
+    return [None if face is None else face.five_points for face in _faces_in_boxes(jpg_path, faces)]
 
 
 class MediaPipeFaceDetection(_MediaPipeProvider):
@@ -110,6 +121,8 @@ class _LandmarkedFace:
     turns."""
     facing: float
     """From 0 for a head turned away from the camera to 1 for a head facing it."""
+    five_points: tuple[tuple[float, float], ...]
+    """See FIVE_POINTS, in pixels of the upright Frame."""
 
 
 _this_thread = threading.local()
@@ -140,7 +153,8 @@ def _face_in_box(frame: Image.Image, box: Region) -> _LandmarkedFace | None:
     left, top, right, bottom = crop
     if right <= left or bottom <= top:
         return None
-    return _overlapping_face(_box_in_crop(box, crop, frame), _landmark(frame.crop(crop)))
+    faces = _landmark(frame.crop(crop), origin=(left, top))
+    return _overlapping_face(_box_in_crop(box, crop, frame), faces)
 
 
 def _crop_around(box: Region, frame_width: int, frame_height: int) -> tuple[int, int, int, int]:
@@ -167,10 +181,20 @@ def _box_in_crop(box: Region, crop: tuple[int, int, int, int], frame: Image.Imag
     )
 
 
-def _landmark(image: Image.Image) -> list[_LandmarkedFace]:
+def _landmark(image: Image.Image, origin: tuple[int, int] = (0, 0)) -> list[_LandmarkedFace]:
+    """The faces in the image, which sits at origin in the upright Frame."""
     result = _landmarker().detect(mediapipe.Image(mediapipe.ImageFormat.SRGB, numpy.asarray(image)))
+    left, top = origin
     return [
-        _landmarked_face(landmarks, blendshapes, matrix)
+        _landmarked_face(
+            landmarks,
+            blendshapes,
+            matrix,
+            tuple(
+                (left + landmarks[i].x * image.width, top + landmarks[i].y * image.height)
+                for i in FIVE_POINTS
+            ),
+        )
         for landmarks, blendshapes, matrix in zip(
             result.face_landmarks,
             result.face_blendshapes,
@@ -204,7 +228,7 @@ def _box(landmarks) -> Region:
     return min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
 
 
-def _landmarked_face(landmarks, blendshapes, matrix) -> _LandmarkedFace:
+def _landmarked_face(landmarks, blendshapes, matrix, five_points) -> _LandmarkedFace:
     scores = {category.category_name: category.score for category in blendshapes}
     head_yaw, head_pitch = _head_angle(matrix)
     eyes_yaw, eyes_pitch = _eyes_angle(scores)
@@ -220,6 +244,7 @@ def _landmarked_face(landmarks, blendshapes, matrix) -> _LandmarkedFace:
         facing=_within(
             math.hypot(head_yaw, head_pitch), FACING_WITHIN_DEGREES, TURNED_AWAY_FROM_DEGREES
         ),
+        five_points=five_points,
     )
 
 

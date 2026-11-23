@@ -72,6 +72,8 @@ jobs:
         run: |
           uv run python -c "import framewise.mediapipe_faces as m; assert m.MediaPipeFaceDetection().is_available()"
           uv run python -c "import framewise.dinov2_fingerprint as d; assert d.DinoV2Fingerprint().is_available()"
+          uv run python -c "import framewise.ediffiqa_face_quality as e; assert e.EDifFIQAFaceQuality().is_available()"
+          uv run python -c "import framewise.laion_aesthetics as a; assert a.LaionAesthetics().is_available()"
 
       - run: uv run ruff check
 

@@ -1,27 +1,21 @@
 """framewise's portable fingerprint Provider, built on DINOv2-small run by onnxruntime. It needs
 the framewise-cull[portable] extra and reports itself unavailable without it."""
 
-import platform
-import sys
-import threading
 from pathlib import Path
 
 from PIL import Image, ImageOps
 
+from framewise import onnx_runtime
 from framewise.analyzer import SimilarityThresholds
-from framewise.models import DINOV2_SMALL, ensure_model
+from framewise.models import DINOV2_SMALL
 from framewise.providers import FINGERPRINT
-from framewise.review import resolve_data_dir
 
 try:
     import numpy
-    import onnxruntime
 except ImportError:
-    onnxruntime = None
+    numpy = None
 
 PRIORITY = 50
-MIN_MACOS = 14
-"""onnxruntime's wheels for macOS need macOS 14 or later."""
 SHORTEST_EDGE = 256
 CROP = 224
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
@@ -40,44 +34,14 @@ class DinoV2Fingerprint:
     similarity = SimilarityThresholds(burst=0.7, near_duplicate=0.82)
 
     def is_available(self) -> bool:
-        return onnxruntime is not None and _onnxruntime_supports_this_os()
+        return onnx_runtime.is_available()
 
     def fingerprint(self, jpg_path: Path) -> list[float]:
         """DINOv2's class token: the embedding it learns to describe the whole image."""
-        [hidden_states] = _session().run(None, {"pixel_values": _pixel_values(jpg_path)})
+        [hidden_states] = onnx_runtime.session(DINOV2_SMALL).run(
+            None, {"pixel_values": _pixel_values(jpg_path)}
+        )
         return hidden_states[0, 0].tolist()
-
-
-def _onnxruntime_supports_this_os() -> bool:
-    if sys.platform != "darwin":
-        return True
-    try:
-        return int(platform.mac_ver()[0].split(".")[0]) >= MIN_MACOS
-    except ValueError:
-        return False
-
-
-_session_lock = threading.Lock()
-_shared_session = None
-
-
-def _session():
-    """One session for every analysis thread, made on first use, when its model is downloaded
-    if it is missing. onnxruntime runs a session from several threads at once; with one thread
-    of its own per run, it runs on the thread that calls it, as many at once as framewise
-    analyzes Frames."""
-    global _shared_session
-    with _session_lock:
-        if _shared_session is None:
-            options = onnxruntime.SessionOptions()
-            options.intra_op_num_threads = 1
-            options.inter_op_num_threads = 1
-            _shared_session = onnxruntime.InferenceSession(
-                str(ensure_model(DINOV2_SMALL, resolve_data_dir())),
-                sess_options=options,
-                providers=["CPUExecutionProvider"],
-            )
-    return _shared_session
 
 
 def _pixel_values(jpg_path: Path):

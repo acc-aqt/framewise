@@ -24,6 +24,7 @@ portable = [
 [project.scripts]
 framewise = "framewise.cli:main"
 framewise-benchmark = "framewise.benchmark:main"
+framewise-compare-winners = "framewise.winner_comparison:main"
 
 [project.entry-points."framewise.providers"]
 apple-vision-fingerprint = "framewise.apple_vision:AppleFingerprint"

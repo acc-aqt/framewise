@@ -4,6 +4,8 @@ import pytest
 from conftest import FakeAnalyzer, make_jpg
 from test_write_back_api import jpg
 
+from framewise.review import session_database_path
+from framewise.store import Override, SessionStore
 from framewise.winner_comparison import main
 
 MOUNTAIN = [0.0, 1.0, 0.0]
@@ -17,7 +19,7 @@ def sharper_against_more_pleasing(session_dir, analyzer) -> None:
     analyzer.script(make_jpg(session_dir / "DSCF0009.JPG"), MOUNTAIN)
 
 
-def test_the_page_shows_the_winners_of_groups_where_the_picks_differ(
+def test_the_page_shows_the_winners_of_groups_where_the_rankings_differ(
     session_dir, isolated_data_dir, tmp_path, capsys
 ):
     analyzer = FakeAnalyzer()
@@ -35,7 +37,7 @@ def test_the_page_shows_the_winners_of_groups_where_the_picks_differ(
     assert str(page) in out
 
 
-def test_the_page_says_which_pick_chose_each_winner_only_in_its_hidden_tally(
+def test_the_page_names_the_ranking_behind_each_winner_only_for_its_hidden_tally(
     session_dir, isolated_data_dir, tmp_path
 ):
     analyzer = FakeAnalyzer()
@@ -45,11 +47,13 @@ def test_the_page_says_which_pick_chose_each_winner_only_in_its_hidden_tally(
     main([str(session_dir), "--page", str(page)], analyzer=analyzer)
 
     html = page.read_text()
-    picks = dict(re.findall(r'data-name="(DSCF\d{4}\.JPG)" data-picks="([^"]*)"', html))
-    assert picks == {"DSCF0001.JPG": "rank z-score", "DSCF0002.JPG": "scores"}
+    ranked_first_by = dict(
+        re.findall(r'data-name="(DSCF\d{4}\.JPG)" data-ranked-first-by="([^"]*)"', html)
+    )
+    assert ranked_first_by == {"DSCF0001.JPG": "rank z-score", "DSCF0002.JPG": "scores"}
 
 
-def test_nothing_is_written_when_the_picks_agree_everywhere(
+def test_nothing_is_written_when_the_rankings_agree_everywhere(
     session_dir, isolated_data_dir, tmp_path, capsys
 ):
     analyzer = FakeAnalyzer()
@@ -66,3 +70,18 @@ def test_nothing_is_written_when_the_picks_agree_everywhere(
 def test_the_page_must_not_go_into_the_session_folder(session_dir, isolated_data_dir):
     with pytest.raises(SystemExit):
         main([str(session_dir), "--page", str(session_dir / "comparison.html")])
+
+
+def test_a_group_whose_winner_the_photographer_chose_is_not_compared(
+    session_dir, isolated_data_dir, tmp_path, capsys
+):
+    analyzer = FakeAnalyzer()
+    sharper_against_more_pleasing(session_dir, analyzer)
+    root = session_dir.resolve()
+    store = SessionStore(session_database_path(root, isolated_data_dir), root)
+    store.save_override("DSCF0002.JPG", Override(verdict="winner"))
+    store.close()
+
+    main([str(session_dir), "--page", str(tmp_path / "comparison.html")], analyzer=analyzer)
+
+    assert "Winners differ in 0 of 1 Groups" in capsys.readouterr().out

@@ -1,7 +1,6 @@
-"""The Winner comparison: judges an analyzed Session once for each way of picking the Winner and
-writes a page that shows, blind, the Winners of the Groups where those ways disagree. The
-photographer clicks the Frame they would keep, and the page tallies which way agreed with them
-(#174).
+"""The Winner comparison: judges an analyzed Session once for each Winner ranking and writes a
+page that shows, blind, the Winners of the Groups where the rankings disagree. The photographer
+clicks the Frame they would keep, and the page tallies which ranking agreed with them (#174).
 
 Run by hand, not in CI. It opens the Session store that `framewise review` keeps, so a Session
 already reviewed is not analyzed again, and it writes nothing into the Session folder.
@@ -11,62 +10,66 @@ import argparse
 import base64
 import html
 import io
-import random
 import sys
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from random import shuffle
 from typing import get_args
 
 from PIL import Image, ImageOps
 
 from framewise.analyzer import FrameAnalyzer
-from framewise.judge import Verdict, WinnerPick, judge
+from framewise.judge import Verdict, WinnerRanking, judge
 from framewise.previews import PreviewConfigError, read_min_preview_long_edge
 from framewise.providers import ProviderError, resolve_analyzer
 from framewise.review import SessionAnalysis, open_session, resolve_config_path, resolve_data_dir
 from framewise.store import AnalyzedFrame, Frame, SessionStore
 
-WINNER_PICKS: tuple[WinnerPick, ...] = get_args(WinnerPick)
+WINNER_RANKINGS: tuple[WinnerRanking, ...] = get_args(WinnerRanking)
 IMAGE_LONG_EDGE = 1280
 
 
 @dataclass(frozen=True)
 class Candidate:
     frame: Frame
-    picks: list[WinnerPick]
-    """The ways of picking the Winner that chose this Frame."""
+    ranked_first_by: tuple[WinnerRanking, ...]
+    """The Winner rankings that made this Frame the Winner."""
 
 
 @dataclass(frozen=True)
 class Comparison:
-    candidates: list[Candidate]
-    """The Group's Winners, one per Frame some way of picking chose."""
+    candidates: tuple[Candidate, ...]
+    """The Group's Winners, one per Frame some Winner ranking made the Winner."""
 
 
-def compare_winner_picks(groups: list[list[AnalyzedFrame]]) -> list[Comparison]:
-    """The Groups whose Winner depends on how it is picked, with each Winner and the ways that
-    picked it."""
+def compare_winner_rankings(
+    groups: list[list[AnalyzedFrame]], verdict_overrides: Mapping[str, Verdict]
+) -> list[Comparison]:
+    """The Groups whose Winner depends on the Winner ranking, with each Winner and the rankings
+    that made it the Winner. The photographer's Verdict Overrides steer the Winner as in the
+    Review UI, so a Group whose Winner they chose never differs."""
     winners = {
-        pick: {
+        ranking: {
             frame_id
-            for frame_id, judgement in judge(groups, winner_pick=pick).items()
+            for frame_id, judgement in judge(
+                groups, verdict_overrides, winner_ranking=ranking
+            ).items()
             if judgement.verdict == Verdict.WINNER
         }
-        for pick in WINNER_PICKS
+        for ranking in WINNER_RANKINGS
     }
     comparisons = []
     for group in groups:
-        candidates = [
-            Candidate(
-                analyzed.frame,
-                [pick for pick in WINNER_PICKS if analyzed.frame.id in winners[pick]],
-            )
-            for analyzed in group
-        ]
-        chosen = [candidate for candidate in candidates if candidate.picks]
-        if len(chosen) > 1:
-            comparisons.append(Comparison(chosen))
+        candidates = []
+        for analyzed in group:
+            frame_id = analyzed.frame.id
+            ranked_first_by = tuple(r for r in WINNER_RANKINGS if frame_id in winners[r])
+            if ranked_first_by:
+                candidates.append(Candidate(analyzed.frame, ranked_first_by))
+        if len(candidates) > 1:
+            comparisons.append(Comparison(tuple(candidates)))
     return comparisons
 
 
@@ -74,7 +77,7 @@ def main(argv: list[str] | None = None, analyzer: FrameAnalyzer | None = None) -
     parser = argparse.ArgumentParser(
         prog="framewise-compare-winners",
         description="Show, blind, the Winners that absolute Scores and standings within the "
-        "Group pick differently, to choose between them.",
+        "Group disagree on, to choose between them.",
     )
     parser.add_argument("session_folder", type=Path)
     parser.add_argument("--page", type=Path, default=Path("framewise-winner-comparison.html"))
@@ -94,7 +97,12 @@ def main(argv: list[str] | None = None, analyzer: FrameAnalyzer | None = None) -
     analysis = SessionAnalysis(store, analyzer)
     analysis.run()
     groups = analysis.groups(store.group_overrides())
-    comparisons = compare_winner_picks(groups)
+    verdict_overrides = {
+        path: Verdict(override.verdict)
+        for path, override in store.overrides().items()
+        if override.verdict is not None
+    }
+    comparisons = compare_winner_rankings(groups, verdict_overrides)
 
     compared = sum(len(group) > 1 for group in groups)
     print(f"Winners differ in {len(comparisons)} of {compared} Groups of more than one Frame")
@@ -104,11 +112,10 @@ def main(argv: list[str] | None = None, analyzer: FrameAnalyzer | None = None) -
 
 
 def _page(store: SessionStore, comparisons: list[Comparison]) -> str:
-    shuffle = random.Random()
     sections = []
     for index, comparison in enumerate(comparisons):
         candidates = list(comparison.candidates)
-        shuffle.shuffle(candidates)
+        shuffle(candidates)
         buttons = "".join(_candidate(store, candidate) for candidate in candidates)
         sections.append(
             f'<section class="comparison" data-group="{index}">'
@@ -123,10 +130,11 @@ def _page(store: SessionStore, comparisons: list[Comparison]) -> str:
 
 def _candidate(store: SessionStore, candidate: Candidate) -> str:
     name = html.escape(candidate.frame.main_path)
-    picks = " ".join(candidate.picks)
+    ranked_first_by = " ".join(candidate.ranked_first_by)
     image = _image_data(store.analysis_image(candidate.frame))
     return (
-        f'<button type="button" class="candidate" data-name="{name}" data-picks="{picks}">'
+        f'<button type="button" class="candidate" data-name="{name}" '
+        f'data-ranked-first-by="{ranked_first_by}">'
         f'<img src="data:image/jpeg;base64,{image}" alt=""><span>{name}</span></button>'
     )
 
@@ -189,8 +197,8 @@ PAGE = """<!doctype html>
 <body data-session="{session}">
 <header>
   <h1>Which Winner would you keep?</h1>
-  <p>In each Group below, framewise's ways of picking the Winner disagree. Click the Frame you
-  would keep. The order is shuffled, and which way picked which Frame stays hidden until you
+  <p>In each Group below, framewise's Winner rankings disagree. Click the Frame you would
+  keep. The order is shuffled, and which ranking chose which Frame stays hidden until you
   show the tally. Choices are kept in this browser if you reload the page.</p>
 </header>
 {sections}
@@ -227,7 +235,10 @@ PAGE = """<!doctype html>
   }
 
   document.getElementById("reveal").addEventListener("click", () => {
-    const wins = { scores: 0, rank: 0, "z-score": 0 };
+    const wins = {};
+    for (const button of document.querySelectorAll(".candidate")) {
+      for (const ranking of button.dataset.rankedFirstBy.split(" ")) wins[ranking] = 0;
+    }
     let decided = 0;
     let cantTell = 0;
     for (const section of sections) {
@@ -237,13 +248,14 @@ PAGE = """<!doctype html>
       decided += 1;
       const chosen = [...section.querySelectorAll(".candidate")]
         .find((button) => button.dataset.name === choice);
-      for (const pick of chosen.dataset.picks.split(" ")) wins[pick] += 1;
+      for (const ranking of chosen.dataset.rankedFirstBy.split(" ")) wins[ranking] += 1;
     }
-    document.getElementById("tally").textContent =
-      "Absolute Scores " + wins.scores + " of " + decided +
-      " · rank " + wins.rank + " of " + decided +
-      " · z-score " + wins["z-score"] + " of " + decided +
-      " · can't tell " + cantTell;
+    const labels = { scores: "Absolute Scores", rank: "Rank", "z-score": "Z-score" };
+    document.getElementById("tally").textContent = [
+      ...Object.entries(wins).map(([ranking, count]) =>
+        (labels[ranking] || ranking) + " " + count + " of " + decided),
+      "can't tell " + cantTell,
+    ].join(" · ");
   });
 
   render();

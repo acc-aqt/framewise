@@ -16,11 +16,12 @@ The photographer's Verdict Overrides steer the Winner: a Frame they made the Win
 Group, and a Frame they overrode to another Verdict is not picked, so the rest of the Group is
 re-judged against the Winner that remains. Applying the Overrides themselves is up to the caller.
 
-Among the Frames of a Group that tie on Flaws, the Winner is the one with the highest total Score.
-Picking it instead by each Frame's standing within its Group on each Score component, as a rank
-or as a clamped z-score, is built in but not used yet (#174): `framewise-compare-winners` shows
-the photographer, blind, the Winners of the Groups where the ways disagree, and standings become
-the default only if they agree with the photographer more often than absolute Scores.
+Among the Frames of a Group with the fewest Flaws, the Winner is the one with the highest total
+Score. Ranking them instead by their standing among each other on each Score component, as a
+rank or as a clamped z-score, is built in but not used yet (#174): `framewise-compare-winners`
+shows the photographer, blind, the Winners of the Groups where the rankings disagree, and
+standings become the default only if they agree with the photographer more often than absolute
+Scores.
 """
 
 import math
@@ -82,10 +83,10 @@ WEIGHTS = {
 # lost as often as it won, and posed portraits often mean a neutral face.
 EXPRESSION_WEIGHTS = {"smile": 0.2, "looking": 0.4, "facing": 0.4}
 EYES_CLOSED = "eyes-closed"
-# How the Winner is picked among the Frames of a Group that tie on Flaws: by the weighted total of
-# their absolute Scores, or of their standing within the Group on each Score component, as a
-# rank or as a clamped z-score (#174).
-WinnerPick = Literal["scores", "rank", "z-score"]
+# What ranks the Frames of a Group that tie on Flaws for Winner: the weighted total of their
+# absolute Scores, or of their standing among each other on each Score component, as a rank or
+# as a clamped z-score (#174).
+WinnerRanking = Literal["scores", "rank", "z-score"]
 # Score components closer than this count as equal when Frames are ranked within a Group, so
 # noise between near-identical Frames isn't blown up into a full rank step.
 STANDING_TOLERANCE = 0.02
@@ -240,21 +241,21 @@ def judge(
     verdict_overrides: Mapping[str, Verdict] | None = None,
     keeper_budget: float = DEFAULT_KEEPER_BUDGET,
     weights: Mapping[str, float] = WEIGHTS,
-    winner_pick: WinnerPick = "scores",
+    winner_ranking: WinnerRanking = "scores",
 ) -> Proposal:
     """Judges each Group, then keeps roughly `keeper_budget` of the Frames as Winners and
     Keepers. `verdict_overrides` holds the photographer's Verdict Overrides by main file; the
     Frames they kept count towards the budget and those they overrode are never re-judged by it.
     `weights` weigh the Score components into the total; only the benchmark tries others.
-    `winner_pick` says how each Group's Winner is picked; only the Winner comparison tries
-    standings."""
+    `winner_ranking` says what ranks the Frames that could win a Group; only the Winner comparison
+    tries standings."""
     overrides = verdict_overrides or {}
     proposal: Proposal = {}
     candidates: list[tuple[_Assessment, _Assessment]] = []
     kept = 0
     for group in groups:
         assessments = [_assess(analyzed, weights) for analyzed in group]
-        winner = _pick_winner(assessments, overrides, _standings(assessments, weights, winner_pick))
+        winner = _pick_winner(assessments, overrides, weights, winner_ranking)
         for assessment in assessments:
             override = _non_winner_override(assessment, overrides)
             if assessment is winner:
@@ -307,11 +308,15 @@ def _keeper_rank(assessment: _Assessment) -> tuple[float, str]:
 
 
 def _pick_winner(
-    assessments: list[_Assessment], overrides: Mapping[str, Verdict], standings: dict[int, float]
+    assessments: list[_Assessment],
+    overrides: Mapping[str, Verdict],
+    weights: Mapping[str, float],
+    winner_ranking: WinnerRanking,
 ) -> _Assessment:
     """The first Frame the photographer made the Winner, or else framewise's best Frame among
-    those without a Verdict Override, ranked by Flaws and then by `standings`. If every Frame has
-    an Override, framewise's best Frame is the Winner only for the others to be judged against."""
+    those without a Verdict Override: of those with the fewest Flaws, the one ranked first by
+    `winner_ranking`. If every Frame has an Override, framewise's best Frame is the Winner only
+    for the others to be judged against."""
     for assessment in assessments:
         if overrides.get(assessment.analyzed.frame.main_path) == Verdict.WINNER:
             return assessment
@@ -319,42 +324,43 @@ def _pick_winner(
         assessment
         for assessment in assessments
         if assessment.analyzed.frame.main_path not in overrides
-    ]
+    ] or assessments
+    fewest_flaws = min(_flaw_rank(assessment) for assessment in candidates)
+    contenders = [assessment for assessment in candidates if _flaw_rank(assessment) == fewest_flaws]
+    totals = _winner_totals(contenders, weights, winner_ranking)
+    best = max(totals)
     return min(
-        candidates or assessments,
-        key=lambda assessment: _winner_rank(assessment, standings[assessment.analyzed.frame.id]),
+        (assessment for assessment, total in zip(contenders, totals, strict=True) if total == best),
+        key=lambda assessment: assessment.analyzed.frame.main_path,
     )
 
 
-def _winner_rank(assessment: _Assessment, standing: float) -> tuple[int, float, str]:
-    flaw_rank = {None: 0, Verdict.UNSURE: 1, Verdict.REJECT: 2}[assessment.worst]
-    return flaw_rank, -standing, assessment.analyzed.frame.main_path
+def _flaw_rank(assessment: _Assessment) -> int:
+    return {None: 0, Verdict.UNSURE: 1, Verdict.REJECT: 2}[assessment.worst]
 
 
-def _standings(
-    assessments: list[_Assessment], weights: Mapping[str, float], winner_pick: WinnerPick
-) -> dict[int, float]:
-    """What each Frame of a Group is ranked by for the Winner pick, by Frame id: its total Score,
-    or the weighted total of its standings on the Score components, plus its Camera rating hint.
-    A component missing from any Frame of the Group is left out for the whole Group."""
-    ids = [assessment.analyzed.frame.id for assessment in assessments]
-    if winner_pick == "scores" or len(assessments) < 2:
-        return {frame_id: a.scores.total for frame_id, a in zip(ids, assessments, strict=True)}
-    standing_of = _rank_standings if winner_pick == "rank" else _z_score_standings
-    weighted = [0.0] * len(assessments)
+def _winner_totals(
+    contenders: list[_Assessment], weights: Mapping[str, float], winner_ranking: WinnerRanking
+) -> list[float]:
+    """What each contender for the Winner is ranked by: its total Score, or the weighted total of
+    its standings among the contenders on each Score component, plus its Camera rating hint. A
+    component missing from any contender is left out."""
+    if winner_ranking == "scores" or len(contenders) < 2:
+        return [assessment.scores.total for assessment in contenders]
+    standings_of = {"rank": _rank_standings, "z-score": _z_score_standings}[winner_ranking]
+    weighted = [0.0] * len(contenders)
     total_weight = 0.0
     for name, weight in weights.items():
-        values = [getattr(assessment.scores, name) for assessment in assessments]
+        values = [getattr(assessment.scores, name) for assessment in contenders]
         if None in values:
             continue
         total_weight += weight
-        for index, standing in enumerate(standing_of(values)):
+        for index, standing in enumerate(standings_of(values)):
             weighted[index] += weight * standing
-    return {
-        frame_id: (weighted[index] / total_weight if total_weight else 0.0)
-        + assessments[index].scores.camera_rating
-        for index, frame_id in enumerate(ids)
-    }
+    return [
+        (total / total_weight if total_weight else 0.0) + assessment.scores.camera_rating
+        for total, assessment in zip(weighted, contenders, strict=True)
+    ]
 
 
 def _rank_standings(values: list[float]) -> list[float]:

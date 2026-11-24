@@ -265,7 +265,6 @@ def create_app(
         return {
             "label_set": asdict(label_set),
             "notice": None if label_set.from_lightroom else ENGLISH_DEFAULTS_NOTICE,
-            "raw_only_notice": _raw_only_notice(reviewed),
             "files": [
                 _file_change_json(change) for change in write_back.dry_run(reviewed, label_set)
             ],
@@ -426,15 +425,6 @@ def _frame_json(frame: Frame) -> dict:
         "thumbnail_url": f"/api/frames/{frame.id}/thumbnail",
         "image_url": f"/api/frames/{frame.id}/image",
     }
-
-
-def _raw_only_notice(reviewed: list[ReviewedFrame]) -> str | None:
-    """Says that Rating write-back leaves RAW-only Frames out, until it supports them (#151)."""
-    count = sum(1 for item in reviewed if item.frame.kind == "raw-only")
-    if count == 0:
-        return None
-    frames = "1 RAW-only Frame is" if count == 1 else f"{count} RAW-only Frames are"
-    return f"{frames} left out: framewise can't write ratings into RAW-only Frames yet."
 
 
 def _file_change_json(change: FileChange) -> dict:

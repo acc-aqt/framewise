@@ -1,6 +1,6 @@
 # ADR-0006: Trashing Frames
 
-**Status:** Accepted — 2026-11-16
+**Status:** Accepted — 2026-11-16. Amended — 2026-11-24: a RAW-only Frame is trashed too, its RAW going last as its main file (ADR-0011, #151).
 
 ## Context
 
@@ -13,7 +13,7 @@ Lightroom Classic imports a RAW and its JPG as two separate photos (ADR-0001), a
 1. **Trash moves files to the OS Trash and never deletes them.**
    - framewise uses `send2trash`: the macOS Trash, or the freedesktop Trash on Linux.
    - Where a volume has no Trash, such as some network or external drives, the Frame is reported as failed and stays as it is. framewise never falls back to a permanent delete.
-2. **A Frame is trashed whole.** That means its RAW, its JPG and, for a RAW written to through one, its `.xmp` sidecar. Trashing a Group trashes every Frame in it, the Winner included. The JPG goes last, and a Frame leaves the Session once its JPG is in the Trash.
+2. **A Frame is trashed whole.** That means its RAW, its JPG and, for a RAW written to through one, its `.xmp` sidecar. Trashing a Group trashes every Frame in it, the Winner included. The main file goes last, the JPG or a RAW-only Frame's RAW, and a Frame leaves the Session once its main file is in the Trash.
 3. **The photographer always confirms.** The confirmation counts the Frames and files, and warns that Frames already imported into Lightroom will show as missing there. It is the same for one Frame as for a Group.
 4. **There is no undo inside framewise.** To bring a Frame back, the photographer restores its files from the Trash and runs `framewise review` again. The scan finds the Frame again, and its Overrides and Group Override come back, because those are kept for vanished Frames (ADR-0003, ADR-0004). Trashing removes only the Frame's row, thumbnail and analysis from the Session store.
 5. **Rating write-back keeps the originals of trashed files.** Undo write-back skips files that are not in the Session folder, so the undo still works once they are restored.

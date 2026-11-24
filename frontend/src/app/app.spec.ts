@@ -1463,7 +1463,7 @@ describe('Review UI', () => {
     expect(all('[data-testid="open-write-back"]').length).toBe(1);
   });
 
-  it('names how many files the write-back screen reads, one per JPG and two per RAW+JPG Frame, leaving out RAW-only Frames', async () => {
+  it('names how many files the write-back screen reads, one per JPG-only or RAW-only Frame and two per RAW+JPG Frame', async () => {
     await respond(summary, []);
     all('[data-testid="open-write-back"]')[0].click();
     await settle();
@@ -1471,7 +1471,7 @@ describe('Review UI', () => {
     http.expectOne('/api/write-back/progress');
 
     expect(text('[data-testid="write-back-loading"]')).toBe(
-      'Reading the current rating of 5 files…',
+      'Reading the current rating of 6 files…',
     );
   });
 
@@ -2727,7 +2727,7 @@ describe('Review UI', () => {
       expect(currentFrameThumbnail()).toBe('/api/frames/3/thumbnail');
     });
 
-    it('leaves RAW-only Frames out of what a Trash moves, and says they stay', async () => {
+    it('trashes RAW-only Frames with the rest, counting their RAW as one file', async () => {
       await respond(summary, [
         group(1, [
           frame(1, 'jpg-only', { verdict: 'winner' }),
@@ -2741,26 +2741,10 @@ describe('Review UI', () => {
       await click(all('[data-testid="trash-group"]')[0]);
 
       expect(text('[data-testid="trash-confirmation"] p')).toBe(
-        'Move 2 Frames (3 files) to the Trash?',
+        'Move 3 Frames (4 files) to the Trash?',
       );
-      expect(text('#trash-note')).toContain(
-        "1 RAW-only Frame stays: framewise can't trash RAW-only Frames yet.",
-      );
-      await confirmTrash([1, 2], [group(5, [frame(5, 'raw-only', { verdict: 'winner' })])]);
-    });
-
-    it('offers nothing to trash when every Frame is RAW-only', async () => {
-      await respond(summary, [group(5, [frame(5, 'raw-only', { verdict: 'winner' })])]);
-      all('[data-testid="group-tile"]')[0].click();
-      await fixture.whenStable();
-
-      await press('Backspace');
-
-      expect(text('[data-testid="trash-confirmation"] p')).toBe(
-        "Nothing to move: framewise can't trash RAW-only Frames yet.",
-      );
-      expect((all('[data-testid="trash-confirm"]')[0] as HTMLButtonElement).disabled).toBe(true);
-      expect(document.activeElement).toBe(all('[data-testid="trash-cancel"]')[0]);
+      expect(text('#trash-note')).not.toContain('RAW-only');
+      await confirmTrash([1, 2, 5], []);
     });
 
     it('asks to trash with Delete too, and trashes nothing on Escape', async () => {

@@ -132,7 +132,7 @@ Overrides are saved in the Session store as you go ([ADR-0003](docs/adr/0003-ove
 
 Fix wrong grouping from an open Group. Fixed Groups are kept on later re-runs ([ADR-0004](docs/adr/0004-group-overrides.md)).
 
-Trashing a Frame moves every file of it (RAW, JPG and any `.xmp` sidecar) to the OS Trash and takes the Frame out of the Session. RAW-only Frames can't be trashed yet. Nothing is deleted outright: restore the files from the Trash and run `framewise review` again to bring a Frame back with its Overrides ([ADR-0006](docs/adr/0006-trashing-frames.md)). Trash before you import into Lightroom, because Lightroom shows trashed Frames it already imported as missing.
+Trashing a Frame moves every file of it (RAW, JPG and any `.xmp` sidecar) to the OS Trash and takes the Frame out of the Session. Nothing is deleted outright: restore the files from the Trash and run `framewise review` again to bring a Frame back with its Overrides ([ADR-0006](docs/adr/0006-trashing-frames.md)). Trash before you import into Lightroom, because Lightroom shows trashed Frames it already imported as missing.
 
 ## Providers
 

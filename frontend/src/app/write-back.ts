@@ -74,9 +74,6 @@ interface Outcome {
       @if (dryRun.value().notice; as notice) {
         <p class="notice" data-testid="write-back-notice">{{ notice }}</p>
       }
-      @if (dryRun.value().raw_only_notice; as notice) {
-        <p class="notice" data-testid="write-back-raw-only-notice">{{ notice }}</p>
-      }
       @if (outcome(); as outcome) {
         <div class="outcome">
           <p class="result" [class.failed]="!outcome.ok" data-testid="write-back-result">

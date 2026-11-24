@@ -43,7 +43,7 @@ import {
 } from './shortcuts';
 import { Tooltip, TooltipContent } from './tooltip';
 import { TrashApi, TrashResult } from './trash-api';
-import { TrashConfirmation, trashableFrames } from './trash-confirmation';
+import { TrashConfirmation } from './trash-confirmation';
 import { WhatsNew } from './whats-new';
 import { WriteBackView } from './write-back';
 
@@ -171,16 +171,13 @@ export class App {
     this.summary.hasValue() ? this.summary.value().keeper_budget : null,
   );
   protected readonly keeperBudgetFailed = signal(false);
-  /**
-   * Rating write-back writes to a JPG-only Frame's file and to both files of a RAW+JPG Frame. It
-   * leaves RAW-only Frames out for now.
-   */
+  /** Rating write-back writes to each file of a Frame: one, or both of a RAW+JPG Frame. */
   protected readonly sessionFileCount = computed(() => {
     if (!this.summary.hasValue()) {
       return null;
     }
-    const { jpg_only_count, raw_jpg_count } = this.summary.value();
-    return jpg_only_count + 2 * raw_jpg_count;
+    const { jpg_only_count, raw_jpg_count, raw_only_count } = this.summary.value();
+    return jpg_only_count + 2 * raw_jpg_count + raw_only_count;
   });
   protected readonly trashing = signal<PendingTrash | null>(null);
   // Set by a Trash until the Groups are requested again. A request already under way, such as
@@ -374,11 +371,10 @@ export class App {
   protected confirmTrash(): void {
     const trash = this.trashing();
     this.trashing.set(null);
-    const frames = trash === null ? [] : trashableFrames(trash.frames);
-    if (trash === null || frames.length === 0) {
+    if (trash === null) {
       return;
     }
-    this.trashApi.trash(frames.map((frame) => frame.id)).subscribe({
+    this.trashApi.trash(trash.frames.map((frame) => frame.id)).subscribe({
       next: (result) => {
         if (trash.fromGrid !== null) {
           this.tileToFocus.set(trash.fromGrid.tileIndex);

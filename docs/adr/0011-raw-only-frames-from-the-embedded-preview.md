@@ -1,6 +1,6 @@
 # ADR-0011: RAW-only Frames are analyzed from the embedded preview
 
-**Status:** Accepted — 2026-11-20. Amends ADR-0001's "Analysis always reads the JPG" and "RAW-only sessions are out of scope".
+**Status:** Accepted — 2026-11-20. Amends ADR-0001's "Analysis always reads the JPG" and "RAW-only sessions are out of scope". Amended — 2026-11-24: Rating write-back and Trash handle RAW-only Frames (#151).
 
 ## Context
 
@@ -18,7 +18,7 @@ What the photographer's cameras embed, checked on 2026-11-20 with ExifTool 13.55
 4. **Previews are cached next to the Session store, never in the Session folder.** They live in a `<store>-previews` folder beside the Session store's database, one JPG per RAW-only Frame, recorded in the store with the RAW's size and modification time. A re-run reuses a cached preview, thumbnail and analysis while the RAW is unchanged and extracts it again when the RAW changes. A preview leaves the cache with its Frame, and `framewise reset` deletes the cache with the store.
 5. **RAW+JPG Frames keep reading the camera's JPG.** Nothing changes for them.
 6. **A RAW-only Frame gets the exposure leniency of a RAW+JPG Frame**, because its RAW holds detail that the preview, like a camera JPG, has clipped.
-7. **Rating write-back and Trash leave RAW-only Frames alone for now.** The write-back dry run says how many RAW-only Frames it leaves out, and the Trash dialog says how many RAW-only Frames stay and leaves them out; the server refuses to trash one with a message. Writing and trashing them is #151.
+7. **Rating write-back and Trash treat a RAW-only Frame's RAW as they treat the RAW of a RAW+JPG Frame.** Write-back writes a DNG's embedded XMP and another RAW's `.xmp` sidecar, as ADR-0001 says, and records the originals so Undo write-back and Reset Session restore them. Trash moves the sidecar, then the RAW, and the Frame's cached preview leaves the cache with it, as §4 says. Since write-back changes only metadata, a re-run keeps reusing the cached preview and analysis of a DNG it wrote into.
 
 ## Considered Options
 

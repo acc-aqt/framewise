@@ -296,8 +296,24 @@ describe('Report a problem', () => {
       { download: 'framewise-report-2026-11-25.md', href: 'blob:report' },
     ]);
     expect(await blobs[0].text()).toBe(built.body);
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:report');
     expect(text('report-status')).toBe('Report saved as framewise-report-2026-11-25.md.');
+  });
+
+  it('keeps the saved file available until the download has started', async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:report');
+    const revoke = vi.fn();
+    URL.revokeObjectURL = revoke;
+    let revokedWithTheClick: boolean | undefined;
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {
+      queueMicrotask(() => (revokedWithTheClick = revoke.mock.calls.length > 0));
+    });
+    await type('DSCF0003 should be the Winner');
+
+    await click('report-save');
+    await answer();
+
+    expect(revokedWithTheClick).toBe(false);
+    expect(revoke).toHaveBeenCalledWith('blob:report');
   });
 
   describe('Include images', () => {

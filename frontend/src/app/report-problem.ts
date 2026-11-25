@@ -423,7 +423,8 @@ export class ReportProblem {
     link.href = url;
     link.download = fileName;
     link.click();
-    URL.revokeObjectURL(url);
+    // Revoked on the next tick, as some browsers start the download only after click() returns.
+    setTimeout(() => URL.revokeObjectURL(url));
     this.status.set(`Report saved as ${fileName}.`);
   }
 

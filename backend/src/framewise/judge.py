@@ -320,10 +320,10 @@ def _judge_flaws_against_winner(assessment: _Assessment, winner: _Assessment) ->
 
 
 def _assess(analyzed: AnalyzedFrame, weights: Mapping[str, float]) -> _Assessment:
-    return _Assessment(analyzed, _scores(analyzed, weights), flaws(analyzed))
+    return _Assessment(analyzed, _scores(analyzed, weights), frame_flaws(analyzed))
 
 
-def flaws(analyzed: AnalyzedFrame) -> list[Flaw]:
+def frame_flaws(analyzed: AnalyzedFrame) -> list[Flaw]:
     """The Flaws of a Frame, which its Judgement shows among its Reasons."""
     return [flaw for check in FLAW_CHECKS for flaw in check(analyzed)]
 

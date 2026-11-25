@@ -1,10 +1,9 @@
-import platform
 import sys
 import threading
 from collections.abc import Callable
 from dataclasses import asdict, replace
 from importlib.metadata import version
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Response
@@ -18,17 +17,9 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from framewise.analyzer import ProviderLineup
 from framewise.changelog import read_changelog
 from framewise.exiftool import ExifTool, exiftool_install_hint, find_exiftool
-from framewise.judge import (
-    DEFAULT_KEEPER_BUDGET,
-    FaceCheck,
-    Judgement,
-    Proposal,
-    Verdict,
-    flaws,
-    judge,
-)
+from framewise.judge import DEFAULT_KEEPER_BUDGET, FaceCheck, Judgement, Proposal, Verdict, judge
 from framewise.lightroom import read_label_set
-from framewise.problem_report import FrameState, GroupFix, GroupState, build_problem_report
+from framewise.problem_report import GroupState, build_problem_report, group_state
 from framewise.report_images import (
     FOLDER_NAME,
     RevealFolder,
@@ -205,46 +196,25 @@ def create_app(
         group = _known_group(group_id)
         if not request.text.strip():
             raise HTTPException(status_code=422, detail="Say what you expected instead")
-        state = group_state(group) if request.include_state else None
+        state = reported_group_state(group) if request.include_state else None
         return asdict(build_problem_report(request.text, state))
 
-    def group_state(group: list[AnalyzedFrame]) -> GroupState:
+    def reported_group_state(group: list[AnalyzedFrame]) -> GroupState:
         groups, overrides, proposal = reviewed_proposal()
-        own_proposal = judge(groups, {}, _keeper_budget())
-        group_overrides = store.group_overrides()
-        own_groups = analysis.groups(None)
-        group_paths = [analyzed.frame.main_path for analyzed in group]
-        frames = []
-        for analyzed in group:
-            path = analyzed.frame.main_path
-            judgement = proposal[analyzed.frame.id]
-            verdict, overridden = _reviewed_verdict(judgement, overrides.get(path))
-            frames.append(
-                FrameState(
-                    name=_file_name(path),
-                    verdict=verdict,
-                    proposed_verdict=own_proposal[analyzed.frame.id].verdict
-                    if overridden
-                    else None,
-                    reasons=judgement.reasons,
-                    flaws=flaws(analyzed),
-                    scores=judgement.scores,
-                    group_fix=_group_fix(path, group_paths, own_groups)
-                    if path in group_overrides
-                    else None,
+        return group_state(
+            group,
+            proposal=proposal,
+            own_proposal=judge(groups, {}, _keeper_budget()),
+            shown_verdicts={
+                analyzed.frame.id: _reviewed_verdict(
+                    proposal[analyzed.frame.id], overrides.get(analyzed.frame.main_path)
                 )
-            )
-        return GroupState(
-            version=version("framewise-cull"),
-            os=platform.platform(),
-            providers={
-                capability: None
-                if lineup.active is None
-                else f"{lineup.active.id} v{lineup.active.version}"
-                for capability, lineup in provider_lineup.items()
+                for analyzed in group
             },
+            fixed_paths=store.group_overrides(),
+            own_groups=analysis.groups(None),
+            provider_lineup=provider_lineup,
             keeper_budget=_keeper_budget(),
-            frames=frames,
             frames_pending=analysis.progress().frames_left,
         )
 
@@ -258,7 +228,6 @@ def create_app(
             for analyzed in _known_group(group_id)
             if (path := _analysis_source(analyzed.frame)) is not None
         ]
-        # The data folder holds the Session store and its preview cache, never the Session.
         folder = store.preview_dir.parent / FOLDER_NAME
         files = copy_report_images(sources, folder)
         removed = False
@@ -543,22 +512,6 @@ def _groups_holding(paths: set[str], groups: list[list[str]]) -> list[list[str]]
     if any(_group_of(path, holding) is None for path in paths):
         raise HTTPException(status_code=422, detail="A Frame is not in a Group yet")
     return holding
-
-
-def _file_name(main_path: str) -> str:
-    return PurePosixPath(main_path).name
-
-
-def _group_fix(
-    main_path: str, group_paths: list[str], own_groups: list[list[AnalyzedFrame]]
-) -> GroupFix:
-    """How framewise grouped a Frame on its own, naming only the Frames of its current Group."""
-    own_group = next(
-        group for group in own_groups if any(a.frame.main_path == main_path for a in group)
-    )
-    others = [a.frame.main_path for a in own_group if a.frame.main_path != main_path]
-    in_group = [path for path in others if path in group_paths]
-    return GroupFix([_file_name(path) for path in in_group], len(others) - len(in_group))
 
 
 def _frame_json(frame: Frame) -> dict:

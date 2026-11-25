@@ -1,11 +1,15 @@
 """Problem reports: a photographer's description of a judging problem in one Group, built into a
 prefilled GitHub new-issue page that the photographer reviews and submits themselves."""
 
+import platform
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, fields
+from importlib.metadata import version
 from urllib.parse import urlencode
 
-from framewise.judge import Flaw, Reason, Scores, Verdict
+from framewise.analyzer import ProviderLineup
+from framewise.judge import Flaw, Proposal, Reason, Scores, Verdict, frame_flaws
+from framewise.store import AnalyzedFrame, main_file_name
 
 NEW_ISSUE_PAGE = "https://github.com/acc-aqt/framewise/issues/new"
 ISSUE_TEMPLATE = "judging-problem.md"
@@ -65,7 +69,70 @@ class GroupState:
     keeper_budget: float
     frames: list[FrameState]
     frames_pending: int
-    """How many Frames of the Session analysis had yet to analyze."""
+    """How many Frames of the Session were not analyzed yet when the report was made."""
+
+
+def group_state(
+    group: list[AnalyzedFrame],
+    *,
+    proposal: Proposal,
+    own_proposal: Proposal,
+    shown_verdicts: Mapping[int, tuple[Verdict, bool]],
+    fixed_paths: Iterable[str],
+    own_groups: list[list[AnalyzedFrame]],
+    provider_lineup: ProviderLineup,
+    keeper_budget: float,
+    frames_pending: int,
+) -> GroupState:
+    """The reported Group's state. `proposal` judges with the photographer's Overrides and
+    `own_proposal` without them; `shown_verdicts` gives each Frame's shown Verdict and whether it
+    is an Override, by Frame id. `fixed_paths` are the main files a Group Override placed, and
+    `own_groups` are framewise's Groups before Group Overrides."""
+    fixed = set(fixed_paths)
+    group_paths = [analyzed.frame.main_path for analyzed in group]
+    frames = []
+    for analyzed in group:
+        frame = analyzed.frame
+        judgement = proposal[frame.id]
+        verdict, overridden = shown_verdicts[frame.id]
+        frames.append(
+            FrameState(
+                name=main_file_name(frame.main_path),
+                verdict=verdict,
+                proposed_verdict=own_proposal[frame.id].verdict if overridden else None,
+                reasons=judgement.reasons,
+                flaws=frame_flaws(analyzed),
+                scores=judgement.scores,
+                group_fix=_group_fix(frame.main_path, group_paths, own_groups)
+                if frame.main_path in fixed
+                else None,
+            )
+        )
+    return GroupState(
+        version=version("framewise-cull"),
+        os=platform.platform(),
+        providers={
+            capability: None
+            if lineup.active is None
+            else f"{lineup.active.id} v{lineup.active.version}"
+            for capability, lineup in provider_lineup.items()
+        },
+        keeper_budget=keeper_budget,
+        frames=frames,
+        frames_pending=frames_pending,
+    )
+
+
+def _group_fix(
+    main_path: str, group_paths: list[str], own_groups: list[list[AnalyzedFrame]]
+) -> GroupFix:
+    """How framewise grouped a Frame on its own, naming only the Frames of its current Group."""
+    own_group = next(
+        group for group in own_groups if any(a.frame.main_path == main_path for a in group)
+    )
+    others = [a.frame.main_path for a in own_group if a.frame.main_path != main_path]
+    in_group = [path for path in others if path in group_paths]
+    return GroupFix([main_file_name(path) for path in in_group], len(others) - len(in_group))
 
 
 def build_problem_report(text: str, state: GroupState | None = None) -> ProblemReport:
@@ -115,11 +182,10 @@ def _pending_note(frames_pending: int) -> str:
     name Frames outside the reported Group."""
     if frames_pending == 0:
         return ""
-    frames = "1 Frame" if frames_pending == 1 else f"{frames_pending} Frames"
     verb = "was" if frames_pending == 1 else "were"
     return (
-        f"\nAnalysis was still running: {frames} of the Session {verb} not analyzed yet, "
-        "so this Group may still change.\n"
+        f"\nAnalysis was still running: {frame_count(frames_pending)} of the Session {verb} "
+        "not analyzed yet, so this Group may still change.\n"
     )
 
 
@@ -131,7 +197,7 @@ def _frame_table(frames: list[FrameState]) -> str:
     rows = [header, ["---"] * len(header)]
     for frame in frames:
         scores = [getattr(frame.scores, name) for name in score_names]
-        flaws = (
+        flaw_texts = (
             f"{flaw.reason.label} (caps at {flaw.caps_at.capitalize()})" for flaw in frame.flaws
         )
         rows.append(
@@ -139,7 +205,7 @@ def _frame_table(frames: list[FrameState]) -> str:
                 frame.name,
                 _verdict(frame),
                 _listed(reason.text for reason in frame.reasons),
-                _listed(flaws),
+                _listed(flaw_texts),
             ]
             + [MISSING if score is None else f"{score:.2f}" for score in scores]
         )
@@ -170,13 +236,17 @@ def _group_fixes(frames: list[FrameState]) -> str:
 def _grouping(fix: GroupFix) -> str:
     named = list(fix.grouped_with)
     if fix.other_groups_count:
-        frames = "Frame" if fix.other_groups_count == 1 else "Frames"
-        named.append(f"{fix.other_groups_count} {frames} of other Groups")
+        named.append(f"{frame_count(fix.other_groups_count)} of other Groups")
     if not named:
         return "alone"
     if len(named) == 1:
         return f"with {named[0]}"
     return f"with {', '.join(named[:-1])} and {named[-1]}"
+
+
+def frame_count(count: int) -> str:
+    """ "1 Frame" or "N Frames"."""
+    return "1 Frame" if count == 1 else f"{count} Frames"
 
 
 def _listed(items: Iterable[str]) -> str:

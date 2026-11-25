@@ -8,9 +8,10 @@ import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from framewise.exiftool import ExifTool
+from framewise.store import main_file_name
 
 RevealFolder = Callable[[Path], None]
 FOLDER_NAME = "problem-report-images"
@@ -76,7 +77,7 @@ def remove_personal_info(exiftool: ExifTool, images: list[Path]) -> bool:
 
 
 def _copy_name(source: SourceImage) -> str:
-    name = PurePosixPath(source.main_path).name
+    name = main_file_name(source.main_path)
     return f"{name}.jpg" if source.from_raw else name
 
 

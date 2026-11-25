@@ -60,11 +60,11 @@ describe('Report a problem', () => {
     await settle();
   }
 
-  async function answer(report: ProblemReport = built): Promise<void> {
+  async function answer(report: ProblemReport = built, includeState = true): Promise<void> {
     const request = http.expectOne({ method: 'POST', url: '/api/groups/7/problem-report' });
     expect(request.request.body).toEqual({
       text: 'DSCF0003 should be the Winner',
-      include_state: true,
+      include_state: includeState,
     });
     request.flush(report);
     await settle();
@@ -79,6 +79,23 @@ describe('Report a problem', () => {
 
   it('asks what the photographer expected instead', () => {
     expect(element().textContent).toContain('What did you expect instead?');
+  });
+
+  it('includes the Group state by default', () => {
+    expect(text('report-include-state')).toBe('Include Group state');
+    expect(byTestId<HTMLInputElement>('report-include-state-box').checked).toBe(true);
+  });
+
+  it('leaves the Group state out when the photographer unticks it', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    await type('DSCF0003 should be the Winner');
+
+    await click('report-include-state-box');
+    await click('report-copy');
+    await answer(built, false);
+
+    expect(writeText).toHaveBeenCalledWith(built.body);
   });
 
   it('keeps every action disabled until the photographer says what they expected', async () => {

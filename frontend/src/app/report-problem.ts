@@ -51,6 +51,15 @@ export function reportFileName(date: Date): string {
           (input)="text.set(textField.value)"
         ></textarea>
       </label>
+      <label class="check" data-testid="report-include-state">
+        <input
+          type="checkbox"
+          data-testid="report-include-state-box"
+          [checked]="includeState()"
+          (change)="includeState.set(!includeState())"
+        />
+        Include Group state
+      </label>
       <p class="note">
         Open on GitHub shows the report on a new issue page, where you can edit it before you submit
         it. Nothing is sent until you do.
@@ -144,6 +153,11 @@ export function reportFileName(date: Date): string {
       font: inherit;
       resize: vertical;
     }
+    .check {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
     .note,
     .status {
       color: var(--color-text-secondary);
@@ -162,6 +176,8 @@ export class ReportProblem {
   readonly close = output();
 
   protected readonly text = signal('');
+  /** Whether the report carries the Group's Verdicts, Scores and Overrides after the text. */
+  protected readonly includeState = signal(true);
   protected readonly ready = computed(() => this.text().trim() !== '' && !this.working());
   protected readonly working = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -220,7 +236,7 @@ export class ReportProblem {
     this.status.set(null);
     try {
       return await firstValueFrom(
-        this.api.build(this.groupId(), { text: this.text(), include_state: true }),
+        this.api.build(this.groupId(), { text: this.text(), include_state: this.includeState() }),
       );
     } catch {
       this.error.set('Could not build the report.');

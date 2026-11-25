@@ -18,14 +18,17 @@ CACHE_SECONDS = 24 * 60 * 60
 CACHE_FILE_NAME = "update-check.json"
 CONFIG_KEY = "check_for_updates"
 OPT_OUT_VARIABLE = "FRAMEWISE_NO_UPDATE_CHECK"
+USER_AGENT = "framewise"
 
 FetchChangelog = Callable[[], str]
 Clock = Callable[[], float]
 
 
 def fetch_main_changelog() -> str:
-    """The Changelog on `main`, with a plain GET that sends nothing about the photographer."""
-    with urllib.request.urlopen(MAIN_CHANGELOG_URL, timeout=TIMEOUT_SECONDS) as response:
+    """The Changelog on `main`, with a plain GET whose User-Agent names no version, so it sends
+    nothing about the photographer."""
+    request = urllib.request.Request(MAIN_CHANGELOG_URL, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
         if response.status != 200:
             raise OSError(f"{MAIN_CHANGELOG_URL} answered {response.status}")
         return response.read().decode("utf-8")

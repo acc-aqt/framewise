@@ -100,7 +100,7 @@ Options:
 
 ### Update check
 
-When `framewise review` starts, framewise checks at most once a day whether a newer Release has changes for your platform, so the Review UI can tell you and show the command to update. The check is a plain GET of the public [Changelog on `main`](https://github.com/acc-aqt/framewise/blob/main/CHANGELOG.md); it sends no version, platform, identifier or anything about your Frames. It runs in the background, gives up after 5 seconds, and offline it is silently skipped. The fetched Changelog is kept for a day in `update-check.json` next to the Session stores ([ADR-0012](docs/adr/0012-checking-for-a-newer-release.md)).
+When `framewise review` starts, framewise checks at most once a day whether a newer Release has changes for your platform, so the Review UI can tell you and show the command to update. The check is a plain GET of the public [Changelog on `main`](https://github.com/acc-aqt/framewise/blob/main/CHANGELOG.md); its only headers are `User-Agent: framewise` and the `Host`, `Accept-Encoding: identity` and `Connection: close` that every such request carries, so it sends no version, platform, identifier or anything about your Frames. It runs in the background, gives up after 5 seconds, and offline it is silently skipped. The fetched Changelog is kept for a day in `update-check.json` next to the Session stores ([ADR-0012](docs/adr/0012-checking-for-a-newer-release.md)).
 
 To turn it off, put this at the top of the `config.toml` described under [Providers](#providers), above any `[table]`:
 

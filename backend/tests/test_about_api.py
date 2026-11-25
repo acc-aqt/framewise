@@ -72,6 +72,37 @@ def test_about_lists_the_changelog_newest_first(review, tmp_path):
     ]
 
 
+def test_about_hides_the_platform_marker_from_the_entry(review, tmp_path):
+    path = tmp_path / "CHANGELOG.md"
+    path.write_text(
+        "# Changelog\n"
+        "\n"
+        "## 0.1.0 — 2026-11-20\n"
+        "\n"
+        "- `framewise review` starts faster <!-- linux windows -->\n"
+        "- Apple Vision finds the subject <!--macos-->\n"
+        "- First Release\n",
+        encoding="utf-8",
+    )
+
+    assert changelog(review(changelog_path=path)) == [
+        {
+            "version": "0.1.0",
+            "date": "2026-11-20",
+            "sections": [
+                {
+                    "heading": None,
+                    "items": [
+                        "`framewise review` starts faster",
+                        "Apple Vision finds the subject",
+                        "First Release",
+                    ],
+                }
+            ],
+        }
+    ]
+
+
 def test_about_has_no_changelog_when_the_file_is_missing(review, tmp_path):
     client = review(changelog_path=tmp_path / "CHANGELOG.md")
 
@@ -93,6 +124,14 @@ def test_about_has_no_changelog_when_the_file_is_missing(review, tmp_path):
         "## 0.1.0 — 2026-11-20\n\nA paragraph instead of a bullet.\n",
         "## 0.1.0 — 2026-11-20\n\n- See [the README](README.md)\n",
         "## 0.1.0 — 2026-11-20\n\n- <b>First</b> Release\n",
+        "## 0.1.0 — 2026-11-20\n\n- <!-- linux --> First Release\n",
+        "## 0.1.0 — 2026-11-20\n\n- First Release <!-- linux --> on Linux\n",
+        "## 0.1.0 — 2026-11-20\n\n- First Release <!-- linux freebsd -->\n",
+        "## 0.1.0 — 2026-11-20\n\n- First Release <!-- Linux -->\n",
+        "## 0.1.0 — 2026-11-20\n\n- First Release <!-- linux, windows -->\n",
+        "## 0.1.0 — 2026-11-20\n\n- First Release <!-- -->\n",
+        "## 0.1.0 — 2026-11-20\n\n- First Release <!-- macos linux windows -->\n",
+        "## 0.1.0 — 2026-11-20\n\n- First Release <br> <!-- linux -->\n",
         "## 0.1.0 — 2026-11-20\n\n- *First* Release\n",
         "## 0.1.0 — 2026-11-20\n\n- _First_ Release\n",
         "## 0.1.0 — 2026-11-20\n\n- **First Release\n",
@@ -109,6 +148,14 @@ def test_about_has_no_changelog_when_the_file_is_missing(review, tmp_path):
         "paragraph",
         "link",
         "HTML",
+        "platform marker first",
+        "platform marker mid-bullet",
+        "unknown platform",
+        "capitalized platform",
+        "comma between platforms",
+        "empty platform marker",
+        "platform marker naming every platform",
+        "HTML before a platform marker",
         "italic",
         "underscore emphasis",
         "unclosed bold",

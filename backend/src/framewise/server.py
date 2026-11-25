@@ -14,7 +14,7 @@ from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from framewise.analyzer import ProviderLineup
-from framewise.changelog import read_changelog
+from framewise.changelog import ChangelogVersion, read_changelog
 from framewise.exiftool import ExifTool
 from framewise.judge import DEFAULT_KEEPER_BUDGET, FaceCheck, Judgement, Proposal, Verdict, judge
 from framewise.lightroom import read_label_set
@@ -387,8 +387,23 @@ def _add_about(app: FastAPI, changelog_path: Path | None) -> None:
     def about() -> dict:
         return {
             "version": version("framewise-cull"),
-            "changelog": [asdict(entry) for entry in read_changelog(changelog_path)],
+            "changelog": [
+                _changelog_version_json(entry) for entry in read_changelog(changelog_path)
+            ],
         }
+
+
+def _changelog_version_json(entry: ChangelogVersion) -> dict:
+    """The version as the Review UI renders it: each bullet as its text alone, without the
+    platforms it applies to."""
+    return {
+        "version": entry.version,
+        "date": entry.date,
+        "sections": [
+            {"heading": section.heading, "items": [item.text for item in section.items]}
+            for section in entry.sections
+        ],
+    }
 
 
 def _mount_review_ui(app: FastAPI, ui_dir: Path | None) -> None:

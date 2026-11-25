@@ -19,6 +19,8 @@ BULLET = re.compile(r"^- (\S.*)$")
 TITLE = re.compile(r"^# \S")
 SUPPORTED_INLINE = re.compile(r"\*\*[^*]+\*\*|`[^`]+`")
 UNSUPPORTED_INLINE = re.compile(r"\[[^\]]*\]\(|<[A-Za-z/!]|[*_`]")
+PLATFORM_MARKER = re.compile(r"\s*<!--(.*?)-->$")
+PLATFORMS = frozenset({"macos", "linux", "windows"})
 
 
 class ChangelogError(ValueError):
@@ -26,10 +28,18 @@ class ChangelogError(ValueError):
 
 
 @dataclass
+class ChangelogItem:
+    text: str
+    """The bullet as photographers read it, without its platform marker."""
+    platforms: frozenset[str]
+    """The platforms the bullet applies to; every platform when it has no marker."""
+
+
+@dataclass
 class ChangelogSection:
     heading: str | None
     """The `###` subheading, or None for the bullets before any subheading."""
-    items: list[str] = field(default_factory=list)
+    items: list[ChangelogItem] = field(default_factory=list)
 
 
 @dataclass
@@ -99,11 +109,32 @@ def _parse_version_heading(
 
 
 def _add_item(entry: ChangelogVersion, item: str, line_number: int) -> None:
-    if UNSUPPORTED_INLINE.search(SUPPORTED_INLINE.sub("", item)):
+    text, platforms = _split_platform_marker(item, line_number)
+    if UNSUPPORTED_INLINE.search(SUPPORTED_INLINE.sub("", text)):
         raise ChangelogError(f"line {line_number}: only **bold** and `code` are shown")
     if not entry.sections:
         entry.sections.append(ChangelogSection(None))
-    entry.sections[-1].items.append(item)
+    entry.sections[-1].items.append(ChangelogItem(text, platforms))
+
+
+def _split_platform_marker(item: str, line_number: int) -> tuple[str, frozenset[str]]:
+    """The bullet without its trailing `<!-- linux windows -->` marker, and the platforms it
+    names."""
+    match = PLATFORM_MARKER.search(item)
+    if match is None:
+        return item, PLATFORMS
+    tokens = match[1].split()
+    unknown = [token for token in tokens if token not in PLATFORMS]
+    if not tokens or unknown:
+        raise ChangelogError(
+            f"line {line_number}: a platform marker names only macos, linux and windows"
+        )
+    platforms = frozenset(tokens)
+    if platforms == PLATFORMS:
+        raise ChangelogError(
+            f"line {line_number}: leave a bullet for every platform without a marker"
+        )
+    return item[: match.start()], platforms
 
 
 def _semver(version: str) -> tuple[int, ...]:

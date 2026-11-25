@@ -4,6 +4,8 @@ What changed in framewise, written for photographers. The Review UI shows this l
 
 ## Unreleased
 
+## 0.3.0 — 2026-11-25
+
 - When a newer Release has changes for your platform, a ring next to the version in the Review UI says an update is available. **What's new** then opens with the new version, the command to update your install, ready to copy, and the changes of every newer Release. Dismiss the ring until the next Release. framewise checks at most once a day; turn the check off with `check_for_updates = false` in `config.toml` or `FRAMEWISE_NO_UPDATE_CHECK=1`.
 - **What's new** shows only the changes that apply to your platform, macOS, Linux or Windows. A Release with nothing for your platform still appears, saying there is nothing new on it.
 - On Linux and Windows, faces now get a face quality Score, as on macOS: a blurred, badly lit or turned-away face scores lower, so within a Group the Frame whose faces are clearer ranks higher. It needs the `portable` extra; its model, about 7 MB, is downloaded on first use or with `framewise models download`. <!-- linux windows -->

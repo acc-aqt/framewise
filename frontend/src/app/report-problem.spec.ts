@@ -158,14 +158,32 @@ describe('Report a problem', () => {
     expect(tab.opener).toBeNull();
   });
 
-  it('opens the new-issue page directly when the blank tab was blocked', async () => {
+  it('shows a link to the new-issue page when the browser blocked the new tab', async () => {
     const open = vi.spyOn(window, 'open').mockReturnValue(null);
     await type('DSCF0003 should be the Winner');
 
     await click('report-open-github');
     await answer();
 
-    expect(open).toHaveBeenLastCalledWith(built.issue_url, '_blank', 'noopener');
+    expect(open).toHaveBeenCalledTimes(1);
+    const link = byTestId<HTMLAnchorElement>('report-issue-link');
+    expect(link.href).toBe(built.issue_url);
+    expect(link.target).toBe('_blank');
+    expect(link.rel).toBe('noopener');
+    expect(text('report-tab-blocked')).toBe(
+      'Your browser blocked the new tab. Open the new issue on GitHub, or use Copy report and paste it there.',
+    );
+  });
+
+  it('shows no link when the new tab opened', async () => {
+    const tab = { opener: null, location: { href: '' }, close: vi.fn() };
+    vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
+    await type('DSCF0003 should be the Winner');
+
+    await click('report-open-github');
+    await answer();
+
+    expect(byTestId('report-tab-blocked')).toBeNull();
   });
 
   describe('when the report is too long for the link', () => {

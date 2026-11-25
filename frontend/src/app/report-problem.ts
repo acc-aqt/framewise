@@ -164,6 +164,14 @@ function succeeded(work: Promise<unknown>): Promise<boolean> {
       @if (status(); as message) {
         <p class="status" role="status" data-testid="report-status">{{ message }}</p>
       }
+      @if (blockedIssueUrl(); as url) {
+        <p class="note" role="status" data-testid="report-tab-blocked">
+          Your browser blocked the new tab.
+          <a data-testid="report-issue-link" [href]="url" target="_blank" rel="noopener"
+            >Open the new issue on GitHub</a
+          >, or use Copy report and paste it there.
+        </p>
+      }
       @if (images(); as prepared) {
         <div class="images" data-testid="report-image-files">
           <p class="note" data-testid="report-images-folder">
@@ -329,6 +337,8 @@ export class ReportProblem {
     () => this.exiftoolAvailable() && this.removePersonalInfo(),
   );
   protected readonly skippedNote = computed(() => skippedNote(this.images()?.skipped ?? []));
+  /** The new-issue page to open from a link, as the browser blocked opening it in a new tab. */
+  protected readonly blockedIssueUrl = signal<string | null>(null);
   /** Whether removal was asked for, but the copies still have location and owner info. */
   protected readonly personalInfoKept = signal(false);
   protected readonly fileName = fileName;
@@ -346,6 +356,7 @@ export class ReportProblem {
     // The copy starts now for the same reason, and is dropped if the whole report fits the link.
     const tab = window.open('', '_blank');
     this.images.set(null);
+    this.blockedIssueUrl.set(null);
     const building = this.build();
     const copied = succeeded(
       copyToClipboard(
@@ -371,7 +382,8 @@ export class ReportProblem {
       }
     }
     if (tab === null) {
-      window.open(report.issue_url, '_blank', 'noopener');
+      // Too late to open a tab now, so the photographer opens it with a click of their own.
+      this.blockedIssueUrl.set(report.issue_url);
     } else {
       tab.opener = null;
       tab.location.href = report.issue_url;

@@ -66,7 +66,7 @@ _Avoid_: Foreground, subject mask, main object
 ## Judging
 
 **Group**:
-Frames that belong to one Burst or are Near-duplicates of each other. Within a Group, Frames are judged against each other rather than in isolation.
+Frames that belong to one Burst or are Near-duplicates of each other. Within a Group, Frames are judged against each other rather than in isolation. A Group need not be contiguous in capture time: when the photographer alternates between subjects, one Group's time range can contain Frames of other Groups.
 _Avoid_: Cluster, series, stack
 
 **Burst**:

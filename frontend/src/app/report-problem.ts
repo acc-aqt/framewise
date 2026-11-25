@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import {
   afterNextRender,
   ChangeDetectionStrategy,
@@ -43,6 +44,14 @@ export function copyToClipboard(text: Promise<string>): Promise<void> {
   }
   const blob = text.then((value) => new Blob([value], { type: 'text/plain' }));
   return clipboard.write([new ClipboardItem({ 'text/plain': blob })]);
+}
+
+/** The Review API's request to close the previous report's images, which it could not replace. */
+function previousImagesInUse(error: unknown): string | null {
+  if (error instanceof HttpErrorResponse && error.status === 409) {
+    return typeof error.error?.detail === 'string' ? error.error.detail : null;
+  }
+  return null;
 }
 
 function succeeded(work: Promise<unknown>): Promise<boolean> {
@@ -361,8 +370,8 @@ export class ReportProblem {
       );
       this.personalInfoKept.set(removing && !images.personal_info_removed);
       this.images.set(images);
-    } catch {
-      this.error.set('Could not prepare the images.');
+    } catch (error) {
+      this.error.set(previousImagesInUse(error) ?? 'Could not prepare the images.');
     } finally {
       this.working.set(false);
     }

@@ -43,6 +43,10 @@ and the artist, in every group. ExifTool
 rewrites only the metadata, so image data, focus, exposure and maker notes stay."""
 
 
+class PreviousImagesInUse(Exception):
+    """The previous Problem report's images could not be removed, as when one is still open."""
+
+
 @dataclass(frozen=True)
 class ReportImage:
     name: str
@@ -65,7 +69,10 @@ def copy_report_images(sources: list[SourceImage], folder: Path) -> list[ReportI
     """Replaces the folder with byte-for-byte copies of the sources, each named after its
     Frame's main file."""
     if folder.exists():
-        shutil.rmtree(folder)
+        try:
+            shutil.rmtree(folder)
+        except OSError as error:
+            raise PreviousImagesInUse(folder) from error
     folder.mkdir(mode=0o700, parents=True)
     copied = []
     for source in sources:

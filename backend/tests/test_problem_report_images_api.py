@@ -1,3 +1,6 @@
+import sys
+
+import pytest
 from conftest import make_jpg, make_raw
 from test_group_fixes_api import BEACH, beach_burst, ids, mountain, seconds
 from test_write_back_api import exiftool, image_data_hash, read_back
@@ -168,7 +171,7 @@ def tag_camera_info(path):
     )
 
 
-def test_removing_personal_info_strips_gps_place_names_serials_owner_and_artist_from_the_copies_only(
+def test_removal_strips_gps_place_names_serials_owner_and_artist_from_the_copies_only(
     session_dir, data_dir, review, analyzer, reveal
 ):
     beach_burst(session_dir, analyzer)
@@ -219,3 +222,23 @@ def test_without_exiftool_removal_copies_anyway_and_says_nothing_was_removed(
     assert response.json()["personal_info_removed"] is False
     assert (data_dir / REPORT_IMAGES / "DSCF0001.JPG").read_bytes() == original.read_bytes()
     assert reveal.revealed == [data_dir / REPORT_IMAGES]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permissions lock the folder here")
+def test_when_the_previous_reports_images_cannot_be_removed_it_asks_to_close_them(
+    session_dir, data_dir, review, analyzer, reveal
+):
+    beach_burst(session_dir, analyzer)
+    client = review(reveal_folder=reveal)
+    [group_id] = ids(client, "DSCF0001.JPG")
+    prepare_images(client, group_id)
+    folder = data_dir / REPORT_IMAGES
+    folder.chmod(0o500)
+    try:
+        response = prepare_images(client, group_id)
+    finally:
+        folder.chmod(0o700)
+
+    assert response.status_code == 409
+    assert "close" in response.json()["detail"].lower()
+    assert reveal.revealed == [folder]

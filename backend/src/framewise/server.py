@@ -22,6 +22,7 @@ from framewise.lightroom import read_label_set
 from framewise.problem_report import GroupState, build_problem_report, group_state
 from framewise.report_images import (
     FOLDER_NAME,
+    PreviousImagesInUse,
     RevealFolder,
     SourceImage,
     copy_report_images,
@@ -229,7 +230,14 @@ def create_app(
             if (path := _analysis_source(analyzed.frame)) is not None
         ]
         folder = store.preview_dir.parent / FOLDER_NAME
-        files = copy_report_images(sources, folder)
+        try:
+            files = copy_report_images(sources, folder)
+        except PreviousImagesInUse:
+            raise HTTPException(
+                status_code=409,
+                detail="framewise could not replace the previous report's images. "
+                "Close any of them that are open and try again.",
+            ) from None
         removed = False
         if request.remove_personal_info and exiftool_executable is not None:
             removed = remove_personal_info(exiftool, [folder / file.name for file in files])

@@ -470,6 +470,22 @@ describe('Report a problem', () => {
 
       expect(text('report-error')).toBe('Could not prepare the images.');
     });
+
+    it("asks to close the previous report's images when they could not be replaced", async () => {
+      const detail =
+        "framewise could not replace the previous report's images. " +
+        'Close any of them that are open and try again.';
+      await tickIncludeImages();
+
+      await openOnGitHub();
+      http
+        .expectOne('/api/groups/7/problem-report/images')
+        .flush({ detail }, { status: 409, statusText: 'Conflict' });
+      await settle();
+      await settle();
+
+      expect(text('report-error')).toBe(detail);
+    });
   });
 
   it('closes on Cancel', async () => {

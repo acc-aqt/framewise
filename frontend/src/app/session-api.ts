@@ -166,3 +166,14 @@ export interface WriteBackResult {
   written: string[];
   failed: { path: string; error: string }[];
 }
+
+/** A Problem report on one Group, built for a prefilled GitHub new-issue page. */
+export interface ProblemReport {
+  title: string;
+  /** The full Markdown report, for copying and saving. */
+  body: string;
+  /** The GitHub new-issue page, prefilled with the judging-problem template, title and body. */
+  issue_url: string;
+  /** Whether `issue_url` carries the whole body. */
+  body_fits_url: boolean;
+}

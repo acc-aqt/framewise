@@ -26,7 +26,8 @@ export type Shortcut =
   | { kind: 'trashGroup' }
   | { kind: 'trashGroups' }
   | { kind: 'writeBack' }
-  | { kind: 'whatsNew' };
+  | { kind: 'whatsNew' }
+  | { kind: 'reportProblem' };
 
 /** What the Review UI is showing, which decides the commands that apply. */
 export interface CommandContext {
@@ -176,6 +177,7 @@ export const COMMANDS: readonly Command[] = [
   },
   frameCommand('trash', 'Trash Frame', '⌫', 'Backspace', { kind: 'trash' }),
   paletteCommand('trash-group', 'Trash Group', { kind: 'trashGroup' }, whenFrameOpen),
+  paletteCommand('report-problem', 'Report a problem', { kind: 'reportProblem' }, whenFrameOpen),
   {
     ...paletteCommand(
       'trash-groups',

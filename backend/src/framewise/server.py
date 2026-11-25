@@ -31,7 +31,7 @@ from framewise.report_images import (
     reveal_folder,
 )
 from framewise.review import SessionAnalysis
-from framewise.store import AnalyzedFrame, Frame, Override, SessionStore
+from framewise.store import AnalyzedFrame, Frame, Override, SessionStore, main_file_name
 from framewise.trash import MoveToTrash, trash_frames
 from framewise.write_back import (
     FileChange,
@@ -223,12 +223,17 @@ def create_app(
     def problem_report_images(group_id: int, request: ReportImagesRequest) -> dict:
         """Copies the Analysis sources of the Group whose first Frame has `group_id` into a
         folder in the data folder, replacing the previous report's, and opens it in the file
-        manager for the photographer to attach to the issue."""
-        sources = [
-            SourceImage(analyzed.frame.main_path, path, analyzed.frame.jpg_path is None)
-            for analyzed in _known_group(group_id)
-            if (path := _analysis_source(analyzed.frame)) is not None
-        ]
+        manager for the photographer to attach to the issue. A Frame whose Analysis source is
+        missing or outside the Session folder and preview cache is named under `skipped`."""
+        sources = []
+        skipped = []
+        for analyzed in _known_group(group_id):
+            frame = analyzed.frame
+            path = _analysis_source(frame)
+            if path is None:
+                skipped.append(main_file_name(frame.main_path))
+            else:
+                sources.append(SourceImage(frame.main_path, path, frame.jpg_path is None))
         folder = store.preview_dir.parent / FOLDER_NAME
         try:
             files = copy_report_images(sources, folder)
@@ -247,6 +252,7 @@ def create_app(
             "folder": str(folder),
             "files": [asdict(file) for file in files],
             "personal_info_removed": removed,
+            "skipped": skipped,
         }
 
     def _known_group(group_id: int) -> list[AnalyzedFrame]:

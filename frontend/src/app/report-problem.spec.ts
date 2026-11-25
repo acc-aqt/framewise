@@ -308,6 +308,7 @@ describe('Report a problem', () => {
         { name: 'DSCF0002.RAF.jpg', size: 12_400_000, too_large: true },
       ],
       personal_info_removed: false,
+      skipped: [],
     };
 
     beforeEach(() => {
@@ -387,6 +388,26 @@ describe('Report a problem', () => {
         large.querySelector('[data-testid="report-image-too-large"]')?.textContent?.trim(),
       ).toBe("Over GitHub's 10 MB limit, share it another way");
       expect(text('report-images-folder')).toContain('/data/framewise/problem-report-images');
+    });
+
+    it('names the Frames whose images could not be found', async () => {
+      await tickIncludeImages();
+
+      await openOnGitHub();
+      await answerImages({ ...prepared, skipped: ['DSCF0003.JPG', 'DSCF0004.JPG'] });
+
+      expect(text('report-images-skipped')).toBe(
+        'framewise could not find the images of DSCF0003.JPG and DSCF0004.JPG, so they are not in the folder.',
+      );
+    });
+
+    it('names no skipped Frames when every image was copied', async () => {
+      await tickIncludeImages();
+
+      await openOnGitHub();
+      await answerImages();
+
+      expect(byTestId('report-images-skipped')).toBeNull();
     });
 
     describe('Remove location and owner info', () => {

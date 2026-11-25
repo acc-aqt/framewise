@@ -28,6 +28,21 @@ function fileName(mainPath: string): string {
   return mainPath.slice(mainPath.lastIndexOf('/') + 1);
 }
 
+/** Names joined for a sentence, such as `A, B and C`. */
+function listed(names: readonly string[]): string {
+  return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
+
+/** Says which Frames' images were left out of the folder, as framewise could not find them. */
+function skippedNote(skipped: readonly string[]): string | null {
+  if (skipped.length === 0) {
+    return null;
+  }
+  const them = skipped.length === 1 ? 'image of' : 'images of';
+  const absent = skipped.length === 1 ? 'it is' : 'they are';
+  return `framewise could not find the ${them} ${listed(skipped)}, so ${absent} not in the folder.`;
+}
+
 /** A file size the way GitHub's limit is put, such as `4.2 MB`. */
 function megabytes(size: number): string {
   return `${(size / 1_000_000).toFixed(1)} MB`;
@@ -155,6 +170,9 @@ function succeeded(work: Promise<unknown>): Promise<boolean> {
             Drag these images into the GitHub page from the folder that just opened:
             {{ prepared.folder }}
           </p>
+          @if (skippedNote(); as note) {
+            <p class="note" data-testid="report-images-skipped">{{ note }}</p>
+          }
           @if (personalInfoKept()) {
             <p class="note" data-testid="report-personal-info-kept">
               Location and owner info could not be removed, so it is still in these files.
@@ -310,6 +328,7 @@ export class ReportProblem {
   protected readonly removingPersonalInfo = computed(
     () => this.exiftoolAvailable() && this.removePersonalInfo(),
   );
+  protected readonly skippedNote = computed(() => skippedNote(this.images()?.skipped ?? []));
   /** Whether removal was asked for, but the copies still have location and owner info. */
   protected readonly personalInfoKept = signal(false);
   protected readonly fileName = fileName;

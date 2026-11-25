@@ -95,6 +95,43 @@ def test_frames_of_the_same_name_from_different_subfolders_each_get_their_own_co
     ).read_bytes()
 
 
+def test_a_frame_whose_analysis_source_is_gone_is_named_as_skipped(
+    session_dir, data_dir, review, analyzer, reveal
+):
+    beach_burst(session_dir, analyzer)
+    client = review(reveal_folder=reveal)
+    [group_id] = ids(client, "DSCF0001.JPG")
+    (session_dir / "DSCF0002.JPG").unlink()
+
+    prepared = prepare_images(client, group_id).json()
+
+    assert [file["name"] for file in prepared["files"]] == [
+        "DSCF0001.JPG",
+        "DSCF0003.JPG",
+        "DSCF0004.JPG",
+    ]
+    assert prepared["skipped"] == ["DSCF0002.JPG"]
+
+
+def test_a_frame_whose_analysis_source_leads_outside_the_session_is_skipped(
+    session_dir, tmp_path, data_dir, review, analyzer, reveal
+):
+    beach_burst(session_dir, analyzer)
+    client = review(reveal_folder=reveal)
+    [group_id] = ids(client, "DSCF0001.JPG")
+    outside = tmp_path / "outside.jpg"
+    (session_dir / "DSCF0003.JPG").replace(outside)
+    try:
+        (session_dir / "DSCF0003.JPG").symlink_to(outside)
+    except OSError:
+        pytest.skip("this machine cannot create symlinks")
+
+    prepared = prepare_images(client, group_id).json()
+
+    assert prepared["skipped"] == ["DSCF0003.JPG"]
+    assert not (data_dir / REPORT_IMAGES / "DSCF0003.JPG").exists()
+
+
 def test_an_image_over_githubs_10_mb_limit_is_flagged(session_dir, review, analyzer, reveal):
     beach_burst(session_dir, analyzer)
     with (session_dir / "DSCF0002.JPG").open("ab") as jpg:

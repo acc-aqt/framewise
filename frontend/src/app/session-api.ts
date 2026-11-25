@@ -193,6 +193,8 @@ export interface ReportImages {
   files: ReportImage[];
   /** Whether location and owner info was removed from the copies. */
   personal_info_removed: boolean;
+  /** The main file names of the Frames whose Analysis source could not be found or used. */
+  skipped: string[];
 }
 
 export interface ReportImage {

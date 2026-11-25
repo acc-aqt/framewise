@@ -1,3 +1,4 @@
+import sys
 import threading
 from collections.abc import Callable
 from dataclasses import asdict, replace
@@ -14,7 +15,13 @@ from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from framewise.analyzer import ProviderLineup
-from framewise.changelog import ChangelogVersion, read_changelog
+from framewise.changelog import (
+    PLATFORM_NAMES,
+    ChangelogVersion,
+    changelog_platform,
+    for_platform,
+    read_changelog,
+)
 from framewise.exiftool import ExifTool
 from framewise.judge import DEFAULT_KEEPER_BUDGET, FaceCheck, Judgement, Proposal, Verdict, judge
 from framewise.lightroom import read_label_set
@@ -69,9 +76,10 @@ def create_app(
     config_path: Path,
     move_to_trash: MoveToTrash = send2trash,
     changelog_path: Path | None = None,
+    platform: str = sys.platform,
 ) -> FastAPI:
     app = FastAPI(title="framewise")
-    _add_about(app, changelog_path)
+    _add_about(app, changelog_path, platform)
     providers_json = {capability: asdict(lineup) for capability, lineup in provider_lineup.items()}
     write_back = RatingWriteBack(store, ExifTool())
 
@@ -354,13 +362,14 @@ class SessionPicker:
         start_session: Callable[[Path], FastAPI],
         ui_dir: Path | None = None,
         changelog_path: Path | None = None,
+        platform: str = sys.platform,
     ):
         self._choose_folder = choose_folder
         self._start_session = start_session
         self._session_app: FastAPI | None = None
         self._lock = threading.Lock()
         self._picker_app = FastAPI(title="framewise")
-        _add_about(self._picker_app, changelog_path)
+        _add_about(self._picker_app, changelog_path, platform)
 
         @self._picker_app.get("/api/session")
         def no_session() -> None:
@@ -382,14 +391,17 @@ class SessionPicker:
         await (self._session_app or self._picker_app)(scope, receive, send)
 
 
-def _add_about(app: FastAPI, changelog_path: Path | None) -> None:
+def _add_about(app: FastAPI, changelog_path: Path | None, platform: str) -> None:
+    """`platform` is named as by sys.platform; the Changelog shows only its entries."""
+    changelog_token = changelog_platform(platform)
+
     @app.get("/api/about")
     def about() -> dict:
+        changelog = for_platform(read_changelog(changelog_path), changelog_token)
         return {
             "version": version("framewise-cull"),
-            "changelog": [
-                _changelog_version_json(entry) for entry in read_changelog(changelog_path)
-            ],
+            "platform": PLATFORM_NAMES[changelog_token],
+            "changelog": [_changelog_version_json(entry) for entry in changelog],
         }
 
 

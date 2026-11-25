@@ -21,6 +21,7 @@ SUPPORTED_INLINE = re.compile(r"\*\*[^*]+\*\*|`[^`]+`")
 UNSUPPORTED_INLINE = re.compile(r"\[[^\]]*\]\(|<[A-Za-z/!]|[*_`]")
 PLATFORM_MARKER = re.compile(r"\s*<!--(.*?)-->$")
 PLATFORMS = frozenset({"macos", "linux", "windows"})
+PLATFORM_NAMES = {"macos": "macOS", "linux": "Linux", "windows": "Windows"}
 
 
 class ChangelogError(ValueError):
@@ -135,6 +136,34 @@ def _split_platform_marker(item: str, line_number: int) -> tuple[str, frozenset[
             f"line {line_number}: leave a bullet for every platform without a marker"
         )
     return item[: match.start()], platforms
+
+
+def changelog_platform(sys_platform: str) -> str:
+    """The Changelog platform token for `sys_platform`, as named by sys.platform."""
+    if sys_platform == "darwin":
+        return "macos"
+    if sys_platform == "win32":
+        return "windows"
+    return "linux"
+
+
+def for_platform(versions: list[ChangelogVersion], platform: str) -> list[ChangelogVersion]:
+    """The versions with only the bullets that apply to `platform`. A version left with no
+    bullets stays, with no sections, so the version numbers don't seem to skip."""
+    filtered = []
+    for entry in versions:
+        sections = [
+            ChangelogSection(
+                section.heading, [item for item in section.items if platform in item.platforms]
+            )
+            for section in entry.sections
+        ]
+        filtered.append(
+            ChangelogVersion(
+                entry.version, entry.date, [section for section in sections if section.items]
+            )
+        )
+    return filtered
 
 
 def _semver(version: str) -> tuple[int, ...]:

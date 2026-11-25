@@ -4,6 +4,8 @@ What changed in framewise, written for photographers. The Review UI shows this l
 
 ## Unreleased
 
+- **Rating write-back** now writes a **RAW-only Frame**'s stars and color label like any RAW's: into a DNG itself, and into an `.xmp` sidecar for other RAWs. Trash moves the RAW and its sidecar.
+
 ## 0.3.0 — 2026-11-25
 
 - When a newer Release has changes for your platform, a ring next to the version in the Review UI says an update is available. **What's new** then opens with the new version, the command to update your install, ready to copy, and the changes of every newer Release. Dismiss the ring until the next Release. framewise checks at most once a day; turn the check off with `check_for_updates = false` in `config.toml` or `FRAMEWISE_NO_UPDATE_CHECK=1`.
@@ -14,7 +16,7 @@ What changed in framewise, written for photographers. The Review UI shows this l
 - Someone who glances back over their shoulder into the lens counts as looking at the camera, whichever way their head is turned. A Frame where they do ranks above one where they look away.
 - Face badges appear together with the Frame's image in the loupe, the Compare loupe and an open Group, instead of floating over an empty area while the image loads. Stepping to the next Frame no longer shows the previous Frame's badges over it.
 - When `framewise review` stops, an open Review UI tab says it lost the connection and how to start it again, instead of showing broken thumbnails. It also notices when you come back to the tab. It reconnects on its own once the server is back, keeping every Override that was saved before it stopped.
-- A RAW with no JPG of the same name is now a **RAW-only Frame** instead of being skipped, so a Session shot in RAW only, or a merge such as a `-Pano.dng`, is grouped, judged and reviewed like any other. framewise judges it by the largest preview JPG embedded in the RAW and marks it RAW-only in the Review UI. **Rating write-back** writes a RAW-only Frame's stars and color label like any RAW's: into a DNG itself, and into an `.xmp` sidecar for other RAWs. Trash moves the RAW and its sidecar.
+- A RAW with no JPG of the same name is now a **RAW-only Frame** instead of being skipped, so a Session shot in RAW only, or a merge such as a `-Pano.dng`, is grouped, judged and reviewed like any other. framewise judges it by the largest preview JPG embedded in the RAW and marks it RAW-only in the Review UI. **Rating write-back** and Trash leave RAW-only Frames alone for now, and say how many RAW-only Frames they leave out.
 - Skipped files are listed with the reason, such as a RAW without an embedded preview framewise can read.
 - A **RAW-only Frame** whose embedded preview is less than 1600 px on its long edge is skipped instead of getting a misleading Verdict, and the Review UI lists it under **Skipped** with the preview's size. Change the minimum with `min_preview_long_edge` under `[raw_only]` in `config.toml`.
 - A Frame that is almost black apart from a blown-out lamp or phone screen is no longer taken for a deliberate low-key shot. It gets an "Underexposed" Reason and can no longer beat a well-exposed Frame to Winner in its Group. Dark Frames with a lit subject, such as a lit face, still count as low-key. Frames analyzed by an earlier version are re-analyzed.

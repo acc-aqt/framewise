@@ -144,7 +144,7 @@ Overrides are saved in the Session store as you go ([ADR-0003](docs/adr/0003-ove
 
 Fix wrong grouping from an open Group. Fixed Groups are kept on later re-runs ([ADR-0004](docs/adr/0004-group-overrides.md)).
 
-Trashing a Frame moves every file of it (RAW, JPG and any `.xmp` sidecar) to the OS Trash and takes the Frame out of the Session. RAW-only Frames can't be trashed yet. Nothing is deleted outright: restore the files from the Trash and run `framewise review` again to bring a Frame back with its Overrides ([ADR-0006](docs/adr/0006-trashing-frames.md)). Trash before you import into Lightroom, because Lightroom shows trashed Frames it already imported as missing.
+Trashing a Frame moves every file of it (RAW, JPG and any `.xmp` sidecar) to the OS Trash and takes the Frame out of the Session. Nothing is deleted outright: restore the files from the Trash and run `framewise review` again to bring a Frame back with its Overrides ([ADR-0006](docs/adr/0006-trashing-frames.md)). Trash before you import into Lightroom, because Lightroom shows trashed Frames it already imported as missing.
 
 ## Providers
 
@@ -183,8 +183,7 @@ Nothing is written to the photos until you ask ([ADR-0001](docs/adr/0001-frames-
 Details:
 
 - Overrides count: an Override's Verdict replaces framewise's, and stars or a color label set with the shortcuts replace the ones the Verdict maps to.
-- JPGs and DNGs get embedded XMP; other RAWs get an `.xmp` sidecar, merged into any existing one.
-- RAW-only Frames are left out for now, and the dry run says how many.
+- JPGs and DNGs get embedded XMP; other RAWs get an `.xmp` sidecar, merged into any existing one. This holds for the RAW of a RAW-only Frame too.
 - Label names come from Lightroom Classic's active color label set (for example `Rot` and `Gelb`), read from its preferences on macOS and, on Windows, from `%APPDATA%\Adobe\Lightroom\Preferences\Lightroom Classic CC 7 Preferences.agprefs`.
 - Writing takes a while for large Sessions, because each DNG is rewritten in full. Reloading the page doesn't stop it.
 - framewise needs [ExifTool](https://exiftool.org), which the [setup script](#from-a-checkout) installs and [Install](#install) says how to get. Without it, framewise stops at start-up and says how to install it.

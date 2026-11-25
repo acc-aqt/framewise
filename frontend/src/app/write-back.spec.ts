@@ -8,7 +8,6 @@ import { WriteBackView } from './write-back';
 const dryRun: WriteBackDryRun = {
   label_set: { red: 'Rot', yellow: 'Gelb', from_lightroom: true },
   notice: null,
-  raw_only_notice: null,
   files: [
     file(
       'DSCF0001.JPG',
@@ -187,18 +186,6 @@ describe('Rating write-back', () => {
 
     expect(text('[data-testid="write-back-notice"]')).toBe(
       'No Lightroom Classic color label set was found.',
-    );
-  });
-
-  it('says when RAW-only Frames are left out', async () => {
-    await showDryRun({
-      ...dryRun,
-      raw_only_notice:
-        "2 RAW-only Frames are left out: framewise can't write ratings into RAW-only Frames yet.",
-    });
-
-    expect(text('[data-testid="write-back-raw-only-notice"]')).toBe(
-      "2 RAW-only Frames are left out: framewise can't write ratings into RAW-only Frames yet.",
     );
   });
 

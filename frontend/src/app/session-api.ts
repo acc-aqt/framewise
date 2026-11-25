@@ -150,8 +150,6 @@ export interface WriteBackFile {
 export interface WriteBackDryRun {
   label_set: { red: string; yellow: string; from_lightroom: boolean };
   notice: string | null;
-  /** Says how many RAW-only Frames write-back leaves out, since it can't write them yet. */
-  raw_only_notice: string | null;
   files: WriteBackFile[];
   can_undo: boolean;
 }

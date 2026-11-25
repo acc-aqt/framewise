@@ -82,6 +82,7 @@ def create_app(
     *,
     provider_lineup: ProviderLineup,
     config_path: Path,
+    data_dir: Path | None = None,
     move_to_trash: MoveToTrash = send2trash,
     changelog_path: Path | None = None,
     platform: str = sys.platform,
@@ -93,7 +94,12 @@ def create_app(
     _add_about(app, changelog_path, platform)
     if update_check is None:
         update_check = _start_update_check(
-            platform, changelog_path, config_path, fetch_changelog, clock
+            platform,
+            changelog_path,
+            config_path,
+            data_dir or resolve_data_dir(),
+            fetch_changelog,
+            clock,
         )
     _add_update(app, update_check)
     providers_json = {capability: asdict(lineup) for capability, lineup in provider_lineup.items()}
@@ -379,6 +385,8 @@ class SessionPicker:
         ui_dir: Path | None = None,
         changelog_path: Path | None = None,
         platform: str = sys.platform,
+        config_path: Path | None = None,
+        data_dir: Path | None = None,
         fetch_changelog: FetchChangelog = fetch_main_changelog,
         clock: Clock = time.time,
     ):
@@ -389,7 +397,12 @@ class SessionPicker:
         self._picker_app = FastAPI(title="framewise")
         _add_about(self._picker_app, changelog_path, platform)
         self._update_check = _start_update_check(
-            platform, changelog_path, resolve_config_path(), fetch_changelog, clock
+            platform,
+            changelog_path,
+            config_path or resolve_config_path(),
+            data_dir or resolve_data_dir(),
+            fetch_changelog,
+            clock,
         )
         _add_update(self._picker_app, self._update_check)
 
@@ -431,6 +444,7 @@ def _start_update_check(
     platform: str,
     changelog_path: Path | None,
     config_path: Path,
+    data_dir: Path,
     fetch_changelog: FetchChangelog,
     clock: Clock,
 ) -> UpdateCheck:
@@ -440,7 +454,7 @@ def _start_update_check(
         is_checkout(changelog_path),
         fetch_changelog,
         clock,
-        resolve_data_dir(),
+        data_dir,
         config_path,
     )
 

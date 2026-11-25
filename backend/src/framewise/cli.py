@@ -283,10 +283,11 @@ def main(
         analyzer = _resolve_analyzer()
     min_preview_long_edge = _read_min_preview_long_edge()
 
+    config_path = resolve_config_path().absolute()
+    data_dir = resolve_data_dir()
+
     def start_session(folder: Path, update_check: UpdateCheck | None = None) -> FastAPI:
-        store = open_session(
-            folder, resolve_data_dir(), min_preview_long_edge=min_preview_long_edge
-        )
+        store = open_session(folder, data_dir, min_preview_long_edge=min_preview_long_edge)
         analysis = SessionAnalysis(store, analyzer, background=args.background)
         analyze_in_background(analysis, nullcontext if args.allow_sleep else keep_awake)
         print(f"framewise: {len(store.frames())} Frames in {store.root}")
@@ -296,14 +297,22 @@ def main(
             UI_DIR,
             lightroom_preferences=LIGHTROOM_PREFERENCES,
             provider_lineup=analyzer.provider_lineup,
-            config_path=resolve_config_path().absolute(),
+            config_path=config_path,
+            data_dir=data_dir,
             changelog_path=CHANGELOG_PATH,
             update_check=update_check,
         )
 
     url = f"http://{HOST}:{args.port}/"
     if args.session_folder is None:
-        app: ASGIApp = SessionPicker(choose_folder, start_session, UI_DIR, CHANGELOG_PATH)
+        app: ASGIApp = SessionPicker(
+            choose_folder,
+            start_session,
+            UI_DIR,
+            CHANGELOG_PATH,
+            config_path=config_path,
+            data_dir=data_dir,
+        )
         print(f"framewise: Review UI at {url}, choose a Session folder there")
     else:
         app = start_session(args.session_folder)

@@ -5,7 +5,9 @@ from urllib.error import HTTPError, URLError
 import pytest
 from fastapi.testclient import TestClient
 
-from framewise.server import SessionPicker
+from framewise.previews import DEFAULT_MIN_PREVIEW_LONG_EDGE
+from framewise.review import SessionAnalysis, open_session
+from framewise.server import SessionPicker, create_app
 from framewise.update_check import MAIN_CHANGELOG_URL
 
 RUNNING = version("framewise-cull")
@@ -284,7 +286,9 @@ def test_update_checks_again_after_a_failed_check(review, main_changelog, clock)
 
 def picker(**options) -> TestClient:
     return TestClient(
-        SessionPicker(choose_folder=lambda: None, start_session=lambda folder: None, **options)
+        SessionPicker(
+            choose_folder=lambda: None, start_session=lambda folder, update_check: None, **options
+        )
     )
 
 
@@ -306,3 +310,33 @@ def test_the_folder_picker_checks_nothing_when_turned_off_in_the_config(
 
     assert update(picker(fetch_changelog=main_changelog, clock=clock)) is None
     assert main_changelog.fetches == 0
+
+
+def test_opening_a_session_from_the_folder_picker_checks_no_second_time(
+    session_dir, data_dir, previews, analyzer, main_changelog, clock
+):
+    main_changelog.error = URLError("offline")
+
+    def start_session(folder, update_check):
+        store = open_session(folder, data_dir, previews, DEFAULT_MIN_PREVIEW_LONG_EDGE)
+        return create_app(
+            store,
+            SessionAnalysis(store, analyzer),
+            provider_lineup={},
+            config_path=data_dir / "config.toml",
+            update_check=update_check,
+        )
+
+    client = TestClient(
+        SessionPicker(
+            choose_folder=lambda: session_dir,
+            start_session=start_session,
+            fetch_changelog=main_changelog,
+            clock=clock,
+        )
+    )
+    update(client)
+    client.post("/api/session/choose")
+
+    assert update(client) is None
+    assert main_changelog.fetches == 1

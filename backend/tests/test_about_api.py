@@ -14,7 +14,9 @@ def test_about_names_the_running_version(review):
 
 
 def test_about_answers_before_a_session_is_open():
-    picker = SessionPicker(choose_folder=lambda: None, start_session=lambda folder: None)
+    picker = SessionPicker(
+        choose_folder=lambda: None, start_session=lambda folder, update_check: None
+    )
 
     about = TestClient(picker).get("/api/about").json()
 
@@ -192,7 +194,7 @@ def test_the_folder_picker_shows_only_the_entries_for_the_platform(tmp_path):
     path.write_text(PLATFORM_CHANGELOG, encoding="utf-8")
     picker = SessionPicker(
         choose_folder=lambda: None,
-        start_session=lambda folder: None,
+        start_session=lambda folder, update_check: None,
         changelog_path=path,
         platform="win32",
     )

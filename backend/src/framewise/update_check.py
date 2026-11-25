@@ -59,6 +59,7 @@ def update_check_enabled(config_path: Path) -> bool:
 @dataclass
 class Update:
     version: str
+    command: str
     releases: list[ChangelogVersion]
     """Every Release newer than the running one, newest first, filtered to the platform."""
 
@@ -70,12 +71,14 @@ class UpdateCheck:
     def __init__(
         self,
         platform: str,
+        checkout: bool,
         fetch_changelog: FetchChangelog,
         clock: Clock,
         data_dir: Path,
         config_path: Path,
     ):
         self._platform = platform
+        self._command = update_command(platform, checkout)
         self._fetch_changelog = fetch_changelog
         self._clock = clock
         self._cache_path = data_dir / CACHE_FILE_NAME
@@ -129,4 +132,4 @@ class UpdateCheck:
         releases = for_platform(newer, self._platform)
         if not any(entry.sections for entry in releases):
             return None
-        return Update(newer[0].version, releases)
+        return Update(newer[0].version, self._command, releases)

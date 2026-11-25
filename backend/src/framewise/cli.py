@@ -30,6 +30,7 @@ from framewise.review import (
     session_database_path,
 )
 from framewise.server import LocalOnly, SessionPicker, create_app
+from framewise.update_check import UpdateCheck
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
@@ -282,7 +283,7 @@ def main(
         analyzer = _resolve_analyzer()
     min_preview_long_edge = _read_min_preview_long_edge()
 
-    def start_session(folder: Path) -> FastAPI:
+    def start_session(folder: Path, update_check: UpdateCheck | None = None) -> FastAPI:
         store = open_session(
             folder, resolve_data_dir(), min_preview_long_edge=min_preview_long_edge
         )
@@ -297,6 +298,7 @@ def main(
             provider_lineup=analyzer.provider_lineup,
             config_path=resolve_config_path().absolute(),
             changelog_path=CHANGELOG_PATH,
+            update_check=update_check,
         )
 
     url = f"http://{HOST}:{args.port}/"

@@ -35,7 +35,6 @@ from framewise.update_check import (
     FetchChangelog,
     UpdateCheck,
     fetch_main_changelog,
-    update_command,
 )
 from framewise.write_back import (
     FileChange,
@@ -88,10 +87,15 @@ def create_app(
     platform: str = sys.platform,
     fetch_changelog: FetchChangelog = fetch_main_changelog,
     clock: Clock = time.time,
+    update_check: UpdateCheck | None = None,
 ) -> FastAPI:
     app = FastAPI(title="framewise")
     _add_about(app, changelog_path, platform)
-    _add_update(app, platform, changelog_path, config_path, fetch_changelog, clock)
+    if update_check is None:
+        update_check = _start_update_check(
+            platform, changelog_path, config_path, fetch_changelog, clock
+        )
+    _add_update(app, update_check)
     providers_json = {capability: asdict(lineup) for capability, lineup in provider_lineup.items()}
     write_back = RatingWriteBack(store, ExifTool())
 
@@ -371,7 +375,7 @@ class SessionPicker:
     def __init__(
         self,
         choose_folder: Callable[[], Path | None],
-        start_session: Callable[[Path], FastAPI],
+        start_session: Callable[[Path, UpdateCheck], FastAPI],
         ui_dir: Path | None = None,
         changelog_path: Path | None = None,
         platform: str = sys.platform,
@@ -384,14 +388,10 @@ class SessionPicker:
         self._lock = threading.Lock()
         self._picker_app = FastAPI(title="framewise")
         _add_about(self._picker_app, changelog_path, platform)
-        _add_update(
-            self._picker_app,
-            platform,
-            changelog_path,
-            resolve_config_path(),
-            fetch_changelog,
-            clock,
+        self._update_check = _start_update_check(
+            platform, changelog_path, resolve_config_path(), fetch_changelog, clock
         )
+        _add_update(self._picker_app, self._update_check)
 
         @self._picker_app.get("/api/session")
         def no_session() -> None:
@@ -404,7 +404,7 @@ class SessionPicker:
                     folder = self._choose_folder()
                     if folder is None:
                         return {"opened": False}
-                    self._session_app = self._start_session(folder)
+                    self._session_app = self._start_session(folder, self._update_check)
             return {"opened": True}
 
         _mount_review_ui(self._picker_app, ui_dir)
@@ -427,29 +427,34 @@ def _add_about(app: FastAPI, changelog_path: Path | None, platform: str) -> None
         }
 
 
-def _add_update(
-    app: FastAPI,
+def _start_update_check(
     platform: str,
     changelog_path: Path | None,
     config_path: Path,
     fetch_changelog: FetchChangelog,
     clock: Clock,
-) -> None:
-    """Starts checking for a newer Release right away, so the Review UI's request waits at most
-    for the check's timeout. `changelog_path` tells a checkout from an installed wheel."""
-    changelog_token = changelog_platform(platform)
-    command = update_command(changelog_token, is_checkout(changelog_path))
-    check = UpdateCheck(changelog_token, fetch_changelog, clock, resolve_data_dir(), config_path)
+) -> UpdateCheck:
+    """`changelog_path` tells a checkout from an installed wheel."""
+    return UpdateCheck(
+        changelog_platform(platform),
+        is_checkout(changelog_path),
+        fetch_changelog,
+        clock,
+        resolve_data_dir(),
+        config_path,
+    )
 
+
+def _add_update(app: FastAPI, update_check: UpdateCheck) -> None:
     @app.get("/api/update")
     def update() -> dict:
-        found = check.update()
+        found = update_check.update()
         if found is None:
             return {"available": None}
         return {
             "available": {
                 "version": found.version,
-                "command": command,
+                "command": found.command,
                 "releases": [_changelog_version_json(entry) for entry in found.releases],
             }
         }

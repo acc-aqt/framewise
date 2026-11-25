@@ -1,5 +1,6 @@
 import sys
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import asdict, replace
 from importlib.metadata import version
@@ -20,14 +21,22 @@ from framewise.changelog import (
     ChangelogVersion,
     changelog_platform,
     for_platform,
+    is_checkout,
     read_changelog,
 )
 from framewise.exiftool import ExifTool
 from framewise.judge import DEFAULT_KEEPER_BUDGET, FaceCheck, Judgement, Proposal, Verdict, judge
 from framewise.lightroom import read_label_set
-from framewise.review import SessionAnalysis
+from framewise.review import SessionAnalysis, resolve_config_path, resolve_data_dir
 from framewise.store import AnalyzedFrame, Frame, Override, SessionStore
 from framewise.trash import MoveToTrash, trash_frames
+from framewise.update_check import (
+    Clock,
+    FetchChangelog,
+    UpdateCheck,
+    fetch_main_changelog,
+    update_command,
+)
 from framewise.write_back import (
     FileChange,
     Rating,
@@ -77,9 +86,12 @@ def create_app(
     move_to_trash: MoveToTrash = send2trash,
     changelog_path: Path | None = None,
     platform: str = sys.platform,
+    fetch_changelog: FetchChangelog = fetch_main_changelog,
+    clock: Clock = time.time,
 ) -> FastAPI:
     app = FastAPI(title="framewise")
     _add_about(app, changelog_path, platform)
+    _add_update(app, platform, changelog_path, config_path, fetch_changelog, clock)
     providers_json = {capability: asdict(lineup) for capability, lineup in provider_lineup.items()}
     write_back = RatingWriteBack(store, ExifTool())
 
@@ -363,6 +375,8 @@ class SessionPicker:
         ui_dir: Path | None = None,
         changelog_path: Path | None = None,
         platform: str = sys.platform,
+        fetch_changelog: FetchChangelog = fetch_main_changelog,
+        clock: Clock = time.time,
     ):
         self._choose_folder = choose_folder
         self._start_session = start_session
@@ -370,6 +384,14 @@ class SessionPicker:
         self._lock = threading.Lock()
         self._picker_app = FastAPI(title="framewise")
         _add_about(self._picker_app, changelog_path, platform)
+        _add_update(
+            self._picker_app,
+            platform,
+            changelog_path,
+            resolve_config_path(),
+            fetch_changelog,
+            clock,
+        )
 
         @self._picker_app.get("/api/session")
         def no_session() -> None:
@@ -402,6 +424,34 @@ def _add_about(app: FastAPI, changelog_path: Path | None, platform: str) -> None
             "version": version("framewise-cull"),
             "platform": PLATFORM_NAMES[changelog_token],
             "changelog": [_changelog_version_json(entry) for entry in changelog],
+        }
+
+
+def _add_update(
+    app: FastAPI,
+    platform: str,
+    changelog_path: Path | None,
+    config_path: Path,
+    fetch_changelog: FetchChangelog,
+    clock: Clock,
+) -> None:
+    """Starts checking for a newer Release right away, so the Review UI's request waits at most
+    for the check's timeout. `changelog_path` tells a checkout from an installed wheel."""
+    changelog_token = changelog_platform(platform)
+    command = update_command(changelog_token, is_checkout(changelog_path))
+    check = UpdateCheck(changelog_token, fetch_changelog, clock, resolve_data_dir(), config_path)
+
+    @app.get("/api/update")
+    def update() -> dict:
+        found = check.update()
+        if found is None:
+            return {"available": None}
+        return {
+            "available": {
+                "version": found.version,
+                "command": command,
+                "releases": [_changelog_version_json(entry) for entry in found.releases],
+            }
         }
 
 

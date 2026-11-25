@@ -12,6 +12,13 @@ CHANGELOG_PATH = (
 )
 """The Changelog an installed wheel carries, or the checkout's when running from a clone."""
 
+
+def is_checkout(changelog_path: Path | None) -> bool:
+    """Whether framewise runs from a clone, whose Changelog sits at the root of the git checkout,
+    rather than from a wheel, which carries its own."""
+    return changelog_path is not None and (changelog_path.parent / ".git").exists()
+
+
 UNRELEASED_HEADING = "## Unreleased"
 RELEASE_HEADING = re.compile(r"^## (\d+\.\d+\.\d+) — (\d{4}-\d{2}-\d{2})$")
 SUBHEADING = re.compile(r"^### (\S.*)$")
@@ -104,7 +111,7 @@ def _parse_version_heading(
             f"line {line_number}: expected '## Unreleased' or '## X.Y.Z — YYYY-MM-DD'"
         )
     previous = next((entry.version for entry in reversed(earlier) if entry.version), None)
-    if previous is not None and _semver(match[1]) >= _semver(previous):
+    if previous is not None and semver(match[1]) >= semver(previous):
         raise ChangelogError(f"line {line_number}: {match[1]} must be older than {previous}")
     return ChangelogVersion(match[1], match[2])
 
@@ -166,5 +173,5 @@ def for_platform(versions: list[ChangelogVersion], platform: str) -> list[Change
     return filtered
 
 
-def _semver(version: str) -> tuple[int, ...]:
+def semver(version: str) -> tuple[int, ...]:
     return tuple(int(part) for part in version.split("."))

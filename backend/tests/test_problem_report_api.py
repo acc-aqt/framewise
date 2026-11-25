@@ -84,3 +84,35 @@ def test_a_group_can_be_reported_while_analysis_is_still_running(
     analyzer.release_all()
     assert response.status_code == 200
     assert "This Group looks stuck." in response.json()["body"]
+
+
+def test_a_report_too_long_for_the_url_asks_to_paste_it_from_the_clipboard(
+    session_dir, review, analyzer
+):
+    beach_burst(session_dir, analyzer)
+    client = review()
+    [group_id] = ids(client, "DSCF0001.JPG")
+    text = "The Winner has closed eyes and DSCF0003 is better. " * 200
+
+    built = report(client, group_id, text).json()
+
+    assert built["body_fits_url"] is False
+    assert text.strip() in built["body"]
+    assert len(built["issue_url"]) <= 8000
+    url_body = parse_qs(urlsplit(built["issue_url"]).query)["body"][0]
+    assert "paste" in url_body.lower()
+    assert "clipboard" in url_body.lower()
+    assert "didn't fit" in url_body
+    assert "closed eyes" not in url_body
+
+
+def test_the_url_limit_counts_encoded_characters(session_dir, review, analyzer):
+    beach_burst(session_dir, analyzer)
+    client = review()
+    [group_id] = ids(client, "DSCF0001.JPG")
+
+    short_ascii = report(client, group_id, "a" * 3000).json()
+    long_once_encoded = report(client, group_id, "ü" * 3000).json()
+
+    assert short_ascii["body_fits_url"] is True
+    assert long_once_encoded["body_fits_url"] is False

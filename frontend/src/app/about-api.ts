@@ -23,3 +23,15 @@ export interface About {
    */
   changelog: ChangelogVersion[];
 }
+
+export interface UpdateCheck {
+  /** Null when there is no update to show, including when the check is off or failed. */
+  available: {
+    /** The newest Release. */
+    version: string;
+    /** The exact command to update this install on this platform. */
+    command: string;
+    /** Every Release newer than the running one, newest first, filtered to the platform. */
+    releases: ChangelogVersion[];
+  } | null;
+}

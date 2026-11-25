@@ -12,7 +12,7 @@ import {
 } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ReportApi } from './report-api';
-import { Frame, ProblemReport, ReportImages } from './session-api';
+import { ExifToolStatus, Frame, ProblemReport, ReportImages } from './session-api';
 
 /** The name a saved report gets, such as `framewise-report-2026-11-25.md`. */
 export function reportFileName(date: Date): string {
@@ -110,6 +110,24 @@ function succeeded(work: Promise<unknown>): Promise<boolean> {
               <li data-testid="report-image-frame">{{ fileName(frame.main_path) }}</li>
             }
           </ul>
+          <label class="check">
+            <input
+              type="checkbox"
+              data-testid="report-remove-personal-info"
+              [checked]="removingPersonalInfo()"
+              [disabled]="!exiftoolAvailable()"
+              (change)="removePersonalInfo.set(!removePersonalInfo())"
+            />
+            <span data-testid="report-remove-personal-info-label"
+              >Remove location and owner info</span
+            >
+          </label>
+          @if (!exiftoolAvailable()) {
+            <p class="note" data-testid="report-exiftool-missing">
+              Location and owner info will stay in the files, as removing it needs ExifTool.
+              {{ exiftool()?.install_hint }}
+            </p>
+          }
         </div>
       }
       <p class="note">
@@ -128,6 +146,11 @@ function succeeded(work: Promise<unknown>): Promise<boolean> {
             Drag these images into the GitHub page from the folder that just opened:
             {{ prepared.folder }}
           </p>
+          @if (personalInfoKept()) {
+            <p class="note" data-testid="report-personal-info-kept">
+              Location and owner info could not be removed, so it is still in these files.
+            </p>
+          }
           <ul>
             @for (file of prepared.files; track file.name) {
               <li data-testid="report-image-file">
@@ -260,6 +283,8 @@ export class ReportProblem {
   readonly groupId = input.required<number>();
   /** The Group's Frames, whose images the report may include. */
   readonly frames = input<readonly Pick<Frame, 'id' | 'main_path'>[]>([]);
+  /** Whether ExifTool is installed, from the session summary. Taken as installed until known. */
+  readonly exiftool = input<ExifToolStatus | undefined>(undefined);
   readonly close = output();
 
   protected readonly text = signal('');
@@ -271,6 +296,13 @@ export class ReportProblem {
   protected readonly status = signal<string | null>(null);
   protected readonly includeImages = signal(false);
   protected readonly images = signal<ReportImages | null>(null);
+  protected readonly exiftoolAvailable = computed(() => this.exiftool()?.available ?? true);
+  protected readonly removePersonalInfo = signal(true);
+  protected readonly removingPersonalInfo = computed(
+    () => this.exiftoolAvailable() && this.removePersonalInfo(),
+  );
+  /** Whether removal was asked for, but the copies still have location and owner info. */
+  protected readonly personalInfoKept = signal(false);
   protected readonly fileName = fileName;
   protected readonly megabytes = megabytes;
 
@@ -323,11 +355,12 @@ export class ReportProblem {
   private async prepareImages(): Promise<void> {
     this.working.set(true);
     try {
-      this.images.set(
-        await firstValueFrom(
-          this.api.prepareImages(this.groupId(), { remove_personal_info: false }),
-        ),
+      const removing = this.removingPersonalInfo();
+      const images = await firstValueFrom(
+        this.api.prepareImages(this.groupId(), { remove_personal_info: removing }),
       );
+      this.personalInfoKept.set(removing && !images.personal_info_removed);
+      this.images.set(images);
     } catch {
       this.error.set('Could not prepare the images.');
     } finally {

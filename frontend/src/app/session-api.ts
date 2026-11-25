@@ -11,6 +11,14 @@ export interface SessionSummary {
   providers: ProviderLineup;
   /** The absolute path of the config.toml framewise reads, whether or not it exists. */
   config_path: string;
+  exiftool: ExifToolStatus;
+}
+
+export interface ExifToolStatus {
+  /** Whether ExifTool is installed, which removing location and owner info from images needs. */
+  available: boolean;
+  /** How to install ExifTool on this computer. */
+  install_hint: string;
 }
 
 export interface SkippedFile {

@@ -46,6 +46,7 @@ const summary: SessionSummary = {
     aesthetics: { active: null, alternatives: [] },
   },
   config_path: '/Users/me/Library/Application Support/framewise/config.toml',
+  exiftool: { available: true, install_hint: 'Install it with: brew install exiftool.' },
 };
 
 const about: About = {

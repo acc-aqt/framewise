@@ -158,6 +158,7 @@
     <app-report-problem
       [groupId]="groupId"
       [frames]="reportingFrames()"
+      [exiftool]="summary.value()?.exiftool"
       (close)="reportingGroupId.set(null)"
     />
   }

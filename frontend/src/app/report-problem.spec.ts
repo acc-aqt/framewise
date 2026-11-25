@@ -335,12 +335,19 @@ describe('Report a problem', () => {
       await answer();
     }
 
-    async function answerImages(images: ReportImages = prepared): Promise<void> {
+    function removePersonalInfo(): HTMLInputElement {
+      return byTestId<HTMLInputElement>('report-remove-personal-info');
+    }
+
+    async function answerImages(
+      images: ReportImages = prepared,
+      removalAsked = true,
+    ): Promise<void> {
       const request = http.expectOne({
         method: 'POST',
         url: '/api/groups/7/problem-report/images',
       });
-      expect(request.request.body).toEqual({ remove_personal_info: false });
+      expect(request.request.body).toEqual({ remove_personal_info: removalAsked });
       request.flush(images);
       await settle();
       await settle();
@@ -380,6 +387,75 @@ describe('Report a problem', () => {
         large.querySelector('[data-testid="report-image-too-large"]')?.textContent?.trim(),
       ).toBe("Over GitHub's 10 MB limit, share it another way");
       expect(text('report-images-folder')).toContain('/data/framewise/problem-report-images');
+    });
+
+    describe('Remove location and owner info', () => {
+      it('is offered only with images, and ticked by default', async () => {
+        expect(removePersonalInfo()).toBeNull();
+
+        await tickIncludeImages();
+
+        expect(removePersonalInfo().checked).toBe(true);
+        expect(removePersonalInfo().disabled).toBe(false);
+        expect(text('report-remove-personal-info-label')).toBe('Remove location and owner info');
+      });
+
+      it('asks to remove it from the copies when ticked', async () => {
+        await tickIncludeImages();
+
+        await openOnGitHub();
+        await answerImages({ ...prepared, personal_info_removed: true });
+
+        expect(byTestId('report-personal-info-kept')).toBeNull();
+      });
+
+      it('copies the images unchanged when unticked', async () => {
+        await tickIncludeImages();
+        removePersonalInfo().click();
+        await settle();
+
+        await openOnGitHub();
+        await answerImages(prepared, false);
+
+        expect(byTestId('report-personal-info-kept')).toBeNull();
+      });
+
+      describe('without ExifTool', () => {
+        beforeEach(async () => {
+          fixture.componentRef.setInput('exiftool', {
+            available: false,
+            install_hint: 'Install it with: brew install exiftool.',
+          });
+          await tickIncludeImages();
+        });
+
+        it('is disabled and unticked, with the install hint and a note that the info stays', () => {
+          expect(removePersonalInfo().checked).toBe(false);
+          expect(removePersonalInfo().disabled).toBe(true);
+          expect(text('report-exiftool-missing')).toBe(
+            'Location and owner info will stay in the files, as removing it needs ExifTool. ' +
+              'Install it with: brew install exiftool.',
+          );
+        });
+
+        it('still copies the images', async () => {
+          await openOnGitHub();
+          await answerImages(prepared, false);
+
+          expect(all('report-image-file')).toHaveLength(2);
+        });
+      });
+
+      it('says so when the info could not be removed after all', async () => {
+        await tickIncludeImages();
+
+        await openOnGitHub();
+        await answerImages(prepared);
+
+        expect(text('report-personal-info-kept')).toBe(
+          'Location and owner info could not be removed, so it is still in these files.',
+        );
+      });
     });
 
     it('says so when the images could not be prepared', async () => {

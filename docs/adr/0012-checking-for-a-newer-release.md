@@ -16,7 +16,7 @@ The Changelog mixes entries for macOS, Linux and Windows, so "a newer Release ex
 4. **At most once a day.** The fetched text and the time it was fetched are kept in `update-check.json` in the data directory. A copy younger than 24 hours is used without fetching. A failed fetch keeps nothing, so the next start tries again.
 5. **An update is reported only when it brings the photographer something.** The newest Release must be strictly greater than the running version, compared by semver, and at least one Release newer than the running one must have an entry for the photographer's platform, by the Changelog's platform marker (ADR-0007). The Review UI gets every newer Release, newest first, filtered to the platform.
 6. **The update command follows the install.** A wheel, which carries its own Changelog, gets the `uvx` command with `framewise-cull@latest` on macOS or `"framewise-cull[portable]@latest"` on Linux and Windows. A checkout, whose Changelog sits at the root of the git clone, gets `git pull` followed by the platform's setup script.
-7. **It can be turned off**, with `check_for_updates = false` at the top level of `config.toml`, or `FRAMEWISE_NO_UPDATE_CHECK=1` in the environment. When off, nothing is fetched and no update is reported.
+7. **It can be turned off**, with `check_for_updates = false` at the top level of `config.toml`, or `FRAMEWISE_NO_UPDATE_CHECK=1` in the environment. When off, nothing is fetched and no update is reported. A `config.toml` that is not valid TOML counts as off, since it cannot say whether the photographer turned the check off; `framewise review` already stops on it with the error from reading the Providers and RAW-only settings.
 
 ## Considered Options
 

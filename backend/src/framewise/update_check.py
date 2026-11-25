@@ -56,14 +56,18 @@ def update_command(platform_token: str, checkout: bool) -> str:
 
 def update_check_enabled(config_path: Path) -> bool:
     """Off with `check_for_updates = false` at the top of the config file, or with
-    FRAMEWISE_NO_UPDATE_CHECK=1 in the environment."""
+    FRAMEWISE_NO_UPDATE_CHECK=1 in the environment. A missing file leaves it on. A config file
+    that is not valid TOML turns it off rather than raising, since it cannot tell whether the
+    photographer turned the check off, and the other config readers already report it."""
     if os.environ.get(OPT_OUT_VARIABLE, "") not in ("", "0"):
         return False
     try:
         with config_path.open("rb") as file:
             config = tomllib.load(file)
-    except (OSError, tomllib.TOMLDecodeError):
+    except FileNotFoundError:
         return True
+    except tomllib.TOMLDecodeError:
+        return False
     return config.get(CONFIG_KEY) is not False
 
 

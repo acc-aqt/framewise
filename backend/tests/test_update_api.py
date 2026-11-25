@@ -231,6 +231,20 @@ def test_update_checks_when_turned_on_in_the_config(
     assert update(client)["version"] == newer()
 
 
+def test_update_checks_nothing_when_the_config_is_not_valid_toml(
+    review, main_changelog, clock, isolated_data_dir
+):
+    main_changelog.text = changelog_text(release(newer(), "Faster grouping"))
+    config_path = isolated_data_dir / "config.toml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text("check_for_updates = no\n", encoding="utf-8")
+
+    client = review(fetch_changelog=main_changelog, clock=clock, config_path=config_path)
+
+    assert update(client) is None
+    assert main_changelog.fetches == 0
+
+
 def test_update_checks_nothing_when_turned_off_by_the_environment(
     review, main_changelog, clock, monkeypatch
 ):

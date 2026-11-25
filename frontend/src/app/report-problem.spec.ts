@@ -11,6 +11,14 @@ const built: ProblemReport = {
   body_fits_url: true,
 };
 
+class FakeClipboardItem {
+  constructor(private readonly items: Record<string, Promise<Blob>>) {}
+
+  getType(type: string): Promise<Blob> {
+    return this.items[type];
+  }
+}
+
 describe('Report a problem', () => {
   let fixture: ComponentFixture<ReportProblem>;
   let http: HttpTestingController;
@@ -29,7 +37,24 @@ describe('Report a problem', () => {
   afterEach(() => {
     http.verify();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
+
+  /** A clipboard that, like a browser's, takes an item's text only once its promise settles. */
+  function fakeClipboard() {
+    const clipboard = {
+      contents: null as string | null,
+      write: vi.fn(async (items: FakeClipboardItem[]) => {
+        clipboard.contents = await (await items[0].getType('text/plain')).text();
+      }),
+      writeText: vi.fn(async (value: string) => {
+        clipboard.contents = value;
+      }),
+    };
+    vi.stubGlobal('ClipboardItem', FakeClipboardItem);
+    Object.defineProperty(navigator, 'clipboard', { value: clipboard, configurable: true });
+    return clipboard;
+  }
 
   function element(): HTMLElement {
     return fixture.nativeElement as HTMLElement;
@@ -54,6 +79,12 @@ describe('Report a problem', () => {
     TestBed.tick();
   }
 
+  /** Lets every pending promise settle, however long its chain. */
+  async function finish(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve));
+    TestBed.tick();
+  }
+
   async function type(value: string): Promise<void> {
     const field = byTestId<HTMLTextAreaElement>('report-text');
     field.value = value;
@@ -66,15 +97,14 @@ describe('Report a problem', () => {
     await settle();
   }
 
-  async function answer(report: ProblemReport = built): Promise<void> {
+  async function answer(
+    report: ProblemReport = built,
+    text = 'DSCF0003 should be the Winner',
+  ): Promise<void> {
     const request = http.expectOne({ method: 'POST', url: '/api/groups/7/problem-report' });
-    expect(request.request.body).toEqual({
-      text: 'DSCF0003 should be the Winner',
-      include_state: true,
-    });
+    expect(request.request.body).toEqual({ text, include_state: true });
     request.flush(report);
-    await settle();
-    await settle();
+    await finish();
   }
 
   function actionsEnabled(): boolean[] {
@@ -120,6 +150,71 @@ describe('Report a problem', () => {
     expect(open).toHaveBeenLastCalledWith(built.issue_url, '_blank', 'noopener');
   });
 
+  describe('when the report is too long for the link', () => {
+    const longText = 'DSCF0003 is sharper and should be the Winner. '.repeat(200).trim();
+    const tooLong: ProblemReport = {
+      title: 'Judging problem: DSCF0003 is sharper and should be the Winner.',
+      body: `${longText}\n`,
+      issue_url: 'https://github.com/acc-aqt/framewise/issues/new?body=Paste+it+here',
+      body_fits_url: false,
+    };
+
+    it('copies the full report before opening the new-issue page and says to paste it', async () => {
+      const clipboard = fakeClipboard();
+      const opened: { url: string; clipboard: string | null }[] = [];
+      const tab = {
+        opener: null,
+        close: vi.fn(),
+        location: {
+          set href(url: string) {
+            opened.push({ url, clipboard: clipboard.contents });
+          },
+        },
+      };
+      vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
+      await type(longText);
+
+      await click('report-open-github');
+      expect(clipboard.write).toHaveBeenCalled();
+      await answer(tooLong, longText);
+
+      expect(opened).toEqual([{ url: tooLong.issue_url, clipboard: tooLong.body }]);
+      expect(text('report-status')).toBe(
+        "The report didn't fit in the link, so it's on your clipboard. Paste it into the new issue.",
+      );
+    });
+
+    it('says to save the report when it could not be copied', async () => {
+      const clipboard = fakeClipboard();
+      clipboard.write.mockRejectedValue(new DOMException('Not allowed', 'NotAllowedError'));
+      const tab = { opener: null, location: { href: '' }, close: vi.fn() };
+      vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
+      await type(longText);
+
+      await click('report-open-github');
+      await answer(tooLong, longText);
+
+      expect(tab.location.href).toBe(tooLong.issue_url);
+      expect(text('report-error')).toBe(
+        "The report didn't fit in the link and could not be copied. Save report and paste it into the new issue.",
+      );
+    });
+  });
+
+  it('leaves the clipboard alone when the whole report fits in the link', async () => {
+    const clipboard = fakeClipboard();
+    const tab = { opener: null, location: { href: '' }, close: vi.fn() };
+    vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
+    await type('DSCF0003 should be the Winner');
+
+    await click('report-open-github');
+    await answer();
+
+    expect(tab.location.href).toBe(built.issue_url);
+    expect(clipboard.contents).toBeNull();
+    expect(text('report-status')).toBe('');
+  });
+
   it('closes the opened tab and says so when the report could not be built', async () => {
     const tab = { opener: null, location: { href: '' }, close: vi.fn() };
     vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
@@ -129,14 +224,25 @@ describe('Report a problem', () => {
     http
       .expectOne('/api/groups/7/problem-report')
       .flush({ detail: 'Group not found' }, { status: 404, statusText: 'Not Found' });
-    await settle();
-    await settle();
+    await finish();
 
     expect(tab.close).toHaveBeenCalled();
     expect(text('report-error')).toBe('Could not build the report.');
   });
 
-  it('copies the report to the clipboard', async () => {
+  it('starts copying the report within the click, before the report is built', async () => {
+    const clipboard = fakeClipboard();
+    await type('DSCF0003 should be the Winner');
+
+    await click('report-copy');
+    expect(clipboard.write).toHaveBeenCalled();
+    await answer();
+
+    expect(clipboard.contents).toBe(built.body);
+    expect(text('report-status')).toBe('Report copied to the clipboard.');
+  });
+
+  it('copies the report as plain text where the browser has no clipboard items', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     await type('DSCF0003 should be the Winner');

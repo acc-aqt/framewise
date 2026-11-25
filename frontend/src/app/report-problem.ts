@@ -33,6 +33,26 @@ function megabytes(size: number): string {
 }
 
 /**
+ * Writes `text` to the clipboard, starting while the click that asked for it still allows that,
+ * as Safari requires, even though the text only arrives later.
+ */
+export function copyToClipboard(text: Promise<string>): Promise<void> {
+  const clipboard = navigator.clipboard;
+  if (typeof ClipboardItem === 'undefined' || !clipboard?.write) {
+    return text.then((value) => clipboard.writeText(value));
+  }
+  const blob = text.then((value) => new Blob([value], { type: 'text/plain' }));
+  return clipboard.write([new ClipboardItem({ 'text/plain': blob })]);
+}
+
+function succeeded(work: Promise<unknown>): Promise<boolean> {
+  return work.then(
+    () => true,
+    () => false,
+  );
+}
+
+/**
  * Lets the photographer describe a judging problem in one Group and send it as a Problem report:
  * on a prefilled GitHub new-issue page they submit themselves, or copied or saved to send any
  * other way.
@@ -252,11 +272,31 @@ export class ReportProblem {
 
   protected async openOnGitHub(): Promise<void> {
     // Opened before the report is built, while the click still allows opening a tab.
+    // The copy starts now for the same reason, and is dropped if the whole report fits the link.
     const tab = window.open('', '_blank');
-    const report = await this.build();
+    const building = this.build();
+    const copied = succeeded(
+      copyToClipboard(
+        building.then((report) =>
+          report !== null && !report.body_fits_url ? report.body : Promise.reject(),
+        ),
+      ),
+    );
+    const report = await building;
     if (report === null) {
       tab?.close();
       return;
+    }
+    if (!report.body_fits_url) {
+      if (await copied) {
+        this.status.set(
+          "The report didn't fit in the link, so it's on your clipboard. Paste it into the new issue.",
+        );
+      } else {
+        this.error.set(
+          "The report didn't fit in the link and could not be copied. Save report and paste it into the new issue.",
+        );
+      }
     }
     if (tab === null) {
       window.open(report.issue_url, '_blank', 'noopener');
@@ -285,12 +325,19 @@ export class ReportProblem {
   }
 
   protected async copyReport(): Promise<void> {
-    const report = await this.build();
-    if (report === null) {
+    // Started within the click, before the report is built, so the browser allows it.
+    const building = this.build();
+    const copied = succeeded(
+      copyToClipboard(building.then((report) => report?.body ?? Promise.reject())),
+    );
+    if ((await building) === null) {
       return;
     }
-    await navigator.clipboard.writeText(report.body);
-    this.status.set('Report copied to the clipboard.');
+    if (await copied) {
+      this.status.set('Report copied to the clipboard.');
+    } else {
+      this.error.set('Could not copy the report to the clipboard.');
+    }
   }
 
   protected async saveReport(): Promise<void> {

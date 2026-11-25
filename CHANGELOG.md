@@ -4,6 +4,7 @@ What changed in framewise, written for photographers. The Review UI shows this l
 
 ## Unreleased
 
+- **What's new** shows only the changes that apply to your platform, macOS, Linux or Windows. A Release with nothing for your platform still appears, saying there is nothing new on it.
 - On Linux and Windows, faces now get a face quality Score, as on macOS: a blurred, badly lit or turned-away face scores lower, so within a Group the Frame whose faces are clearer ranks higher. It needs the `portable` extra; its model, about 7 MB, is downloaded on first use or with `framewise models download`. <!-- linux windows -->
 - On Linux, Windows and macOS 14, Frames now get an aesthetics Score, as on macOS 15: a more pleasing image scores higher, which helps pick the Winner in a Group and the Keepers in a Session. It needs the `portable` extra; its model, about 180 MB, is downloaded on first use or with `framewise models download`.
 - Faces are read for their expression: a smile, eyes looking into the lens and a head facing the camera. Within a Group, a Frame where everyone faces and looks at the camera ranks above one where someone does not, and a smile adds a little; expression never makes a Frame a Reject. An open Group and the loupe show a badge on each face. Needs an `expression` Provider, which the portable MediaPipe Provider serves on macOS, Linux and Windows.

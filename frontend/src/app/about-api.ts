@@ -15,6 +15,11 @@ export interface ChangelogVersion {
 
 export interface About {
   version: string;
-  /** Newest first. Empty when the Changelog is missing or out of shape. */
+  /** The photographer's platform: macOS, Linux or Windows. */
+  platform: string;
+  /**
+   * Newest first, with only the entries for the platform. Empty when the Changelog is missing
+   * or out of shape.
+   */
   changelog: ChangelogVersion[];
 }

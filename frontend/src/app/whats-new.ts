@@ -103,6 +103,10 @@ function inlineParts(item: string): InlinePart[] {
             </h3>
             @if (!entry.version) {
               <p class="meta">On main, not in a Release yet.</p>
+            } @else if (!entry.sections.length) {
+              <p class="meta" data-testid="nothing-new-on-platform">
+                Nothing new on {{ about().platform }} in this release
+              </p>
             }
             @for (section of entry.sections; track $index) {
               @if (section.heading) {

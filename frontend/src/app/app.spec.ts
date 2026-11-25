@@ -50,6 +50,7 @@ const summary: SessionSummary = {
 
 const about: About = {
   version: '0.1.0',
+  platform: 'Windows',
   changelog: [
     {
       version: null,
@@ -326,6 +327,25 @@ describe('Review UI', () => {
       await openWhatsNew();
 
       expect(shownVersions()).toEqual(['0.1.0 2026-11-20']);
+    });
+
+    it('says so when a Release has nothing new on the platform', async () => {
+      await respond(summary, []);
+      await restartWith({
+        ...about,
+        version: '0.2.0',
+        changelog: [{ version: '0.2.0', date: '2026-12-01', sections: [] }, about.changelog[1]],
+      });
+
+      await openWhatsNew();
+
+      expect(shownVersions()).toEqual(['0.2.0 2026-12-01', '0.1.0 2026-11-20']);
+      const [emptied, released] = all('[data-testid="changelog-version"]', panel());
+      expect(text('[data-testid="nothing-new-on-platform"]', emptied)).toBe(
+        'Nothing new on Windows in this release',
+      );
+      expect(all('ul', emptied)).toEqual([]);
+      expect(all('[data-testid="nothing-new-on-platform"]', released)).toEqual([]);
     });
 
     it('says so when there are no release notes', async () => {

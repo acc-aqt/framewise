@@ -50,6 +50,7 @@ const summary: SessionSummary = {
     aesthetics: { active: null, alternatives: [] },
   },
   config_path: '/Users/me/Library/Application Support/framewise/config.toml',
+  exiftool: { available: true, install_hint: 'Install it with: brew install exiftool.' },
 };
 
 const about: About = {
@@ -2181,7 +2182,8 @@ describe('Review UI', () => {
         expect(rows()).toContain('Trash Group');
         expect(rows()).toContain('Trash selected Groups');
         expect(rows()).toContain("What's new");
-        expect(rows().length).toBe(33);
+        expect(rows()).toContain('Report a problem');
+        expect(rows().length).toBe(34);
       });
 
       it('names keys the Windows way outside macOS', async () => {
@@ -3464,6 +3466,82 @@ describe('Review UI', () => {
         expect(paletteCommand(label)).toBeUndefined();
         await press('Escape');
       }
+    });
+  });
+
+  describe('Report a problem', () => {
+    const groups = (): Group[] => [
+      group(1, [frame(1, 'jpg-only', { verdict: 'winner' }), frame(2, 'jpg-only')]),
+      group(3, [frame(3, 'jpg-only', { verdict: 'winner' })]),
+    ];
+    const dialog = () => all('[data-testid="report-problem"]')[0];
+
+    async function openGroup(index: number): Promise<void> {
+      await respond(summary, groups());
+      all('[data-testid="group-tile"]')[index].click();
+      await fixture.whenStable();
+    }
+
+    async function press(key: string, target: EventTarget = document): Promise<void> {
+      target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+      await settle();
+    }
+
+    async function sendReport(): Promise<void> {
+      const field = dialog().querySelector<HTMLTextAreaElement>('textarea')!;
+      field.value = 'Wrong Winner';
+      field.dispatchEvent(new Event('input'));
+      await settle();
+      vi.spyOn(window, 'open').mockReturnValue(null);
+      dialog().querySelector<HTMLButtonElement>('[data-testid="report-open-github"]')!.click();
+      await settle();
+    }
+
+    it('opens from the Group view header and reports on that Group', async () => {
+      await openGroup(1);
+
+      all('[data-testid="report-problem-button"]')[0].click();
+      await settle();
+      await sendReport();
+
+      expect(dialog()).toBeDefined();
+      http.expectOne({ method: 'POST', url: '/api/groups/3/problem-report' });
+    });
+
+    it('opens from the command palette while a Group is open', async () => {
+      await openGroup(0);
+
+      await runFromPalette('Report a problem');
+      await sendReport();
+
+      http.expectOne({ method: 'POST', url: '/api/groups/1/problem-report' });
+    });
+
+    it("offers the open Group's Frames as images", async () => {
+      await openGroup(0);
+      all('[data-testid="report-problem-button"]')[0].click();
+      await settle();
+
+      dialog().querySelector<HTMLInputElement>('[data-testid="report-include-images"]')!.click();
+      await settle();
+
+      expect(
+        [...dialog().querySelectorAll('[data-testid="report-image-frame"]')].map((row) =>
+          row.textContent?.trim(),
+        ),
+      ).toEqual(['DSCF0001.JPG', 'DSCF0002.JPG']);
+    });
+
+    it('lets the photographer type without reviewing, and closes on Escape', async () => {
+      await openGroup(0);
+      all('[data-testid="report-problem-button"]')[0].click();
+      await settle();
+
+      await press('p', dialog().querySelector('textarea')!);
+      await press('Escape');
+
+      expect(dialog()).toBeUndefined();
+      expect(all('[data-testid="group-view"]').length).toBe(1);
     });
   });
 

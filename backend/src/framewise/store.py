@@ -6,7 +6,7 @@ import uuid
 from array import array
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Literal
 
 from framewise.analyzer import (
@@ -147,6 +147,11 @@ class Frame:
         preview is extracted. The pixels analyzed, its Analysis source, are
         SessionStore.analysis_image."""
         return self.jpg_path if self.jpg_path is not None else self.main_path
+
+
+def main_file_name(main_path: str) -> str:
+    """A Frame's main file name, without its folder."""
+    return PurePosixPath(main_path).name
 
 
 @dataclass(frozen=True)

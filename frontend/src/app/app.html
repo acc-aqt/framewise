@@ -125,6 +125,7 @@
         (move)="moveFrame($event.frame, $event.by)"
         (resetGrouping)="resetGrouping(group)"
         (trash)="askToTrash($event)"
+        (reportProblem)="reportingGroupId.set(group.id)"
       />
       @if (loupeZoom(); as zoom) {
         @if (loupeFrames().length > 0) {
@@ -155,6 +156,14 @@
       [groupCount]="trash.fromGrid?.groupCount ?? null"
       (confirm)="confirmTrash()"
       (cancel)="trashing.set(null)"
+    />
+  }
+  @if (reportingGroupId(); as groupId) {
+    <app-report-problem
+      [groupId]="groupId"
+      [frames]="reportingFrames()"
+      [exiftool]="summary.value()?.exiftool"
+      (close)="reportingGroupId.set(null)"
     />
   }
   @if (paletteOpen() && paletteAvailable()) {

@@ -4,6 +4,7 @@ What changed in framewise, written for photographers. The Review UI shows this l
 
 ## Unreleased
 
+- When framewise judges a Group wrongly, **Report a problem** in the Group's header or the command palette lets you say what you expected instead and send it as a **Problem report**. Open on GitHub shows a prefilled new issue that you can edit before you submit it, and nothing is sent until you do. A Problem report too long to prefill the issue is copied to your clipboard, and the new issue asks you to paste it there. Tick **Include images** to have framewise copy the images of the Group's Frames, exactly as it judged them, into a folder it opens for you, so you can drag them into the issue; framewise never uploads them, and it flags any image too large for GitHub. **Remove location and owner info**, on by default, takes GPS and place names, camera serial numbers, owner and artist out of those copies and leaves your originals alone; it needs ExifTool. Without a GitHub account, copy the Problem report or save it as a Markdown file and send it any way you like.
 - **Rating write-back** now writes a **RAW-only Frame**'s stars and color label like any RAW's: into a DNG itself, and into an `.xmp` sidecar for other RAWs. Trash moves the RAW and its sidecar.
 
 ## 0.3.0 — 2026-11-25

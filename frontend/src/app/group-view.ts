@@ -138,6 +138,16 @@ function writePinnedWinnerCollapsed(collapsed: boolean): void {
         <app-icon name="trash" [size]="14" />
         Trash Group
       </button>
+      <button
+        type="button"
+        class="btn btn-ghost"
+        data-testid="report-problem-button"
+        [appTooltip]="reportProblemTooltip"
+        (click)="reportProblem.emit()"
+      >
+        <app-icon name="flag" [size]="14" />
+        Report a problem
+      </button>
       <span class="keys">
         @for (hint of shortcutHints; track hint.label) {
           <span class="hint"
@@ -435,6 +445,8 @@ export class GroupView {
   readonly resetGrouping = output();
   /** Frames to move to the Trash, once the photographer confirms. */
   readonly trash = output<Frame[]>();
+  /** Asks to report a judging problem in the Group. */
+  readonly reportProblem = output();
 
   protected readonly breakdown = scoreBreakdown;
   protected readonly shortcutHints = SHORTCUT_HINTS;
@@ -457,6 +469,7 @@ export class GroupView {
   protected readonly moveNextTooltip = commandById('move-next');
   protected readonly makeWinnerTooltip = commandById('make-winner');
   protected readonly trashGroupTooltip = commandById('trash-group');
+  protected readonly reportProblemTooltip = commandById('report-problem');
   protected readonly pinnedWinnerToggleLabel = computed(() =>
     this.pinnedWinnerCollapsed() ? 'Show Winner' : 'Hide Winner',
   );

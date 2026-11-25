@@ -23,11 +23,22 @@ from framewise.changelog import (
     for_platform,
     read_changelog,
 )
-from framewise.exiftool import ExifTool
+from framewise.exiftool import ExifTool, exiftool_install_hint, find_exiftool
 from framewise.judge import DEFAULT_KEEPER_BUDGET, FaceCheck, Judgement, Proposal, Verdict, judge
 from framewise.lightroom import read_label_set
+from framewise.problem_report import GroupState, build_problem_report, group_state
+from framewise.report_images import (
+    FOLDER_NAME,
+    PreviousImagesInUse,
+    RevealFolder,
+    SourceImage,
+    copy_report_images,
+    remove_personal_info,
+    report_image,
+    reveal_folder,
+)
 from framewise.review import SessionAnalysis, resolve_config_path, resolve_data_dir
-from framewise.store import AnalyzedFrame, Frame, Override, SessionStore
+from framewise.store import AnalyzedFrame, Frame, Override, SessionStore, main_file_name
 from framewise.trash import MoveToTrash, trash_frames
 from framewise.update_check import (
     Clock,
@@ -69,6 +80,19 @@ class FrameMove(BaseModel):
     to_frame_id: int
 
 
+class ProblemReportRequest(BaseModel):
+    text: str
+    """What the photographer expected instead. It may not be blank."""
+    include_state: bool = True
+    """Whether the report carries the Group's state."""
+
+
+class ReportImagesRequest(BaseModel):
+    remove_personal_info: bool = False
+    """Whether to remove location and owner info from the copies. Without ExifTool the copies
+    keep it, and the response says so."""
+
+
 class SessionChange(BaseModel):
     keeper_budget: float = Field(ge=0, le=1)
     """The share of the Session's Frames the photographer roughly wants to keep."""
@@ -84,6 +108,8 @@ def create_app(
     config_path: Path,
     data_dir: Path | None = None,
     move_to_trash: MoveToTrash = send2trash,
+    reveal_folder: RevealFolder = reveal_folder,
+    find_exiftool: Callable[[], str | None] = find_exiftool,
     changelog_path: Path | None = None,
     platform: str = sys.platform,
     fetch_changelog: FetchChangelog = fetch_main_changelog,
@@ -103,7 +129,9 @@ def create_app(
         )
     _add_update(app, update_check)
     providers_json = {capability: asdict(lineup) for capability, lineup in provider_lineup.items()}
-    write_back = RatingWriteBack(store, ExifTool())
+    exiftool_executable = find_exiftool()
+    exiftool = ExifTool(exiftool_executable)
+    write_back = RatingWriteBack(store, exiftool)
 
     def _groups() -> list[list[AnalyzedFrame]]:
         return analysis.groups(store.group_overrides())
@@ -152,6 +180,10 @@ def create_app(
             "keeper_budget": _keeper_budget(),
             "providers": providers_json,
             "config_path": str(config_path),
+            "exiftool": {
+                "available": exiftool_executable is not None,
+                "install_hint": exiftool_install_hint(sys.platform),
+            },
         }
 
     @app.get("/api/progress")
@@ -187,6 +219,77 @@ def create_app(
             for group in groups
         ]
 
+    @app.post("/api/groups/{group_id}/problem-report")
+    def problem_report(group_id: int, request: ProblemReportRequest) -> dict:
+        """Builds a Problem report on the Group whose first Frame has `group_id`, as a prefilled
+        GitHub new-issue page the photographer reviews and submits themselves."""
+        group = _known_group(group_id)
+        if not request.text.strip():
+            raise HTTPException(status_code=422, detail="Say what you expected instead")
+        state = reported_group_state(group) if request.include_state else None
+        return asdict(build_problem_report(request.text, state))
+
+    def reported_group_state(group: list[AnalyzedFrame]) -> GroupState:
+        groups, overrides, proposal = reviewed_proposal()
+        return group_state(
+            group,
+            proposal=proposal,
+            own_proposal=judge(groups, {}, _keeper_budget()),
+            shown_verdicts={
+                analyzed.frame.id: _reviewed_verdict(
+                    proposal[analyzed.frame.id], overrides.get(analyzed.frame.main_path)
+                )
+                for analyzed in group
+            },
+            fixed_paths=store.group_overrides(),
+            own_groups=analysis.groups(None),
+            provider_lineup=provider_lineup,
+            keeper_budget=_keeper_budget(),
+            frames_pending=analysis.progress().frames_left,
+        )
+
+    @app.post("/api/groups/{group_id}/problem-report/images")
+    def problem_report_images(group_id: int, request: ReportImagesRequest) -> dict:
+        """Copies the Analysis sources of the Group whose first Frame has `group_id` into a
+        folder in the data folder, replacing the previous report's, and opens it in the file
+        manager for the photographer to attach to the issue. A Frame whose Analysis source is
+        missing or outside the Session folder and preview cache is named under `skipped`."""
+        sources = []
+        skipped = []
+        for analyzed in _known_group(group_id):
+            frame = analyzed.frame
+            path = _analysis_source(frame)
+            if path is None:
+                skipped.append(main_file_name(frame.main_path))
+            else:
+                sources.append(SourceImage(frame.main_path, path, frame.jpg_path is None))
+        folder = store.preview_dir.parent / FOLDER_NAME
+        try:
+            files = copy_report_images(sources, folder)
+        except PreviousImagesInUse:
+            raise HTTPException(
+                status_code=409,
+                detail="framewise could not replace the previous report's images. "
+                "Close any of them that are open and try again.",
+            ) from None
+        removed = False
+        if request.remove_personal_info and exiftool_executable is not None:
+            removed = remove_personal_info(exiftool, [folder / file.name for file in files])
+            files = [report_image(folder / file.name) for file in files]
+        reveal_folder(folder)
+        return {
+            "folder": str(folder),
+            "files": [asdict(file) for file in files],
+            "personal_info_removed": removed,
+            "skipped": skipped,
+        }
+
+    def _known_group(group_id: int) -> list[AnalyzedFrame]:
+        group = next((group for group in _groups() if group[0].frame.id == group_id), None)
+        if group is None:
+            raise HTTPException(status_code=404, detail="Group not found")
+        return group
+
     @app.patch("/api/session")
     def change_session(change: SessionChange) -> dict:
         store.save_keeper_budget(change.keeper_budget)
@@ -213,14 +316,22 @@ def create_app(
     @app.get("/api/frames/{frame_id}/image")
     def frame_image(frame_id: int) -> FileResponse:
         """The Frame's Analysis source: its JPG, or a RAW-only Frame's embedded preview."""
-        path = store.analysis_image(_known_frame(frame_id))
+        path = _analysis_source(_known_frame(frame_id))
+        if path is None:
+            raise HTTPException(status_code=404, detail="Image not found")
+        return FileResponse(path, media_type="image/jpeg")
+
+    def _analysis_source(frame: Frame) -> Path | None:
+        """The Frame's Analysis source, or None unless it is a plain file in the Session folder
+        or the preview cache."""
+        path = store.analysis_image(frame)
         resolved = path.resolve()
         inside = resolved.is_relative_to(store.root) or resolved.is_relative_to(
             store.preview_dir.resolve()
         )
         if path.is_symlink() or not path.is_file() or not inside:
-            raise HTTPException(status_code=404, detail="Image not found")
-        return FileResponse(path, media_type="image/jpeg")
+            return None
+        return path
 
     def _known_frame(frame_id: int) -> Frame:
         frame = store.frame(frame_id)

@@ -24,6 +24,7 @@ import { Loupe, LoupeZoom } from './loupe';
 import { OverrideApi } from './override-api';
 import { findWinner, isFiltering, NO_FILTER, ProposalFilter, stillSelected } from './proposal';
 import { ProposalFilters } from './proposal-filters';
+import { ReportProblem } from './report-problem';
 import { AnalysisProgress, Frame, Group, OverrideChange, SessionSummary } from './session-api';
 import { SessionChangeApi } from './session-change-api';
 import { SessionPicker } from './session-picker';
@@ -74,6 +75,7 @@ interface PendingTrash {
     KeeperBudget,
     Loupe,
     ProposalFilters,
+    ReportProblem,
     SessionPicker,
     SessionSummaryView,
     Tooltip,
@@ -194,8 +196,17 @@ export class App {
   protected readonly trashError = signal<string | null>(null);
   protected readonly paletteOpen = signal(false);
   protected readonly whatsNewOpen = signal(false);
+  /** The Group a Problem report is being written on, by its first Frame's id. */
+  protected readonly reportingGroupId = signal<number | null>(null);
+  protected readonly reportingFrames = computed(
+    () => this.groups().find((group) => group.id === this.reportingGroupId())?.frames ?? [],
+  );
   protected readonly paletteAvailable = computed(
-    () => !this.noSession() && !this.writingBack() && this.trashing() === null,
+    () =>
+      !this.noSession() &&
+      !this.writingBack() &&
+      this.trashing() === null &&
+      this.reportingGroupId() === null,
   );
   protected readonly commands = COMMANDS;
   protected readonly commandContext = computed<CommandContext>(() => {
@@ -277,6 +288,12 @@ export class App {
     if (this.trashing() !== null) {
       if (event.key === 'Escape') {
         this.trashing.set(null);
+      }
+      return;
+    }
+    if (this.reportingGroupId() !== null) {
+      if (event.key === 'Escape') {
+        this.reportingGroupId.set(null);
       }
       return;
     }
@@ -472,6 +489,8 @@ export class App {
         return this.askToTrash([frame]);
       case 'trashGroup':
         return this.askToTrash(this.openGroup()!.frames);
+      case 'reportProblem':
+        return this.reportingGroupId.set(this.openGroup()!.id);
       case 'makeWinner':
         return frame.verdict === 'winner'
           ? undefined

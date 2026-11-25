@@ -305,16 +305,37 @@ def trash(tmp_path: Path) -> FakeTrash:
     return FakeTrash(tmp_path / "Trash")
 
 
+class FakeRevealFolder:
+    """Stands in for opening a folder in the OS file manager: records the folders."""
+
+    def __init__(self):
+        self.revealed: list[Path] = []
+
+    def __call__(self, folder: Path) -> None:
+        self.revealed.append(folder)
+
+
+@pytest.fixture
+def reveal() -> FakeRevealFolder:
+    return FakeRevealFolder()
+
+
 def _no_trash(path: Path) -> None:
     raise AssertionError(f"a test not about Trash trashed {path}")
 
 
+def _no_reveal(folder: Path) -> None:
+    raise AssertionError(f"a test not about revealing folders revealed {folder}")
+
+
 def review_app(store, analysis: SessionAnalysis, *args, **app_options) -> TestClient:
     """The Review UI, with a stand-in Provider lineup and config path for the tests that are
-    not about them. Tests that trash Frames pass a FakeTrash, so none reaches the OS Trash."""
+    not about them. Tests that trash Frames pass a FakeTrash, so none reaches the OS Trash, and
+    tests that reveal a folder pass a FakeRevealFolder, so no file manager opens."""
     app_options.setdefault("provider_lineup", {})
     app_options.setdefault("config_path", Path("config.toml"))
     app_options.setdefault("move_to_trash", _no_trash)
+    app_options.setdefault("reveal_folder", _no_reveal)
     return TestClient(create_app(store, analysis, *args, **app_options))
 
 

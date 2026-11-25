@@ -147,6 +147,10 @@ _Avoid_: Delete, remove, discard
 The explicit, opt-in and reversible step that writes the reviewed Verdicts into the Frames' files so Lightroom Classic can read them.
 _Avoid_: Export, sync, apply
 
+**Problem report**:
+A description of a judging problem in one Group, written by the photographer, optionally with the Group's state and its Frames' Analysis sources attached. It becomes a GitHub issue only once the photographer submits it.
+_Avoid_: Bug report, feedback, ticket
+
 ## Releases
 
 **Release**:

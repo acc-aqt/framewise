@@ -11,6 +11,14 @@ export interface SessionSummary {
   providers: ProviderLineup;
   /** The absolute path of the config.toml framewise reads, whether or not it exists. */
   config_path: string;
+  exiftool: ExifToolStatus;
+}
+
+export interface ExifToolStatus {
+  /** Whether ExifTool is installed, which removing location and owner info from images needs. */
+  available: boolean;
+  /** How to install ExifTool on this computer. */
+  install_hint: string;
 }
 
 export interface SkippedFile {
@@ -163,4 +171,34 @@ export interface WriteBackProgress {
 export interface WriteBackResult {
   written: string[];
   failed: { path: string; error: string }[];
+}
+
+/** A Problem report on one Group, built for a prefilled GitHub new-issue page. */
+export interface ProblemReport {
+  title: string;
+  /** The full Markdown report, for copying and saving. */
+  body: string;
+  /** The GitHub new-issue page, prefilled with the judging-problem template, title and body. */
+  issue_url: string;
+  /** Whether `issue_url` carries the whole body. */
+  body_fits_url: boolean;
+}
+
+/** A Group's Analysis sources, copied into a local folder for the photographer to attach. */
+export interface ReportImages {
+  /** The folder in framewise's data folder that holds the copies, opened in the file manager. */
+  folder: string;
+  files: ReportImage[];
+  /** Whether location and owner info was removed from the copies. */
+  personal_info_removed: boolean;
+  /** The main file names of the Frames whose Analysis source could not be found or used. */
+  skipped: string[];
+}
+
+export interface ReportImage {
+  name: string;
+  /** In bytes. */
+  size: number;
+  /** Whether the file is over GitHub's 10 MB image limit, so it has to be shared another way. */
+  too_large: boolean;
 }

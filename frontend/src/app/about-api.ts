@@ -15,6 +15,22 @@ export interface ChangelogVersion {
 
 export interface About {
   version: string;
-  /** Newest first. Empty when the Changelog is missing or out of shape. */
+  /** The photographer's platform: macOS, Linux or Windows. */
+  platform: string;
+  /**
+   * Newest first, with only the entries for the platform. Empty when the Changelog is missing
+   * or out of shape.
+   */
   changelog: ChangelogVersion[];
+}
+
+export interface UpdateCheck {
+  /** Null when there is no update to show, including when the check is off or failed. */
+  available: {
+    version: string;
+    /** The exact command to update this install on this platform. */
+    command: string;
+    /** Every Release newer than the running one, newest first, filtered to the platform. */
+    releases: ChangelogVersion[];
+  } | null;
 }

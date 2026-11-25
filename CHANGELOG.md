@@ -4,7 +4,9 @@ What changed in framewise, written for photographers. The Review UI shows this l
 
 ## Unreleased
 
-- On Linux and Windows, faces now get a face quality Score, as on macOS: a blurred, badly lit or turned-away face scores lower, so within a Group the Frame whose faces are clearer ranks higher. It needs the `portable` extra; its model, about 7 MB, is downloaded on first use or with `framewise models download`.
+- When a newer Release has changes for your platform, a ring next to the version in the Review UI says an update is available. **What's new** then opens with the new version, the command to update your install, ready to copy, and the changes of every newer Release. Dismiss the ring until the next Release. framewise checks at most once a day; turn the check off with `check_for_updates = false` in `config.toml` or `FRAMEWISE_NO_UPDATE_CHECK=1`.
+- **What's new** shows only the changes that apply to your platform, macOS, Linux or Windows. A Release with nothing for your platform still appears, saying there is nothing new on it.
+- On Linux and Windows, faces now get a face quality Score, as on macOS: a blurred, badly lit or turned-away face scores lower, so within a Group the Frame whose faces are clearer ranks higher. It needs the `portable` extra; its model, about 7 MB, is downloaded on first use or with `framewise models download`. <!-- linux windows -->
 - On Linux, Windows and macOS 14, Frames now get an aesthetics Score, as on macOS 15: a more pleasing image scores higher, which helps pick the Winner in a Group and the Keepers in a Session. It needs the `portable` extra; its model, about 180 MB, is downloaded on first use or with `framewise models download`.
 - Faces are read for their expression: a smile, eyes looking into the lens and a head facing the camera. Within a Group, a Frame where everyone faces and looks at the camera ranks above one where someone does not, and a smile adds a little; expression never makes a Frame a Reject. An open Group and the loupe show a badge on each face. Needs an `expression` Provider, which the portable MediaPipe Provider serves on macOS, Linux and Windows.
 - Someone who glances back over their shoulder into the lens counts as looking at the camera, whichever way their head is turned. A Frame where they do ranks above one where they look away.
@@ -17,8 +19,8 @@ What changed in framewise, written for photographers. The Review UI shows this l
 
 ## 0.2.0 — 2026-11-19
 
-- framewise runs on Windows x64 as a preview, with the same portable Providers as on Linux. Set it up with `scripts\setup.ps1`. **Rating write-back** uses the color label names from Lightroom Classic's preferences there too.
-- On Windows and Linux, key hints say `Alt+` and `Delete` instead of the Mac symbols.
+- framewise runs on Windows x64 as a preview, with the same portable Providers as on Linux. Set it up with `scripts\setup.ps1`. **Rating write-back** uses the color label names from Lightroom Classic's preferences there too. <!-- windows -->
+- On Windows and Linux, key hints say `Alt+` and `Delete` instead of the Mac symbols. <!-- linux windows -->
 - framewise can be installed as one package with the Review UI built in. A machine that runs it from that package with `uvx` needs only ExifTool, with no git clone, Node.js or setup script.
 - Each Release is published on PyPI as `framewise-cull` and attached to its GitHub Release. Run it with `uvx --python 3.13 --from framewise-cull framewise review`, on Linux and Windows with `framewise-cull[portable]` instead. To update, add `@latest` at the end, such as `framewise-cull[portable]@latest`.
 - Without ExifTool, framewise stops at start-up with one message that says how to install it, instead of failing later at **Rating write-back**.
@@ -32,5 +34,5 @@ What changed in framewise, written for photographers. The Review UI shows this l
 - Review with Lightroom Classic's shortcuts. Change any Verdict with an Override, and fix wrong grouping by splitting, moving or merging Groups. Overrides survive re-analysis.
 - Trash junk Frames or whole Groups. Their files go to the OS Trash and are never deleted outright.
 - **Rating write-back** writes your Verdicts as stars and color labels that Lightroom Classic reads, after showing a dry run, and can be undone.
-- Runs on macOS with Apple Vision, and on Linux with the portable Providers.
+- Runs on macOS with Apple Vision, and on Linux with the portable Providers. <!-- macos linux -->
 - The Review UI shows which version of framewise is running, next to its name. Click it, or choose **What's new** in the command palette, to read this list. After an update, a dot on the version marks what changed until you open it.

@@ -12,7 +12,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { Observable } from 'rxjs';
-import { About } from './about-api';
+import { About, UpdateCheck } from './about-api';
 import { AnalysisProgressView } from './analysis-progress';
 import { AnalysisSettings } from './analysis-settings';
 import { Disconnected } from './disconnected';
@@ -86,6 +86,11 @@ interface PendingTrash {
 })
 export class App {
   protected readonly about = httpResource<About>(() => '/api/about');
+  // Requested apart from /api/about, whose answer the update check must never hold up.
+  protected readonly update = httpResource<UpdateCheck>(() => '/api/update');
+  protected readonly availableUpdate = computed(() =>
+    this.update.hasValue() ? this.update.value().available : null,
+  );
   protected readonly summary = httpResource<SessionSummary>(() => '/api/session');
   // framewise started without a Session folder, so the photographer chooses one here.
   protected readonly noSession = computed(() => {

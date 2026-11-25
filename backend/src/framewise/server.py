@@ -1,4 +1,6 @@
+import sys
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import asdict, replace
 from importlib.metadata import version
@@ -14,13 +16,26 @@ from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from framewise.analyzer import ProviderLineup
-from framewise.changelog import read_changelog
+from framewise.changelog import (
+    PLATFORM_NAMES,
+    ChangelogVersion,
+    changelog_platform,
+    for_platform,
+    read_changelog,
+)
 from framewise.exiftool import ExifTool
 from framewise.judge import DEFAULT_KEEPER_BUDGET, FaceCheck, Judgement, Proposal, Verdict, judge
 from framewise.lightroom import read_label_set
-from framewise.review import SessionAnalysis
+from framewise.review import SessionAnalysis, resolve_config_path, resolve_data_dir
 from framewise.store import AnalyzedFrame, Frame, Override, SessionStore
 from framewise.trash import MoveToTrash, trash_frames
+from framewise.update_check import (
+    Clock,
+    FetchChangelog,
+    UpdateCheck,
+    fetch_main_changelog,
+    is_checkout,
+)
 from framewise.write_back import (
     FileChange,
     Rating,
@@ -67,11 +82,26 @@ def create_app(
     *,
     provider_lineup: ProviderLineup,
     config_path: Path,
+    data_dir: Path | None = None,
     move_to_trash: MoveToTrash = send2trash,
     changelog_path: Path | None = None,
+    platform: str = sys.platform,
+    fetch_changelog: FetchChangelog = fetch_main_changelog,
+    clock: Clock = time.time,
+    update_check: UpdateCheck | None = None,
 ) -> FastAPI:
     app = FastAPI(title="framewise")
-    _add_about(app, changelog_path)
+    _add_about(app, changelog_path, platform)
+    if update_check is None:
+        update_check = _start_update_check(
+            platform,
+            changelog_path,
+            config_path,
+            data_dir or resolve_data_dir(),
+            fetch_changelog,
+            clock,
+        )
+    _add_update(app, update_check)
     providers_json = {capability: asdict(lineup) for capability, lineup in provider_lineup.items()}
     write_back = RatingWriteBack(store, ExifTool())
 
@@ -351,16 +381,30 @@ class SessionPicker:
     def __init__(
         self,
         choose_folder: Callable[[], Path | None],
-        start_session: Callable[[Path], FastAPI],
+        start_session: Callable[[Path, UpdateCheck], FastAPI],
         ui_dir: Path | None = None,
         changelog_path: Path | None = None,
+        platform: str = sys.platform,
+        config_path: Path | None = None,
+        data_dir: Path | None = None,
+        fetch_changelog: FetchChangelog = fetch_main_changelog,
+        clock: Clock = time.time,
     ):
         self._choose_folder = choose_folder
         self._start_session = start_session
         self._session_app: FastAPI | None = None
         self._lock = threading.Lock()
         self._picker_app = FastAPI(title="framewise")
-        _add_about(self._picker_app, changelog_path)
+        _add_about(self._picker_app, changelog_path, platform)
+        self._update_check = _start_update_check(
+            platform,
+            changelog_path,
+            config_path or resolve_config_path(),
+            data_dir or resolve_data_dir(),
+            fetch_changelog,
+            clock,
+        )
+        _add_update(self._picker_app, self._update_check)
 
         @self._picker_app.get("/api/session")
         def no_session() -> None:
@@ -373,7 +417,7 @@ class SessionPicker:
                     folder = self._choose_folder()
                     if folder is None:
                         return {"opened": False}
-                    self._session_app = self._start_session(folder)
+                    self._session_app = self._start_session(folder, self._update_check)
             return {"opened": True}
 
         _mount_review_ui(self._picker_app, ui_dir)
@@ -382,13 +426,61 @@ class SessionPicker:
         await (self._session_app or self._picker_app)(scope, receive, send)
 
 
-def _add_about(app: FastAPI, changelog_path: Path | None) -> None:
+def _add_about(app: FastAPI, changelog_path: Path | None, platform: str) -> None:
+    platform_token = changelog_platform(platform)
+
     @app.get("/api/about")
     def about() -> dict:
+        changelog = for_platform(read_changelog(changelog_path), platform_token)
         return {
             "version": version("framewise-cull"),
-            "changelog": [asdict(entry) for entry in read_changelog(changelog_path)],
+            "platform": PLATFORM_NAMES[platform_token],
+            "changelog": [_changelog_version_json(entry) for entry in changelog],
         }
+
+
+def _start_update_check(
+    platform: str,
+    changelog_path: Path | None,
+    config_path: Path,
+    data_dir: Path,
+    fetch_changelog: FetchChangelog,
+    clock: Clock,
+) -> UpdateCheck:
+    return UpdateCheck(
+        changelog_platform(platform),
+        is_checkout(changelog_path),
+        fetch_changelog,
+        clock,
+        data_dir,
+        config_path,
+    )
+
+
+def _add_update(app: FastAPI, update_check: UpdateCheck) -> None:
+    @app.get("/api/update")
+    def update() -> dict:
+        found = update_check.update()
+        if found is None:
+            return {"available": None}
+        return {
+            "available": {
+                "version": found.version,
+                "command": found.command,
+                "releases": [_changelog_version_json(entry) for entry in found.releases],
+            }
+        }
+
+
+def _changelog_version_json(entry: ChangelogVersion) -> dict:
+    return {
+        "version": entry.version,
+        "date": entry.date,
+        "sections": [
+            {"heading": section.heading, "items": [item.text for item in section.items]}
+            for section in entry.sections
+        ],
+    }
 
 
 def _mount_review_ui(app: FastAPI, ui_dir: Path | None) -> None:

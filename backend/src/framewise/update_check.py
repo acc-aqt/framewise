@@ -31,14 +31,22 @@ def fetch_main_changelog() -> str:
         return response.read().decode("utf-8")
 
 
-def update_command(platform: str, checkout: bool) -> str:
+def is_checkout(changelog_path: Path | None) -> bool:
+    """Whether framewise runs from a clone, whose Changelog sits at the root of the git checkout,
+    rather than from a wheel, which carries its own."""
+    return changelog_path is not None and (changelog_path.parent / ".git").exists()
+
+
+def update_command(platform_token: str, checkout: bool) -> str:
     """The command that updates framewise as it was installed, as the README gives it."""
-    if checkout and platform == "windows":
+    if checkout and platform_token == "windows":
         return r"git pull; powershell -ExecutionPolicy Bypass -File scripts\setup.ps1"
     if checkout:
         return "git pull && scripts/setup.sh"
     package = (
-        "framewise-cull@latest" if platform == "macos" else '"framewise-cull[portable]@latest"'
+        "framewise-cull@latest"
+        if platform_token == "macos"
+        else '"framewise-cull[portable]@latest"'
     )
     return f"uvx --python 3.13 --from {package} framewise review"
 
@@ -70,15 +78,15 @@ class UpdateCheck:
 
     def __init__(
         self,
-        platform: str,
+        platform_token: str,
         checkout: bool,
         fetch_changelog: FetchChangelog,
         clock: Clock,
         data_dir: Path,
         config_path: Path,
     ):
-        self._platform = platform
-        self._command = update_command(platform, checkout)
+        self._platform_token = platform_token
+        self._command = update_command(platform_token, checkout)
         self._fetch_changelog = fetch_changelog
         self._clock = clock
         self._cache_path = data_dir / CACHE_FILE_NAME
@@ -129,7 +137,7 @@ class UpdateCheck:
             for entry in parse_changelog(changelog)
             if entry.version is not None and semver(entry.version) > running
         ]
-        releases = for_platform(newer, self._platform)
+        releases = for_platform(newer, self._platform_token)
         if not any(entry.sections for entry in releases):
             return None
         return Update(newer[0].version, self._command, releases)

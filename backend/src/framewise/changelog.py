@@ -13,12 +13,6 @@ CHANGELOG_PATH = (
 """The Changelog an installed wheel carries, or the checkout's when running from a clone."""
 
 
-def is_checkout(changelog_path: Path | None) -> bool:
-    """Whether framewise runs from a clone, whose Changelog sits at the root of the git checkout,
-    rather than from a wheel, which carries its own."""
-    return changelog_path is not None and (changelog_path.parent / ".git").exists()
-
-
 UNRELEASED_HEADING = "## Unreleased"
 RELEASE_HEADING = re.compile(r"^## (\d+\.\d+\.\d+) — (\d{4}-\d{2}-\d{2})$")
 SUBHEADING = re.compile(r"^### (\S.*)$")
@@ -154,14 +148,15 @@ def changelog_platform(sys_platform: str) -> str:
     return "linux"
 
 
-def for_platform(versions: list[ChangelogVersion], platform: str) -> list[ChangelogVersion]:
-    """The versions with only the bullets that apply to `platform`. A version left with no
+def for_platform(versions: list[ChangelogVersion], platform_token: str) -> list[ChangelogVersion]:
+    """The versions with only the bullets that apply to `platform_token`. A version left with no
     bullets stays, with no sections, so the version numbers don't seem to skip."""
     filtered = []
     for entry in versions:
         sections = [
             ChangelogSection(
-                section.heading, [item for item in section.items if platform in item.platforms]
+                section.heading,
+                [item for item in section.items if platform_token in item.platforms],
             )
             for section in entry.sections
         ]

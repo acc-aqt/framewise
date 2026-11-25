@@ -21,7 +21,6 @@ from framewise.changelog import (
     ChangelogVersion,
     changelog_platform,
     for_platform,
-    is_checkout,
     read_changelog,
 )
 from framewise.exiftool import ExifTool
@@ -35,6 +34,7 @@ from framewise.update_check import (
     FetchChangelog,
     UpdateCheck,
     fetch_main_changelog,
+    is_checkout,
 )
 from framewise.write_back import (
     FileChange,
@@ -427,15 +427,14 @@ class SessionPicker:
 
 
 def _add_about(app: FastAPI, changelog_path: Path | None, platform: str) -> None:
-    """`platform` is named as by sys.platform; the Changelog shows only its entries."""
-    changelog_token = changelog_platform(platform)
+    platform_token = changelog_platform(platform)
 
     @app.get("/api/about")
     def about() -> dict:
-        changelog = for_platform(read_changelog(changelog_path), changelog_token)
+        changelog = for_platform(read_changelog(changelog_path), platform_token)
         return {
             "version": version("framewise-cull"),
-            "platform": PLATFORM_NAMES[changelog_token],
+            "platform": PLATFORM_NAMES[platform_token],
             "changelog": [_changelog_version_json(entry) for entry in changelog],
         }
 
@@ -448,7 +447,6 @@ def _start_update_check(
     fetch_changelog: FetchChangelog,
     clock: Clock,
 ) -> UpdateCheck:
-    """`changelog_path` tells a checkout from an installed wheel."""
     return UpdateCheck(
         changelog_platform(platform),
         is_checkout(changelog_path),

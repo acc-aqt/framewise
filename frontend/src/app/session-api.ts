@@ -177,3 +177,20 @@ export interface ProblemReport {
   /** Whether `issue_url` carries the whole body. */
   body_fits_url: boolean;
 }
+
+/** A Group's Analysis sources, copied into a local folder for the photographer to attach. */
+export interface ReportImages {
+  /** The folder in framewise's data folder that holds the copies, opened in the file manager. */
+  folder: string;
+  files: ReportImage[];
+  /** Whether location and owner info was removed from the copies. */
+  personal_info_removed: boolean;
+}
+
+export interface ReportImage {
+  name: string;
+  /** In bytes. */
+  size: number;
+  /** Whether the file is over GitHub's 10 MB image limit, so it has to be shared another way. */
+  too_large: boolean;
+}

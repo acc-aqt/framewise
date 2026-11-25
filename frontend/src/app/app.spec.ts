@@ -3330,6 +3330,21 @@ describe('Review UI', () => {
       http.expectOne({ method: 'POST', url: '/api/groups/1/problem-report' });
     });
 
+    it("offers the open Group's Frames as images", async () => {
+      await openGroup(0);
+      all('[data-testid="report-problem-button"]')[0].click();
+      await settle();
+
+      dialog().querySelector<HTMLInputElement>('[data-testid="report-include-images"]')!.click();
+      await settle();
+
+      expect(
+        [...dialog().querySelectorAll('[data-testid="report-image-frame"]')].map((row) =>
+          row.textContent?.trim(),
+        ),
+      ).toEqual(['DSCF0001.JPG', 'DSCF0002.JPG']);
+    });
+
     it('lets the photographer type without reviewing, and closes on Escape', async () => {
       await openGroup(0);
       all('[data-testid="report-problem-button"]')[0].click();

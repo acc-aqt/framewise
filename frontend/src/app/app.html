@@ -155,7 +155,11 @@
     />
   }
   @if (reportingGroupId(); as groupId) {
-    <app-report-problem [groupId]="groupId" (close)="reportingGroupId.set(null)" />
+    <app-report-problem
+      [groupId]="groupId"
+      [frames]="reportingFrames()"
+      (close)="reportingGroupId.set(null)"
+    />
   }
   @if (paletteOpen() && paletteAvailable()) {
     <app-command-palette

@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReportProblem } from './report-problem';
-import { ProblemReport } from './session-api';
+import { ProblemReport, ReportImages } from './session-api';
 
 const built: ProblemReport = {
   title: 'Judging problem: DSCF0003 should be the Winner',
@@ -37,6 +37,12 @@ describe('Report a problem', () => {
 
   function byTestId<T extends HTMLElement>(testId: string): T {
     return element().querySelector<T>(`[data-testid="${testId}"]`)!;
+  }
+
+  function all(testId: string): string[] {
+    return [...element().querySelectorAll(`[data-testid="${testId}"]`)].map(
+      (row) => row.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+    );
   }
 
   function text(testId: string): string {
@@ -168,6 +174,102 @@ describe('Report a problem', () => {
     expect(await blobs[0].text()).toBe(built.body);
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:report');
     expect(text('report-status')).toBe('Report saved as framewise-report-2026-11-25.md.');
+  });
+
+  describe('Include images', () => {
+    const prepared: ReportImages = {
+      folder: '/data/framewise/problem-report-images',
+      files: [
+        { name: 'DSCF0001.JPG', size: 4_200_000, too_large: false },
+        { name: 'DSCF0002.RAF.jpg', size: 12_400_000, too_large: true },
+      ],
+      personal_info_removed: false,
+    };
+
+    beforeEach(() => {
+      fixture.componentRef.setInput('frames', [
+        { id: 7, main_path: 'card-a/DSCF0001.JPG' },
+        { id: 8, main_path: 'card-a/DSCF0002.RAF' },
+      ]);
+      TestBed.tick();
+    });
+
+    function includeImages(): HTMLInputElement {
+      return byTestId<HTMLInputElement>('report-include-images');
+    }
+
+    async function tickIncludeImages(): Promise<void> {
+      includeImages().click();
+      await settle();
+    }
+
+    async function openOnGitHub(): Promise<void> {
+      const tab = { opener: null, location: { href: '' }, close: vi.fn() };
+      vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
+      await type('DSCF0003 should be the Winner');
+      await click('report-open-github');
+      await answer();
+    }
+
+    async function answerImages(images: ReportImages = prepared): Promise<void> {
+      const request = http.expectOne({
+        method: 'POST',
+        url: '/api/groups/7/problem-report/images',
+      });
+      expect(request.request.body).toEqual({ remove_personal_info: false });
+      request.flush(images);
+      await settle();
+      await settle();
+    }
+
+    it('is off by default and lists no Frames', () => {
+      expect(includeImages().checked).toBe(false);
+      expect(byTestId('report-image-frames')).toBeNull();
+    });
+
+    it("lists the Group's Frames by file name when ticked", async () => {
+      await tickIncludeImages();
+
+      expect(all('report-image-frame')).toEqual(['DSCF0001.JPG', 'DSCF0002.RAF']);
+    });
+
+    it('prepares no images when it is not ticked', async () => {
+      await openOnGitHub();
+
+      http.expectNone('/api/groups/7/problem-report/images');
+      expect(byTestId('report-image-files')).toBeNull();
+    });
+
+    it('prepares the images and shows the files, flagging those too large for GitHub', async () => {
+      await tickIncludeImages();
+
+      await openOnGitHub();
+      await answerImages();
+
+      const [small, large] = element().querySelectorAll('[data-testid="report-image-file"]');
+      expect(small.textContent).toContain('DSCF0001.JPG');
+      expect(small.textContent).toContain('4.2 MB');
+      expect(small.querySelector('[data-testid="report-image-too-large"]')).toBeNull();
+      expect(large.textContent).toContain('DSCF0002.RAF.jpg');
+      expect(large.textContent).toContain('12.4 MB');
+      expect(
+        large.querySelector('[data-testid="report-image-too-large"]')?.textContent?.trim(),
+      ).toBe("Over GitHub's 10 MB limit, share it another way");
+      expect(text('report-images-folder')).toContain('/data/framewise/problem-report-images');
+    });
+
+    it('says so when the images could not be prepared', async () => {
+      await tickIncludeImages();
+
+      await openOnGitHub();
+      http
+        .expectOne('/api/groups/7/problem-report/images')
+        .flush({ detail: 'Group not found' }, { status: 404, statusText: 'Not Found' });
+      await settle();
+      await settle();
+
+      expect(text('report-error')).toBe('Could not prepare the images.');
+    });
   });
 
   it('closes on Cancel', async () => {

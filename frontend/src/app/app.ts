@@ -196,6 +196,9 @@ export class App {
   protected readonly whatsNewOpen = signal(false);
   /** The Group a Problem report is being written on, by its first Frame's id. */
   protected readonly reportingGroupId = signal<number | null>(null);
+  protected readonly reportingFrames = computed(
+    () => this.groups().find((group) => group.id === this.reportingGroupId())?.frames ?? [],
+  );
   protected readonly paletteAvailable = computed(
     () =>
       !this.noSession() &&

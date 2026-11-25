@@ -137,6 +137,20 @@ PERSONAL_INFO = {
     "IFD0:Artist": "Jane Doe",
     "XMP-aux:SerialNumber": "1234567",
     "XMP-dc:Creator": "Jane Doe",
+    "IPTC:City": "Sexten",
+    "IPTC:Sub-location": "Drei Zinnen Hut",
+    "IPTC:Province-State": "South Tyrol",
+    "IPTC:Country-PrimaryLocationName": "Italy",
+    "IPTC:Country-PrimaryLocationCode": "ITA",
+    "XMP-iptcCore:Location": "Drei Zinnen Hut",
+    "XMP-iptcCore:CountryCode": "ITA",
+    "XMP-photoshop:City": "Sexten",
+    "XMP-photoshop:State": "South Tyrol",
+    "XMP-photoshop:Country": "Italy",
+    "XMP-iptcExt:LocationCreatedCity": "Sexten",
+    "XMP-iptcExt:LocationCreatedCountryName": "Italy",
+    "XMP-iptcExt:LocationShownSublocation": "Drei Zinnen",
+    "XMP-iptcExt:LocationShownCountryCode": "ITA",
 }
 ORDINARY_EXIF = {
     "ExifIFD:ExposureTime": 0.004,
@@ -154,7 +168,7 @@ def tag_camera_info(path):
     )
 
 
-def test_removing_personal_info_strips_location_serials_owner_and_artist_from_the_copies_only(
+def test_removing_personal_info_strips_gps_place_names_serials_owner_and_artist_from_the_copies_only(
     session_dir, data_dir, review, analyzer, reveal
 ):
     beach_burst(session_dir, analyzer)

@@ -19,14 +19,27 @@ GITHUB_IMAGE_LIMIT = 10_000_000
 """GitHub's 10 MB limit on an image attached to an issue."""
 PERSONAL_INFO_DELETIONS = (
     "-gps*=",
+    "-IPTC:City=",
+    "-IPTC:Sub-location=",
+    "-IPTC:Province-State=",
+    "-IPTC:Country-PrimaryLocationName=",
+    "-IPTC:Country-PrimaryLocationCode=",
+    "-XMP-iptcCore:Location=",
+    "-XMP-iptcCore:CountryCode=",
+    "-XMP-photoshop:City=",
+    "-XMP-photoshop:State=",
+    "-XMP-photoshop:Country=",
+    "-XMP-iptcExt:LocationCreated=",
+    "-XMP-iptcExt:LocationShown=",
     "-*SerialNumber=",
     "-OwnerName=",
     "-Artist=",
     "-XMP-dc:Creator=",
     "-IPTC:By-line=",
 )
-"""ExifTool arguments that delete location, camera and lens serial numbers, also those in maker
-notes where ExifTool can write them, the owner's name and the artist, in every group. ExifTool
+"""ExifTool arguments that delete location, both GPS and the IPTC and XMP place names, camera and
+lens serial numbers, also those in maker notes where ExifTool can write them, the owner's name
+and the artist, in every group. ExifTool
 rewrites only the metadata, so image data, focus, exposure and maker notes stay."""
 
 

@@ -10,10 +10,23 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from framewise.exiftool import ExifTool
+
 RevealFolder = Callable[[Path], None]
 FOLDER_NAME = "problem-report-images"
 GITHUB_IMAGE_LIMIT = 10_000_000
 """GitHub's 10 MB limit on an image attached to an issue."""
+PERSONAL_INFO_DELETIONS = (
+    "-gps*=",
+    "-*SerialNumber=",
+    "-OwnerName=",
+    "-Artist=",
+    "-XMP-dc:Creator=",
+    "-IPTC:By-line=",
+)
+"""ExifTool arguments that delete location, camera and lens serial numbers, also those in maker
+notes where ExifTool can write them, the owner's name and the artist, in every group. ExifTool
+rewrites only the metadata, so image data, focus, exposure and maker notes stay."""
 
 
 @dataclass(frozen=True)
@@ -44,9 +57,22 @@ def copy_report_images(sources: list[SourceImage], folder: Path) -> list[ReportI
     for source in sources:
         target = _free_name(folder, _copy_name(source))
         shutil.copyfile(source.path, target)
-        size = target.stat().st_size
-        copied.append(ReportImage(target.name, size, size > GITHUB_IMAGE_LIMIT))
+        copied.append(report_image(target))
     return copied
+
+
+def report_image(path: Path) -> ReportImage:
+    size = path.stat().st_size
+    return ReportImage(path.name, size, size > GITHUB_IMAGE_LIMIT)
+
+
+def remove_personal_info(exiftool: ExifTool, images: list[Path]) -> bool:
+    """Deletes location and owner info from the images in place, and says whether ExifTool
+    managed it for every image."""
+    if not images:
+        return True
+    result = exiftool.run("-overwrite_original", *PERSONAL_INFO_DELETIONS, *images)
+    return not result.errors
 
 
 def _copy_name(source: SourceImage) -> str:

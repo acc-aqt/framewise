@@ -1,5 +1,6 @@
 from conftest import make_jpg, make_raw
 from test_group_fixes_api import BEACH, beach_burst, ids, mountain, seconds
+from test_write_back_api import exiftool, image_data_hash, read_back
 
 from framewise.review import session_database_path
 from framewise.store import preview_cache_dir
@@ -116,3 +117,91 @@ def test_images_are_prepared_only_for_a_known_group(session_dir, review, analyze
     assert prepare_images(client, second_frame_id).status_code == 404
     assert prepare_images(client, 9999).status_code == 404
     assert reveal.revealed == []
+
+
+def test_the_session_summary_says_whether_exiftool_is_available(review):
+    available = review(find_exiftool=lambda: "/usr/bin/exiftool").get("/api/session").json()
+    missing = review(find_exiftool=lambda: None).get("/api/session").json()
+
+    assert available["exiftool"]["available"] is True
+    assert missing["exiftool"]["available"] is False
+    assert "https://exiftool.org" in missing["exiftool"]["install_hint"]
+
+
+PERSONAL_INFO = {
+    "GPS:GPSLatitude": 46.6186,
+    "GPS:GPSLongitude": 12.3027,
+    "ExifIFD:SerialNumber": "1234567",
+    "ExifIFD:LensSerialNumber": "7654321",
+    "ExifIFD:OwnerName": "Jane Doe",
+    "IFD0:Artist": "Jane Doe",
+    "XMP-aux:SerialNumber": "1234567",
+    "XMP-dc:Creator": "Jane Doe",
+}
+ORDINARY_EXIF = {
+    "ExifIFD:ExposureTime": 0.004,
+    "ExifIFD:FNumber": 8,
+    "ExifIFD:FocalLength": 23,
+    "ExifIFD:DateTimeOriginal": "2026:06:20 14:30:00",
+}
+
+
+def tag_camera_info(path):
+    exiftool(
+        "-overwrite_original",
+        *(f"-{tag}={value}" for tag, value in {**PERSONAL_INFO, **ORDINARY_EXIF}.items()),
+        path,
+    )
+
+
+def test_removing_personal_info_strips_location_serials_owner_and_artist_from_the_copies_only(
+    session_dir, data_dir, review, analyzer, reveal
+):
+    beach_burst(session_dir, analyzer)
+    original = session_dir / "DSCF0001.JPG"
+    tag_camera_info(original)
+    original_bytes = original.read_bytes()
+    client = review(reveal_folder=reveal)
+    [group_id] = ids(client, "DSCF0001.JPG")
+
+    prepared = prepare_images(client, group_id, remove_personal_info=True).json()
+
+    copy = data_dir / REPORT_IMAGES / "DSCF0001.JPG"
+    assert prepared["personal_info_removed"] is True
+    assert read_back(copy, *PERSONAL_INFO) == {}
+    assert read_back(copy, *ORDINARY_EXIF) == ORDINARY_EXIF
+    assert image_data_hash(copy) == image_data_hash(original)
+    assert original.read_bytes() == original_bytes
+    assert prepared["files"][0]["size"] == copy.stat().st_size
+
+
+def test_without_removal_copies_keep_personal_info_byte_for_byte(
+    session_dir, data_dir, review, analyzer, reveal
+):
+    beach_burst(session_dir, analyzer)
+    original = session_dir / "DSCF0001.JPG"
+    tag_camera_info(original)
+    client = review(reveal_folder=reveal)
+    [group_id] = ids(client, "DSCF0001.JPG")
+
+    prepared = prepare_images(client, group_id, remove_personal_info=False).json()
+
+    assert prepared["personal_info_removed"] is False
+    assert (data_dir / REPORT_IMAGES / "DSCF0001.JPG").read_bytes() == original.read_bytes()
+
+
+def test_without_exiftool_removal_copies_anyway_and_says_nothing_was_removed(
+    session_dir, data_dir, review, analyzer, reveal
+):
+    beach_burst(session_dir, analyzer)
+    original = session_dir / "DSCF0001.JPG"
+    tag_camera_info(original)
+    client = review(reveal_folder=reveal, find_exiftool=lambda: None)
+    [group_id] = ids(client, "DSCF0001.JPG")
+
+    response = prepare_images(client, group_id, remove_personal_info=True)
+
+    assert response.status_code == 200
+    assert response.json()["personal_info_removed"] is False
+    assert (data_dir / REPORT_IMAGES / "DSCF0001.JPG").read_bytes() == original.read_bytes()
+    assert reveal.revealed == [data_dir / REPORT_IMAGES]

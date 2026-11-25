@@ -1,4 +1,5 @@
 import platform
+import sys
 import threading
 from collections.abc import Callable
 from dataclasses import asdict, replace
@@ -16,7 +17,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from framewise.analyzer import ProviderLineup
 from framewise.changelog import read_changelog
-from framewise.exiftool import ExifTool
+from framewise.exiftool import ExifTool, exiftool_install_hint, find_exiftool
 from framewise.judge import (
     DEFAULT_KEEPER_BUDGET,
     FaceCheck,
@@ -33,6 +34,8 @@ from framewise.report_images import (
     RevealFolder,
     SourceImage,
     copy_report_images,
+    remove_personal_info,
+    report_image,
     reveal_folder,
 )
 from framewise.review import SessionAnalysis
@@ -80,7 +83,8 @@ class ProblemReportRequest(BaseModel):
 
 class ReportImagesRequest(BaseModel):
     remove_personal_info: bool = False
-    """Whether to remove location and owner info from the copies. Not done yet."""
+    """Whether to remove location and owner info from the copies. Without ExifTool the copies
+    keep it, and the response says so."""
 
 
 class SessionChange(BaseModel):
@@ -98,12 +102,15 @@ def create_app(
     config_path: Path,
     move_to_trash: MoveToTrash = send2trash,
     reveal_folder: RevealFolder = reveal_folder,
+    find_exiftool: Callable[[], str | None] = find_exiftool,
     changelog_path: Path | None = None,
 ) -> FastAPI:
     app = FastAPI(title="framewise")
     _add_about(app, changelog_path)
     providers_json = {capability: asdict(lineup) for capability, lineup in provider_lineup.items()}
-    write_back = RatingWriteBack(store, ExifTool())
+    exiftool_executable = find_exiftool()
+    exiftool = ExifTool(exiftool_executable)
+    write_back = RatingWriteBack(store, exiftool)
 
     def _groups() -> list[list[AnalyzedFrame]]:
         return analysis.groups(store.group_overrides())
@@ -152,6 +159,10 @@ def create_app(
             "keeper_budget": _keeper_budget(),
             "providers": providers_json,
             "config_path": str(config_path),
+            "exiftool": {
+                "available": exiftool_executable is not None,
+                "install_hint": exiftool_install_hint(sys.platform),
+            },
         }
 
     @app.get("/api/progress")
@@ -250,11 +261,15 @@ def create_app(
         # The data folder holds the Session store and its preview cache, never the Session.
         folder = store.preview_dir.parent / FOLDER_NAME
         files = copy_report_images(sources, folder)
+        removed = False
+        if request.remove_personal_info and exiftool_executable is not None:
+            removed = remove_personal_info(exiftool, [folder / file.name for file in files])
+            files = [report_image(folder / file.name) for file in files]
         reveal_folder(folder)
         return {
             "folder": str(folder),
             "files": [asdict(file) for file in files],
-            "personal_info_removed": False,
+            "personal_info_removed": removed,
         }
 
     def _known_group(group_id: int) -> list[AnalyzedFrame]:

@@ -184,3 +184,7 @@ def test_the_changelog_is_in_the_shape_the_review_ui_shows(review):
     released = [entry["version"] for entry in entries if entry["version"] is not None]
     if released:
         assert released[0] == version("framewise-cull")
+    items = [
+        item for entry in entries for section in entry["sections"] for item in section["items"]
+    ]
+    assert not [item for item in items if "<!--" in item]

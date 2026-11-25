@@ -12,6 +12,12 @@ ISSUE_TEMPLATE = "judging-problem.md"
 TITLE_PREFIX = "Judging problem: "
 TITLE_TEXT_LENGTH = 60
 MISSING = "–"
+URL_LIMIT = 8000
+"""The longest new-issue URL that browsers and GitHub reliably accept, in encoded characters."""
+PASTE_BODY = (
+    "The full report didn't fit in this link. framewise copied it to your clipboard. "
+    "Paste it here in place of this text.\n"
+)
 
 
 @dataclass(frozen=True)
@@ -67,8 +73,15 @@ def build_problem_report(text: str, state: GroupState | None = None) -> ProblemR
     body = text.strip() + "\n"
     if state is not None:
         body += "\n" + _state_markdown(state)
+    issue_url = _issue_url(title, body)
+    if len(issue_url) <= URL_LIMIT:
+        return ProblemReport(title, body, issue_url, body_fits_url=True)
+    return ProblemReport(title, body, _issue_url(title, PASTE_BODY), body_fits_url=False)
+
+
+def _issue_url(title: str, body: str) -> str:
     query = urlencode({"template": ISSUE_TEMPLATE, "title": title, "body": body})
-    return ProblemReport(title, body, f"{NEW_ISSUE_PAGE}?{query}", body_fits_url=True)
+    return f"{NEW_ISSUE_PAGE}?{query}"
 
 
 def _title_text(text: str) -> str:

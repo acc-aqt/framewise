@@ -19,3 +19,4 @@ Every pull request with a change a photographer can notice adds a line to `## Un
 - Write for photographers: say what changed for them, in Glossary terms, not what changed in the code.
 - Refactors, tests, CI, docs for contributors and other internal changes get no entry.
 - Keep to the shape the Review UI renders: bullets, optionally under `### ` subheadings, with only `**bold**` and `` `code` `` as inline formatting. No italics, links, images, HTML or nested lists, and no `*`, `_` or backtick outside that formatting.
+- An entry that applies to only some platforms ends with a hidden marker naming them, any of `macos`, `linux`, `windows` separated by spaces, such as `<!-- linux windows -->`. It must be the last thing on the bullet. Leave an entry for every platform unmarked; a marker naming all three is an error. This marker is the only HTML allowed.

@@ -4,6 +4,7 @@ from pathlib import Path
 from framewise.benchmark import active_catalog
 from framewise.cli import folder_dialog_command
 from framewise.lightroom import lightroom_preferences
+from framewise.report_images import reveal_folder_command
 from framewise.review import default_data_dir
 
 HOME = Path("/home/me")
@@ -69,3 +70,24 @@ def test_on_windows_the_session_folder_is_chosen_in_tks_explorer_dialog():
 
     assert command[:2] == [sys.executable, "-c"]
     assert "askdirectory" in command[2]
+
+
+FOLDER = Path("/data/framewise/problem-report-images")
+
+
+def test_on_macos_a_folder_is_revealed_in_finder():
+    assert reveal_folder_command("darwin", FOLDER) == ["open", str(FOLDER)]
+
+
+def test_on_windows_a_folder_is_revealed_in_explorer():
+    assert reveal_folder_command("win32", FOLDER) == ["explorer", str(FOLDER)]
+
+
+def test_on_linux_a_folder_is_revealed_in_the_desktops_file_manager(monkeypatch):
+    monkeypatch.setattr("shutil.which", lambda name: f"/usr/bin/{name}")
+    assert reveal_folder_command("linux", FOLDER) == ["xdg-open", str(FOLDER)]
+
+
+def test_on_linux_without_xdg_open_no_folder_is_revealed(monkeypatch):
+    monkeypatch.setattr("shutil.which", lambda name: None)
+    assert reveal_folder_command("linux", FOLDER) is None

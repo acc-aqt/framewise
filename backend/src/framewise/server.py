@@ -19,6 +19,13 @@ from framewise.exiftool import ExifTool
 from framewise.judge import DEFAULT_KEEPER_BUDGET, FaceCheck, Judgement, Proposal, Verdict, judge
 from framewise.lightroom import read_label_set
 from framewise.problem_report import build_problem_report
+from framewise.report_images import (
+    FOLDER_NAME,
+    RevealFolder,
+    SourceImage,
+    copy_report_images,
+    reveal_folder,
+)
 from framewise.review import SessionAnalysis
 from framewise.store import AnalyzedFrame, Frame, Override, SessionStore
 from framewise.trash import MoveToTrash, trash_frames
@@ -62,6 +69,11 @@ class ProblemReportRequest(BaseModel):
     """Whether the report carries the Group's state."""
 
 
+class ReportImagesRequest(BaseModel):
+    remove_personal_info: bool = False
+    """Whether to remove location and owner info from the copies. Not done yet."""
+
+
 class SessionChange(BaseModel):
     keeper_budget: float = Field(ge=0, le=1)
     """The share of the Session's Frames the photographer roughly wants to keep."""
@@ -76,6 +88,7 @@ def create_app(
     provider_lineup: ProviderLineup,
     config_path: Path,
     move_to_trash: MoveToTrash = send2trash,
+    reveal_folder: RevealFolder = reveal_folder,
     changelog_path: Path | None = None,
 ) -> FastAPI:
     app = FastAPI(title="framewise")
@@ -174,6 +187,26 @@ def create_app(
             raise HTTPException(status_code=422, detail="Say what you expected instead")
         return asdict(build_problem_report(request.text))
 
+    @app.post("/api/groups/{group_id}/problem-report/images")
+    def problem_report_images(group_id: int, request: ReportImagesRequest) -> dict:
+        """Copies the Analysis sources of the Group whose first Frame has `group_id` into a
+        folder in the data folder, replacing the previous report's, and opens it in the file
+        manager for the photographer to attach to the issue."""
+        sources = [
+            SourceImage(analyzed.frame.main_path, path, analyzed.frame.jpg_path is None)
+            for analyzed in _known_group(group_id)
+            if (path := _analysis_source(analyzed.frame)) is not None
+        ]
+        # The data folder holds the Session store and its preview cache, never the Session.
+        folder = store.preview_dir.parent / FOLDER_NAME
+        files = copy_report_images(sources, folder)
+        reveal_folder(folder)
+        return {
+            "folder": str(folder),
+            "files": [asdict(file) for file in files],
+            "personal_info_removed": False,
+        }
+
     def _known_group(group_id: int) -> list[AnalyzedFrame]:
         group = next((group for group in _groups() if group[0].frame.id == group_id), None)
         if group is None:
@@ -206,14 +239,22 @@ def create_app(
     @app.get("/api/frames/{frame_id}/image")
     def frame_image(frame_id: int) -> FileResponse:
         """The Frame's Analysis source: its JPG, or a RAW-only Frame's embedded preview."""
-        path = store.analysis_image(_known_frame(frame_id))
+        path = _analysis_source(_known_frame(frame_id))
+        if path is None:
+            raise HTTPException(status_code=404, detail="Image not found")
+        return FileResponse(path, media_type="image/jpeg")
+
+    def _analysis_source(frame: Frame) -> Path | None:
+        """The Frame's Analysis source, or None unless it is a plain file in the Session folder
+        or the preview cache."""
+        path = store.analysis_image(frame)
         resolved = path.resolve()
         inside = resolved.is_relative_to(store.root) or resolved.is_relative_to(
             store.preview_dir.resolve()
         )
         if path.is_symlink() or not path.is_file() or not inside:
-            raise HTTPException(status_code=404, detail="Image not found")
-        return FileResponse(path, media_type="image/jpeg")
+            return None
+        return path
 
     def _known_frame(frame_id: int) -> Frame:
         frame = store.frame(frame_id)

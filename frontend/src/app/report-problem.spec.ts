@@ -406,6 +406,26 @@ describe('Report a problem', () => {
       expect(text('report-images-folder')).toContain('/data/framewise/problem-report-images');
     });
 
+    it('keeps showing the prepared images after Copy report and Save report', async () => {
+      fakeClipboard();
+      URL.createObjectURL = vi.fn(() => 'blob:report');
+      URL.revokeObjectURL = vi.fn();
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+      await tickIncludeImages();
+      await openOnGitHub();
+      await answerImages();
+
+      await click('report-copy');
+      await answer();
+      await click('report-save');
+      await answer();
+
+      expect(all('report-image-file')).toHaveLength(2);
+      expect(all('report-image-too-large')).toEqual([
+        "Over GitHub's 10 MB limit, share it another way",
+      ]);
+    });
+
     it('names the Frames whose images could not be found', async () => {
       await tickIncludeImages();
 

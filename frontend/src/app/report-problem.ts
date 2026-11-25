@@ -345,6 +345,7 @@ export class ReportProblem {
     // Opened before the report is built, while the click still allows opening a tab.
     // The copy starts now for the same reason, and is dropped if the whole report fits the link.
     const tab = window.open('', '_blank');
+    this.images.set(null);
     const building = this.build();
     const copied = succeeded(
       copyToClipboard(
@@ -432,7 +433,6 @@ export class ReportProblem {
     this.working.set(true);
     this.error.set(null);
     this.status.set(null);
-    this.images.set(null);
     try {
       return await firstValueFrom(
         this.api.build(this.groupId(), { text: this.text(), include_state: this.includeState() }),

@@ -18,6 +18,7 @@ from framewise.changelog import read_changelog
 from framewise.exiftool import ExifTool
 from framewise.judge import DEFAULT_KEEPER_BUDGET, FaceCheck, Judgement, Proposal, Verdict, judge
 from framewise.lightroom import read_label_set
+from framewise.problem_report import build_problem_report
 from framewise.review import SessionAnalysis
 from framewise.store import AnalyzedFrame, Frame, Override, SessionStore
 from framewise.trash import MoveToTrash, trash_frames
@@ -52,6 +53,13 @@ class FrameSelection(BaseModel):
 
 class FrameMove(BaseModel):
     to_frame_id: int
+
+
+class ProblemReportRequest(BaseModel):
+    text: str
+    """What the photographer expected instead. It may not be blank."""
+    include_state: bool = True
+    """Whether the report carries the Group's state."""
 
 
 class SessionChange(BaseModel):
@@ -156,6 +164,21 @@ def create_app(
             }
             for group in groups
         ]
+
+    @app.post("/api/groups/{group_id}/problem-report")
+    def problem_report(group_id: int, request: ProblemReportRequest) -> dict:
+        """Builds a Problem report on the Group whose first Frame has `group_id`, as a prefilled
+        GitHub new-issue page the photographer reviews and submits themselves."""
+        _known_group(group_id)
+        if not request.text.strip():
+            raise HTTPException(status_code=422, detail="Say what you expected instead")
+        return asdict(build_problem_report(request.text))
+
+    def _known_group(group_id: int) -> list[AnalyzedFrame]:
+        group = next((group for group in _groups() if group[0].frame.id == group_id), None)
+        if group is None:
+            raise HTTPException(status_code=404, detail="Group not found")
+        return group
 
     @app.patch("/api/session")
     def change_session(change: SessionChange) -> dict:

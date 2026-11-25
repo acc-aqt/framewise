@@ -315,7 +315,6 @@ function inlineParts(item: string): InlinePart[] {
 })
 export class WhatsNew implements OnInit {
   readonly about = input.required<About>();
-  /** The newer Release to tell the photographer about, if any. */
   readonly update = input<UpdateCheck['available']>(null);
   readonly open = model(false);
 

@@ -27,7 +27,6 @@ export interface About {
 export interface UpdateCheck {
   /** Null when there is no update to show, including when the check is off or failed. */
   available: {
-    /** The newest Release. */
     version: string;
     /** The exact command to update this install on this platform. */
     command: string;

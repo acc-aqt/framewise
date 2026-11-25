@@ -473,8 +473,6 @@ def _add_update(app: FastAPI, update_check: UpdateCheck) -> None:
 
 
 def _changelog_version_json(entry: ChangelogVersion) -> dict:
-    """The version as the Review UI renders it: each bullet as its text alone, without the
-    platforms it applies to."""
     return {
         "version": entry.version,
         "date": entry.date,

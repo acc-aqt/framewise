@@ -1,5 +1,4 @@
 import io
-import os
 import re
 
 import pytest
@@ -8,7 +7,14 @@ from PIL import Image
 from test_review_api import snapshot
 from test_trash_api import trash_frames
 from test_verdicts_api import BEACH, frames_by_name, reasons
-from test_write_back_api import files_by_path, lightroom_preferences
+from test_write_back_api import (
+    exiftool,
+    files_by_path,
+    lightroom_preferences,
+    make_dng,
+    rating,
+    read_back,
+)
 
 from framewise.exiftool import ExifTool
 from framewise.previews import PreviewConfigError, read_min_preview_long_edge
@@ -255,37 +261,132 @@ def test_hard_reset_deletes_the_preview_cache(session_dir, data_dir, previews):
     assert not cache.exists()
 
 
-def test_rating_write_back_leaves_raw_only_frames_out_and_says_so(
-    session_dir, review, analyzer, tmp_path
+@pytest.fixture
+def english(tmp_path) -> dict:
+    return {"lightroom_preferences": lightroom_preferences(tmp_path, "Red", "Yellow")}
+
+
+def test_rating_write_back_writes_a_raw_only_dng_embedded_and_another_raw_into_a_sidecar(
+    session_dir, review, english
 ):
-    english = {"lightroom_preferences": lightroom_preferences(tmp_path, "Red", "Yellow")}
-    make_jpg(session_dir / "DSCF0001.JPG")
-    raw = make_raw(session_dir / "DSCF0002.RAF")
+    dng = make_dng(session_dir / "L1000001.DNG", stars=1)
+    raf = make_raw(session_dir / "DSCF0002.RAF")
+    raf_before = raf.read_bytes()
     client = review(**english)
 
-    dry_run = client.get("/api/write-back").json()
+    dry_run = files_by_path(client.get("/api/write-back").json())
+    result = client.post("/api/write-back").json()
+
+    assert {path: file["written_to"] for path, file in dry_run.items()} == {
+        "DSCF0002.RAF": "DSCF0002.xmp",
+        "L1000001.DNG": "L1000001.DNG",
+    }
+    assert dry_run["L1000001.DNG"]["old"] == {"stars": 1, "label": None}
+    assert result["failed"] == []
+    assert rating(dng) == {"stars": 3, "label": None}
+    assert rating(raf.with_suffix(".xmp")) == {"stars": 3, "label": None}
+    assert raf.read_bytes() == raf_before
+
+
+def test_write_back_merges_an_existing_sidecar_of_a_raw_only_frame(session_dir, review, english):
+    make_raw(session_dir / "DSCF0001.RAF")
+    sidecar = make_sidecar(session_dir / "DSCF0001.xmp", stars=1, label="Green")
+    exiftool("-overwrite_original", "-XMP-crs:Exposure2012=+0.35", sidecar)
+
+    review(**english).post("/api/write-back")
+
+    assert rating(sidecar) == {"stars": 3, "label": None}
+    assert read_back(sidecar, "XMP-crs:Exposure2012") == {"XMP-crs:Exposure2012": "+0.35"}
+
+
+def raw_only_session_written_back(session_dir, review, english):
+    """A RAW-only DNG, a RAF without a sidecar and a RAF with one, after write-back."""
+    dng = make_dng(session_dir / "L1000001.DNG", stars=1, label="Blue")
+    new_sidecar_raf = make_raw(session_dir / "DSCF0002.RAF")
+    make_raw(session_dir / "DSCF0003.RAF")
+    existing_sidecar = make_sidecar(session_dir / "DSCF0003.xmp", stars=1, label="Green")
+    client = review(**english)
     client.post("/api/write-back")
+    return client, dng, new_sidecar_raf.with_suffix(".xmp"), existing_sidecar
 
-    assert list(files_by_path(dry_run)) == ["DSCF0001.JPG"]
-    assert dry_run["raw_only_notice"] == (
-        "1 RAW-only Frame is left out: framewise can't write ratings into RAW-only Frames yet."
+
+def test_undo_write_back_restores_raw_only_frames_and_removes_the_sidecars_it_created(
+    session_dir, review, english
+):
+    client, dng, new_sidecar, existing_sidecar = raw_only_session_written_back(
+        session_dir, review, english
     )
-    assert not raw.with_suffix(".xmp").exists()
+
+    result = client.post("/api/write-back/undo").json()
+
+    assert result["failed"] == []
+    assert rating(dng) == {"stars": 1, "label": "Blue"}
+    assert not new_sidecar.exists()
+    assert rating(existing_sidecar) == {"stars": 1, "label": "Green"}
+    assert client.get("/api/write-back").json()["can_undo"] is False
 
 
-def test_trashing_a_raw_only_frame_is_refused_and_moves_nothing(session_dir, review, trash):
+def test_resetting_the_session_restores_raw_only_frames(session_dir, review, english):
+    client, dng, new_sidecar, existing_sidecar = raw_only_session_written_back(
+        session_dir, review, english
+    )
+
+    result = client.post("/api/session/reset").json()
+
+    assert result["failed"] == []
+    assert rating(dng) == {"stars": 1, "label": "Blue"}
+    assert not new_sidecar.exists()
+    assert rating(existing_sidecar) == {"stars": 1, "label": "Green"}
+
+
+def test_a_raw_only_dng_is_not_extracted_or_analyzed_again_after_write_back(
+    session_dir, review, analyzer, previews, english
+):
+    make_dng(session_dir / "L1000001.DNG")
+    review(**english).post("/api/write-back")
+    previews.extracted.clear()
+    analyzer.analyzed.clear()
+
+    review(**english)
+
+    assert previews.extracted == []
+    assert analyzer.analyzed == []
+
+
+def test_trashing_a_raw_only_frame_moves_its_raw_and_sidecar_and_drops_its_preview(
+    session_dir, data_dir, review, trash
+):
     raw = make_raw(session_dir / "DSCF0001.RAF")
+    sidecar = make_sidecar(session_dir / "DSCF0001.xmp", stars=1)
+    make_raw(session_dir / "DSCF0002.RAF")
     client = review(move_to_trash=trash)
+    [frame_id] = [f["id"] for f in client.get("/api/frames").json() if f["main_path"] == raw.name]
 
     response = trash_frames(client, "DSCF0001.RAF")
 
-    assert response.json() == {
-        "trashed": [],
-        "failed": [{"path": "DSCF0001.RAF", "error": "framewise can't trash RAW-only Frames yet"}],
-    }
-    assert trash.trashed == []
-    assert os.path.exists(raw)
+    assert response.json() == {"trashed": [frame_id], "failed": []}
+    assert trash.trashed == [sidecar, raw]
     assert client.get("/api/session").json()["total_frames"] == 1
+    cache = preview_cache_dir(session_database_path(session_dir.resolve(), data_dir))
+    assert len(list(cache.iterdir())) == 1
+
+
+def test_a_restored_raw_only_frame_comes_back_with_its_overrides(session_dir, review, trash):
+    raw = make_raw(session_dir / "DSCF0001.RAF")
+    sidecar = make_sidecar(session_dir / "DSCF0001.xmp", stars=1)
+    client = review(move_to_trash=trash)
+    [frame] = client.get("/api/frames").json()
+    client.patch(f"/api/frames/{frame['id']}/override", json={"verdict": "reject", "stars": 4})
+    trash_frames(client, "DSCF0001.RAF")
+
+    trash.restore(sidecar)
+    trash.restore(raw)
+    client = review(move_to_trash=trash)
+
+    [group] = client.get("/api/groups").json()
+    [restored] = group["frames"]
+    assert restored["main_path"] == "DSCF0001.RAF"
+    assert restored["override"] == {"verdict": "reject", "stars": 4, "label": None}
 
 
 def test_the_minimum_preview_size_defaults_to_1600_px(tmp_path):

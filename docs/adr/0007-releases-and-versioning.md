@@ -1,6 +1,6 @@
 # ADR-0007: Releases and versioning
 
-**Status:** Accepted — 2026-11-18. Amended by ADR-0009 and ADR-0010 — 2026-11-19.
+**Status:** Accepted — 2026-11-18. Amended by ADR-0009 and ADR-0010 — 2026-11-19. Amended with the platform marker — 2026-11-25.
 
 ## Context
 
@@ -16,6 +16,7 @@ framewise changes daily, and photographers update it with `git pull` and `script
    - Each pull request with a user-visible change adds its line to `## Unreleased` in the same pull request. There is no CI gate; AGENTS.md and the pull request template ask for it.
    - Cutting a Release turns `## Unreleased` into `## X.Y.Z — YYYY-MM-DD`.
    - The Review UI shows the Changelog, so it keeps to a fixed shape: one level-2 section per version, newest first, `## Unreleased` first; optional level-3 subheadings; bullets; inline formatting limited to `**bold**` and `` `code` ``. A test fails when it drifts from that shape.
+   - An entry that applies to only some platforms ends with a hidden marker naming them, any subset of `macos`, `linux` and `windows` separated by spaces, such as `<!-- linux windows -->`. An entry without a marker applies to every platform, so a marker naming all three is an error. The marker must be the last thing on the bullet, an unknown token is an error, and any other HTML stays forbidden. framewise strips the marker from the text it shows and filters by it; GitHub hides it in the Release notes, so cutting a Release needs no extra step. GitHub Releases published before the marker are not edited.
 3. **The backend's project version is the only place the version lives.** The Review UI asks the backend for it.
 4. **Releases are cut by hand with `scripts/release.sh`**, typically after an epic or a notable feature merges to `main`. There is no schedule.
 5. **framewise stays on 0.x until it can keep four promises.** While on 0.x, a minor bump means new features or breaking changes, a patch bump means fixes only. 1.0.0 means:

@@ -11,15 +11,7 @@ import {
 import { pluralize } from './pluralize';
 import { Frame } from './session-api';
 
-/** The Frames a Trash moves: RAW-only Frames stay, as framewise can't trash them yet (#151). */
-export function trashableFrames(frames: Frame[]): Frame[] {
-  return frames.filter((frame) => frame.kind !== 'raw-only');
-}
-
-/**
- * Asks before Frames go to the Trash. Enter confirms, as the confirm button has focus. When every
- * Frame is RAW-only there is nothing to move, so only Cancel is offered.
- */
+/** Asks before Frames go to the Trash. Enter confirms, as the confirm button has focus. */
 @Component({
   selector: 'app-trash-confirmation',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -36,17 +28,11 @@ export function trashableFrames(frames: Frame[]): Frame[] {
     >
       <p id="trash-question" class="question">{{ question() }}</p>
       <p id="trash-note" class="note">
-        @if (trashable().length > 0) {
-          You can restore them from the Trash. Frames already imported into Lightroom will show as
-          missing there.
-        }
-        @if (rawOnlyNotice(); as notice) {
-          {{ notice }}
-        }
+        You can restore them from the Trash. Frames already imported into Lightroom will show as
+        missing there.
       </p>
       <div class="actions">
         <button
-          #cancelButton
           type="button"
           class="btn btn-ghost"
           data-testid="trash-cancel"
@@ -59,7 +45,6 @@ export function trashableFrames(frames: Frame[]): Frame[] {
           type="button"
           class="btn btn-danger"
           data-testid="trash-confirm"
-          [disabled]="trashable().length === 0"
           (click)="confirm.emit()"
         >
           Move to Trash
@@ -114,13 +99,8 @@ export class TrashConfirmation {
   readonly confirm = output();
   readonly cancel = output();
 
-  protected readonly trashable = computed(() => trashableFrames(this.frames()));
-
   protected readonly question = computed(() => {
-    const frames = this.trashable();
-    if (frames.length === 0) {
-      return "Nothing to move: framewise can't trash RAW-only Frames yet.";
-    }
+    const frames = this.frames();
     const files = frames.reduce((sum, frame) => sum + (frame.kind === 'raw+jpg' ? 2 : 1), 0);
     const frameCount = pluralize(frames.length, 'Frame');
     const fileCount = pluralize(files, 'file');
@@ -130,23 +110,10 @@ export class TrashConfirmation {
       : `Move ${pluralize(groupCount, 'Group')} (${frameCount}, ${fileCount}) to the Trash?`;
   });
 
-  protected readonly rawOnlyNotice = computed(() => {
-    const rawOnly = this.frames().length - this.trashable().length;
-    if (rawOnly === 0 || this.trashable().length === 0) {
-      return null;
-    }
-    const stay = rawOnly === 1 ? 'stays' : 'stay';
-    return `${pluralize(rawOnly, 'RAW-only Frame')} ${stay}: framewise can't trash RAW-only Frames yet.`;
-  });
-
   private readonly confirmButton =
     viewChild.required<ElementRef<HTMLButtonElement>>('confirmButton');
-  private readonly cancelButton = viewChild.required<ElementRef<HTMLButtonElement>>('cancelButton');
 
   constructor() {
-    afterNextRender(() => {
-      const button = this.trashable().length > 0 ? this.confirmButton() : this.cancelButton();
-      button.nativeElement.focus();
-    });
+    afterNextRender(() => this.confirmButton().nativeElement.focus());
   }
 }

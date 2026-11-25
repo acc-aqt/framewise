@@ -1,7 +1,11 @@
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import {
+  HttpTestingController,
+  provideHttpClientTesting,
+  TestRequest,
+} from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { About } from './about-api';
+import { About, UpdateCheck } from './about-api';
 import { App, POLL_INTERVAL_MS } from './app';
 import { RECONNECT_INTERVAL_MS, watchServerConnection } from './server-connection';
 import { TOOLTIP_DELAY_MS } from './tooltip';
@@ -51,6 +55,7 @@ const summary: SessionSummary = {
 
 const about: About = {
   version: '0.1.0',
+  platform: 'Windows',
   changelog: [
     {
       version: null,
@@ -66,6 +71,23 @@ const about: About = {
       ],
     },
   ],
+};
+
+const noUpdate: UpdateCheck = { available: null };
+
+const update: UpdateCheck = {
+  available: {
+    version: '0.3.0',
+    command: 'uvx --python 3.13 --from framewise-cull[portable]@latest framewise review',
+    releases: [
+      {
+        version: '0.3.0',
+        date: '2026-12-10',
+        sections: [{ heading: null, items: ['**Update notice** in the Review UI'] }],
+      },
+      { version: '0.2.0', date: '2026-12-01', sections: [] },
+    ],
+  },
 };
 
 describe('Review UI', () => {
@@ -84,10 +106,16 @@ describe('Review UI', () => {
     startApp();
   });
 
-  function startApp(running: About = about): void {
+  function startApp(running: About = about, update: UpdateCheck = noUpdate): void {
+    startAppAwaitingUpdate(running).flush(update);
+  }
+
+  /** Starts the Review UI and hands back its update check, still unanswered. */
+  function startAppAwaitingUpdate(running: About = about): TestRequest {
     fixture = TestBed.createComponent(App);
     TestBed.tick();
     http.expectOne('/api/about').flush(running);
+    return http.expectOne('/api/update');
   }
 
   afterEach(() => {
@@ -289,9 +317,9 @@ describe('Review UI', () => {
     }
 
     /** Reloads the Review UI, which must have answered its first requests already. */
-    async function restartWith(running: About): Promise<void> {
+    async function restartWith(running: About, available: UpdateCheck = noUpdate): Promise<void> {
       fixture.destroy();
-      startApp(running);
+      startApp(running, available);
       await respond(summary, []);
     }
 
@@ -327,6 +355,25 @@ describe('Review UI', () => {
       await openWhatsNew();
 
       expect(shownVersions()).toEqual(['0.1.0 2026-11-20']);
+    });
+
+    it('says so when a Release has nothing new on the platform', async () => {
+      await respond(summary, []);
+      await restartWith({
+        ...about,
+        version: '0.2.0',
+        changelog: [{ version: '0.2.0', date: '2026-12-01', sections: [] }, about.changelog[1]],
+      });
+
+      await openWhatsNew();
+
+      expect(shownVersions()).toEqual(['0.2.0 2026-12-01', '0.1.0 2026-11-20']);
+      const [emptied, released] = all('[data-testid="changelog-version"]', panel());
+      expect(text('[data-testid="nothing-new-on-platform"]', emptied)).toBe(
+        'Nothing new on Windows in this release',
+      );
+      expect(all('ul', emptied)).toEqual([]);
+      expect(all('[data-testid="nothing-new-on-platform"]', released)).toEqual([]);
     });
 
     it('says so when there are no release notes', async () => {
@@ -366,6 +413,147 @@ describe('Review UI', () => {
       await runFromPalette("What's new");
 
       expect(shownVersions()).toEqual(['Unreleased', '0.1.0 2026-11-20']);
+    });
+
+    describe('when a newer Release is available', () => {
+      const marker = () => all('header [data-testid="update-marker"]')[0];
+
+      afterEach(() => localStorage.clear());
+
+      it('marks the version only when an update is reported', async () => {
+        await respond(summary, []);
+
+        expect(marker()).toBeUndefined();
+
+        await restartWith(about, update);
+
+        expect(marker()).toBeDefined();
+        expect(versionButton().getAttribute('aria-label')).toContain('update available');
+      });
+
+      const notice = () => all('[data-testid="update-notice"]', panel())[0];
+
+      it("opens What's new with the available version, its command and the newer Releases", async () => {
+        await respond(summary, []);
+        await restartWith(about, update);
+
+        await openWhatsNew();
+
+        expect(text('h3', notice())).toBe('framewise 0.3.0 is available');
+        expect(text('pre code', notice())).toBe(
+          'uvx --python 3.13 --from framewise-cull[portable]@latest framewise review',
+        );
+        const releases = all('[data-testid="changelog-version"]', notice());
+        expect(releases.map((release) => text('h3', release))).toEqual([
+          '0.3.0 2026-12-10',
+          '0.2.0 2026-12-01',
+        ]);
+        expect(text('li', releases[0])).toBe('Update notice in the Review UI');
+        expect(text('li strong', releases[0])).toBe('Update notice');
+        expect(text('[data-testid="nothing-new-on-platform"]', releases[1])).toBe(
+          'Nothing new on Windows in this release',
+        );
+        expect(shownVersions()).toEqual([
+          '0.3.0 2026-12-10',
+          '0.2.0 2026-12-01',
+          'Unreleased',
+          '0.1.0 2026-11-20',
+        ]);
+      });
+
+      it('copies the command', async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+        await respond(summary, []);
+        await restartWith(about, update);
+        await openWhatsNew();
+
+        all('[data-testid="copy-update-command"]', notice())[0].click();
+        await settle();
+
+        expect(writeText).toHaveBeenCalledWith(
+          'uvx --python 3.13 --from framewise-cull[portable]@latest framewise review',
+        );
+        delete (navigator as { clipboard?: unknown }).clipboard;
+      });
+
+      it('stays dismissed across a restart until a newer version is reported', async () => {
+        await respond(summary, []);
+        await restartWith(about, update);
+        await openWhatsNew();
+
+        all('[data-testid="dismiss-update"]', notice())[0].click();
+        await settle();
+
+        expect(marker()).toBeUndefined();
+        expect(localStorage.getItem('framewise.updateDismissedVersion')).toBe('0.3.0');
+        expect(text('h3', notice())).toBe('framewise 0.3.0 is available');
+        expect(all('[data-testid="dismiss-update"]', notice())).toEqual([]);
+
+        await restartWith(about, update);
+
+        expect(marker()).toBeUndefined();
+
+        await restartWith(about, {
+          available: { ...update.available!, version: '0.10.0' },
+        });
+
+        expect(marker()).toBeDefined();
+      });
+
+      it("adds nothing to What's new without an update", async () => {
+        await respond(summary, []);
+
+        await openWhatsNew();
+
+        expect(notice()).toBeUndefined();
+      });
+
+      it('leaves the Review UI as it is when the check fails', async () => {
+        await respond(summary, []);
+        fixture.destroy();
+        startAppAwaitingUpdate().flush('boom', { status: 500, statusText: 'Server Error' });
+        await respond(summary, []);
+
+        expect(marker()).toBeUndefined();
+        expect(versionButton().getAttribute('aria-label')).toBe("framewise 0.1.0, What's new");
+        expect(all('[data-testid="disconnected"]')).toEqual([]);
+
+        await openWhatsNew();
+
+        expect(notice()).toBeUndefined();
+        expect(shownVersions()).toEqual(['Unreleased', '0.1.0 2026-11-20']);
+      });
+
+      it('lets the Review UI work while the check is slow, and marks the version once it answers', async () => {
+        await respond(summary, []);
+        fixture.destroy();
+        const check = startAppAwaitingUpdate();
+        await respond(summary, []);
+
+        expect(text('header [data-testid="version"]')).toBe('0.1.0');
+        expect(marker()).toBeUndefined();
+
+        check.flush(update);
+        await settle();
+
+        expect(marker()).toBeDefined();
+      });
+
+      it('shows apart from the unseen-changes badge, and both can show at once', async () => {
+        await respond(summary, []);
+        localStorage.setItem('framewise.whatsNewSeenVersion', '0.0.9');
+        await restartWith(about, update);
+
+        const badge = all('header [data-testid="whats-new-badge"]')[0];
+        expect(badge).toBeDefined();
+        expect(marker()).toBeDefined();
+        expect(marker()).not.toBe(badge);
+        expect(marker().className).not.toBe(badge.className);
+        expect(versionButton().getAttribute('aria-label')).toBe(
+          "framewise 0.1.0, What's new, unseen changes, update available",
+        );
+      });
     });
 
     describe('after an upgrade', () => {
@@ -469,6 +657,20 @@ describe('Review UI', () => {
       await settle();
 
       expect(all('[data-testid="whats-new"] [data-testid="changelog-version"]').length).toBe(2);
+    });
+
+    it('tells about a newer Release before a Session is open', async () => {
+      await respondWithoutSession();
+      fixture.destroy();
+      startApp(about, update);
+      await respondWithoutSession();
+
+      expect(all('header [data-testid="update-marker"]').length).toBe(1);
+
+      all('header [data-testid="version"]')[0].click();
+      await settle();
+
+      expect(text('[data-testid="update-notice"] h3')).toBe('framewise 0.3.0 is available');
     });
 
     it('opens the chosen Session', async () => {
@@ -1464,7 +1666,7 @@ describe('Review UI', () => {
     expect(all('[data-testid="open-write-back"]').length).toBe(1);
   });
 
-  it('names how many files the write-back screen reads, one per JPG and two per RAW+JPG Frame, leaving out RAW-only Frames', async () => {
+  it('names how many files the write-back screen reads, one per JPG-only or RAW-only Frame and two per RAW+JPG Frame', async () => {
     await respond(summary, []);
     all('[data-testid="open-write-back"]')[0].click();
     await settle();
@@ -1472,7 +1674,7 @@ describe('Review UI', () => {
     http.expectOne('/api/write-back/progress');
 
     expect(text('[data-testid="write-back-loading"]')).toBe(
-      'Reading the current rating of 5 files…',
+      'Reading the current rating of 6 files…',
     );
   });
 
@@ -2729,7 +2931,7 @@ describe('Review UI', () => {
       expect(currentFrameThumbnail()).toBe('/api/frames/3/thumbnail');
     });
 
-    it('leaves RAW-only Frames out of what a Trash moves, and says they stay', async () => {
+    it('trashes RAW-only Frames with the rest, counting their RAW as one file', async () => {
       await respond(summary, [
         group(1, [
           frame(1, 'jpg-only', { verdict: 'winner' }),
@@ -2743,26 +2945,10 @@ describe('Review UI', () => {
       await click(all('[data-testid="trash-group"]')[0]);
 
       expect(text('[data-testid="trash-confirmation"] p')).toBe(
-        'Move 2 Frames (3 files) to the Trash?',
+        'Move 3 Frames (4 files) to the Trash?',
       );
-      expect(text('#trash-note')).toContain(
-        "1 RAW-only Frame stays: framewise can't trash RAW-only Frames yet.",
-      );
-      await confirmTrash([1, 2], [group(5, [frame(5, 'raw-only', { verdict: 'winner' })])]);
-    });
-
-    it('offers nothing to trash when every Frame is RAW-only', async () => {
-      await respond(summary, [group(5, [frame(5, 'raw-only', { verdict: 'winner' })])]);
-      all('[data-testid="group-tile"]')[0].click();
-      await fixture.whenStable();
-
-      await press('Backspace');
-
-      expect(text('[data-testid="trash-confirmation"] p')).toBe(
-        "Nothing to move: framewise can't trash RAW-only Frames yet.",
-      );
-      expect((all('[data-testid="trash-confirm"]')[0] as HTMLButtonElement).disabled).toBe(true);
-      expect(document.activeElement).toBe(all('[data-testid="trash-cancel"]')[0]);
+      expect(text('#trash-note')).not.toContain('RAW-only');
+      await confirmTrash([1, 2, 5], []);
     });
 
     it('asks to trash with Delete too, and trashes nothing on Escape', async () => {

@@ -14,7 +14,9 @@ def test_about_names_the_running_version(review):
 
 
 def test_about_answers_before_a_session_is_open():
-    picker = SessionPicker(choose_folder=lambda: None, start_session=lambda folder: None)
+    picker = SessionPicker(
+        choose_folder=lambda: None, start_session=lambda folder, update_check: None
+    )
 
     about = TestClient(picker).get("/api/about").json()
 
@@ -72,11 +74,145 @@ def test_about_lists_the_changelog_newest_first(review, tmp_path):
     ]
 
 
+def test_about_hides_the_platform_marker_from_the_entry(review, tmp_path):
+    path = tmp_path / "CHANGELOG.md"
+    path.write_text(
+        "# Changelog\n"
+        "\n"
+        "## 0.1.0 — 2026-11-20\n"
+        "\n"
+        "- `framewise review` starts faster <!-- linux windows -->\n"
+        "- First Release\n",
+        encoding="utf-8",
+    )
+
+    assert changelog(review(changelog_path=path, platform="linux")) == [
+        {
+            "version": "0.1.0",
+            "date": "2026-11-20",
+            "sections": [
+                {"heading": None, "items": ["`framewise review` starts faster", "First Release"]}
+            ],
+        }
+    ]
+
+
+PLATFORM_CHANGELOG = (
+    "# Changelog\n"
+    "\n"
+    "## Unreleased\n"
+    "\n"
+    "- Faster grouping\n"
+    "\n"
+    "## 0.2.0 — 2026-12-01\n"
+    "\n"
+    "- Apple Vision finds the subject <!--macos-->\n"
+    "\n"
+    "### Fixed\n"
+    "\n"
+    "- `framewise review` opens the browser again <!-- linux windows -->\n"
+    "\n"
+    "## 0.1.0 — 2026-11-20\n"
+    "\n"
+    "- First Release\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("platform", "name", "released_0_2_0"),
+    [
+        (
+            "darwin",
+            "macOS",
+            [{"heading": None, "items": ["Apple Vision finds the subject"]}],
+        ),
+        (
+            "linux",
+            "Linux",
+            [{"heading": "Fixed", "items": ["`framewise review` opens the browser again"]}],
+        ),
+        (
+            "win32",
+            "Windows",
+            [{"heading": "Fixed", "items": ["`framewise review` opens the browser again"]}],
+        ),
+    ],
+)
+def test_about_shows_only_the_entries_for_the_platform(
+    review, tmp_path, platform, name, released_0_2_0
+):
+    path = tmp_path / "CHANGELOG.md"
+    path.write_text(PLATFORM_CHANGELOG, encoding="utf-8")
+
+    about = review(changelog_path=path, platform=platform).get("/api/about").json()
+
+    assert about["platform"] == name
+    assert about["changelog"] == [
+        {
+            "version": None,
+            "date": None,
+            "sections": [{"heading": None, "items": ["Faster grouping"]}],
+        },
+        {"version": "0.2.0", "date": "2026-12-01", "sections": released_0_2_0},
+        {
+            "version": "0.1.0",
+            "date": "2026-11-20",
+            "sections": [{"heading": None, "items": ["First Release"]}],
+        },
+    ]
+
+
+def test_about_keeps_a_release_with_nothing_for_the_platform(review, tmp_path):
+    path = tmp_path / "CHANGELOG.md"
+    path.write_text(
+        "# Changelog\n"
+        "\n"
+        "## 0.2.0 — 2026-12-01\n"
+        "\n"
+        "### Fixed\n"
+        "\n"
+        "- Apple Vision finds the subject <!-- macos -->\n"
+        "\n"
+        "## 0.1.0 — 2026-11-20\n"
+        "\n"
+        "- First Release\n",
+        encoding="utf-8",
+    )
+
+    assert changelog(review(changelog_path=path, platform="win32")) == [
+        {"version": "0.2.0", "date": "2026-12-01", "sections": []},
+        {
+            "version": "0.1.0",
+            "date": "2026-11-20",
+            "sections": [{"heading": None, "items": ["First Release"]}],
+        },
+    ]
+
+
+def test_the_folder_picker_shows_only_the_entries_for_the_platform(tmp_path):
+    path = tmp_path / "CHANGELOG.md"
+    path.write_text(PLATFORM_CHANGELOG, encoding="utf-8")
+    picker = SessionPicker(
+        choose_folder=lambda: None,
+        start_session=lambda folder, update_check: None,
+        changelog_path=path,
+        platform="win32",
+    )
+
+    about = TestClient(picker).get("/api/about").json()
+
+    assert about["platform"] == "Windows"
+    assert about["changelog"][1]["sections"] == [
+        {"heading": "Fixed", "items": ["`framewise review` opens the browser again"]}
+    ]
+
+
 def test_about_has_no_changelog_when_the_file_is_missing(review, tmp_path):
-    client = review(changelog_path=tmp_path / "CHANGELOG.md")
+    client = review(changelog_path=tmp_path / "CHANGELOG.md", platform="linux")
 
     assert client.get("/api/about").json() == {
         "version": version("framewise-cull"),
+        "platform": "Linux",
         "changelog": [],
     }
 
@@ -93,6 +229,14 @@ def test_about_has_no_changelog_when_the_file_is_missing(review, tmp_path):
         "## 0.1.0 — 2026-11-20\n\nA paragraph instead of a bullet.\n",
         "## 0.1.0 — 2026-11-20\n\n- See [the README](README.md)\n",
         "## 0.1.0 — 2026-11-20\n\n- <b>First</b> Release\n",
+        "## 0.1.0 — 2026-11-20\n\n- <!-- linux --> First Release\n",
+        "## 0.1.0 — 2026-11-20\n\n- First Release <!-- linux --> on Linux\n",
+        "## 0.1.0 — 2026-11-20\n\n- First Release <!-- linux freebsd -->\n",
+        "## 0.1.0 — 2026-11-20\n\n- First Release <!-- Linux -->\n",
+        "## 0.1.0 — 2026-11-20\n\n- First Release <!-- linux, windows -->\n",
+        "## 0.1.0 — 2026-11-20\n\n- First Release <!-- -->\n",
+        "## 0.1.0 — 2026-11-20\n\n- First Release <!-- macos linux windows -->\n",
+        "## 0.1.0 — 2026-11-20\n\n- First Release <br> <!-- linux -->\n",
         "## 0.1.0 — 2026-11-20\n\n- *First* Release\n",
         "## 0.1.0 — 2026-11-20\n\n- _First_ Release\n",
         "## 0.1.0 — 2026-11-20\n\n- **First Release\n",
@@ -109,6 +253,14 @@ def test_about_has_no_changelog_when_the_file_is_missing(review, tmp_path):
         "paragraph",
         "link",
         "HTML",
+        "platform marker first",
+        "platform marker mid-bullet",
+        "unknown platform",
+        "capitalized platform",
+        "comma between platforms",
+        "empty platform marker",
+        "platform marker naming every platform",
+        "HTML before a platform marker",
         "italic",
         "underscore emphasis",
         "unclosed bold",
@@ -137,3 +289,7 @@ def test_the_changelog_is_in_the_shape_the_review_ui_shows(review):
     released = [entry["version"] for entry in entries if entry["version"] is not None]
     if released:
         assert released[0] == version("framewise-cull")
+    items = [
+        item for entry in entries for section in entry["sections"] for item in section["items"]
+    ]
+    assert not [item for item in items if "<!--" in item]

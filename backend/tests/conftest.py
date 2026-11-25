@@ -86,6 +86,12 @@ def no_focus_point_reader(monkeypatch):
     monkeypatch.setattr("framewise.providers.find_exiftool", lambda: None)
 
 
+@pytest.fixture(autouse=True)
+def no_update_check(monkeypatch):
+    """No test checks for a newer Release over the network unless it is about the update check."""
+    monkeypatch.setenv("FRAMEWISE_NO_UPDATE_CHECK", "1")
+
+
 @pytest.fixture
 def session_dir(tmp_path: Path) -> Path:
     folder = tmp_path / "session"

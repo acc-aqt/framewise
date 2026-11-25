@@ -7,7 +7,7 @@ Cull a photo shoot on your own machine: framewise groups bursts and near-duplica
 
 ![Opening a Session of 221 photos, analysis, merging Groups, comparing a Frame with the Winner and making it the new Winner, then Rating write-back and the result in Lightroom Classic](docs/images/workflow.gif)
 
-Everything runs locally; no photo leaves the machine. Terms such as Frame, Group and Verdict are defined in the [Glossary](GLOSSARY.md).
+Everything runs locally; no photo leaves the machine. The only network call framewise makes on its own is a daily check for a newer Release, which sends nothing about you or your photos and can be [turned off](#update-check). Terms such as Frame, Group and Verdict are defined in the [Glossary](GLOSSARY.md).
 
 Built with AI coding agents; design, calibration and review by me.
 
@@ -98,6 +98,18 @@ Options:
 - `--background` analyzes on a quarter of the cores at background priority, so apps like Lightroom stay responsive.
 - `--allow-sleep` lets the machine sleep during analysis. By default framewise keeps it awake until analysis finishes (on Linux, through `systemd-inhibit` where it exists).
 
+### Update check
+
+When `framewise review` starts, framewise checks at most once a day whether a newer Release has changes for your platform, so the Review UI can tell you and show the command to update. The check is a plain GET of the public [Changelog on `main`](https://github.com/acc-aqt/framewise/blob/main/CHANGELOG.md); its only headers are `User-Agent: framewise` and the `Host`, `Accept-Encoding: identity` and `Connection: close` that every such request carries, so it sends no version, platform, identifier or anything about your Frames. It runs in the background, gives up after 5 seconds, and offline it is silently skipped. The fetched Changelog is kept for a day in `update-check.json` next to the Session stores ([ADR-0012](docs/adr/0012-checking-for-a-newer-release.md)).
+
+To turn it off, put this at the top of the `config.toml` described under [Providers](#providers), above any `[table]`:
+
+```toml
+check_for_updates = false
+```
+
+or set `FRAMEWISE_NO_UPDATE_CHECK=1` in the environment. Then framewise fetches nothing and tells you about no update.
+
 If the Review UI has not been built, `framewise review` warns you.
 
 ## How it judges
@@ -132,7 +144,7 @@ Overrides are saved in the Session store as you go ([ADR-0003](docs/adr/0003-ove
 
 Fix wrong grouping from an open Group. Fixed Groups are kept on later re-runs ([ADR-0004](docs/adr/0004-group-overrides.md)).
 
-Trashing a Frame moves every file of it (RAW, JPG and any `.xmp` sidecar) to the OS Trash and takes the Frame out of the Session. RAW-only Frames can't be trashed yet. Nothing is deleted outright: restore the files from the Trash and run `framewise review` again to bring a Frame back with its Overrides ([ADR-0006](docs/adr/0006-trashing-frames.md)). Trash before you import into Lightroom, because Lightroom shows trashed Frames it already imported as missing.
+Trashing a Frame moves every file of it (RAW, JPG and any `.xmp` sidecar) to the OS Trash and takes the Frame out of the Session. Nothing is deleted outright: restore the files from the Trash and run `framewise review` again to bring a Frame back with its Overrides ([ADR-0006](docs/adr/0006-trashing-frames.md)). Trash before you import into Lightroom, because Lightroom shows trashed Frames it already imported as missing.
 
 ## Providers
 
@@ -171,8 +183,7 @@ Nothing is written to the photos until you ask ([ADR-0001](docs/adr/0001-frames-
 Details:
 
 - Overrides count: an Override's Verdict replaces framewise's, and stars or a color label set with the shortcuts replace the ones the Verdict maps to.
-- JPGs and DNGs get embedded XMP; other RAWs get an `.xmp` sidecar, merged into any existing one.
-- RAW-only Frames are left out for now, and the dry run says how many.
+- JPGs and DNGs get embedded XMP; other RAWs get an `.xmp` sidecar, merged into any existing one. This holds for the RAW of a RAW-only Frame too.
 - Label names come from Lightroom Classic's active color label set (for example `Rot` and `Gelb`), read from its preferences on macOS and, on Windows, from `%APPDATA%\Adobe\Lightroom\Preferences\Lightroom Classic CC 7 Preferences.agprefs`.
 - Writing takes a while for large Sessions, because each DNG is rewritten in full. Reloading the page doesn't stop it.
 - framewise needs [ExifTool](https://exiftool.org), which the [setup script](#from-a-checkout) installs and [Install](#install) says how to get. Without it, framewise stops at start-up and says how to install it.

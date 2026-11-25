@@ -12,6 +12,7 @@ CHANGELOG_PATH = (
 )
 """The Changelog an installed wheel carries, or the checkout's when running from a clone."""
 
+
 UNRELEASED_HEADING = "## Unreleased"
 RELEASE_HEADING = re.compile(r"^## (\d+\.\d+\.\d+) — (\d{4}-\d{2}-\d{2})$")
 SUBHEADING = re.compile(r"^### (\S.*)$")
@@ -19,6 +20,9 @@ BULLET = re.compile(r"^- (\S.*)$")
 TITLE = re.compile(r"^# \S")
 SUPPORTED_INLINE = re.compile(r"\*\*[^*]+\*\*|`[^`]+`")
 UNSUPPORTED_INLINE = re.compile(r"\[[^\]]*\]\(|<[A-Za-z/!]|[*_`]")
+PLATFORM_MARKER = re.compile(r"\s*<!--(.*?)-->$")
+PLATFORMS = frozenset({"macos", "linux", "windows"})
+PLATFORM_NAMES = {"macos": "macOS", "linux": "Linux", "windows": "Windows"}
 
 
 class ChangelogError(ValueError):
@@ -26,10 +30,18 @@ class ChangelogError(ValueError):
 
 
 @dataclass
+class ChangelogItem:
+    text: str
+    """The bullet as photographers read it, without its platform marker."""
+    platforms: frozenset[str]
+    """The platforms the bullet applies to; every platform when it has no marker."""
+
+
+@dataclass
 class ChangelogSection:
     heading: str | None
     """The `###` subheading, or None for the bullets before any subheading."""
-    items: list[str] = field(default_factory=list)
+    items: list[ChangelogItem] = field(default_factory=list)
 
 
 @dataclass
@@ -93,18 +105,68 @@ def _parse_version_heading(
             f"line {line_number}: expected '## Unreleased' or '## X.Y.Z — YYYY-MM-DD'"
         )
     previous = next((entry.version for entry in reversed(earlier) if entry.version), None)
-    if previous is not None and _semver(match[1]) >= _semver(previous):
+    if previous is not None and semver(match[1]) >= semver(previous):
         raise ChangelogError(f"line {line_number}: {match[1]} must be older than {previous}")
     return ChangelogVersion(match[1], match[2])
 
 
 def _add_item(entry: ChangelogVersion, item: str, line_number: int) -> None:
-    if UNSUPPORTED_INLINE.search(SUPPORTED_INLINE.sub("", item)):
+    text, platforms = _split_platform_marker(item, line_number)
+    if UNSUPPORTED_INLINE.search(SUPPORTED_INLINE.sub("", text)):
         raise ChangelogError(f"line {line_number}: only **bold** and `code` are shown")
     if not entry.sections:
         entry.sections.append(ChangelogSection(None))
-    entry.sections[-1].items.append(item)
+    entry.sections[-1].items.append(ChangelogItem(text, platforms))
 
 
-def _semver(version: str) -> tuple[int, ...]:
+def _split_platform_marker(item: str, line_number: int) -> tuple[str, frozenset[str]]:
+    """The bullet without its trailing `<!-- linux windows -->` marker, and the platforms it
+    names."""
+    match = PLATFORM_MARKER.search(item)
+    if match is None:
+        return item, PLATFORMS
+    tokens = match[1].split()
+    unknown = [token for token in tokens if token not in PLATFORMS]
+    if not tokens or unknown:
+        raise ChangelogError(
+            f"line {line_number}: a platform marker names only macos, linux and windows"
+        )
+    platforms = frozenset(tokens)
+    if platforms == PLATFORMS:
+        raise ChangelogError(
+            f"line {line_number}: leave a bullet for every platform without a marker"
+        )
+    return item[: match.start()], platforms
+
+
+def changelog_platform(sys_platform: str) -> str:
+    """The Changelog platform token for `sys_platform`, as named by sys.platform."""
+    if sys_platform == "darwin":
+        return "macos"
+    if sys_platform == "win32":
+        return "windows"
+    return "linux"
+
+
+def for_platform(versions: list[ChangelogVersion], platform_token: str) -> list[ChangelogVersion]:
+    """The versions with only the bullets that apply to `platform_token`. A version left with no
+    bullets stays, with no sections, so the version numbers don't seem to skip."""
+    filtered = []
+    for entry in versions:
+        sections = [
+            ChangelogSection(
+                section.heading,
+                [item for item in section.items if platform_token in item.platforms],
+            )
+            for section in entry.sections
+        ]
+        filtered.append(
+            ChangelogVersion(
+                entry.version, entry.date, [section for section in sections if section.items]
+            )
+        )
+    return filtered
+
+
+def semver(version: str) -> tuple[int, ...]:
     return tuple(int(part) for part in version.split("."))
